@@ -1,3 +1,5 @@
+import type { DurationMetric, PayrollMetric } from './payroll-rules';
+
 export type Model = 'ad' | 'live' | 'premium' | 'schedule' | 'performance';
 export type Metric = 'roi' | 'hourlySpend' | 'spend';
 export interface Department { id: string; name: string; active: boolean }
@@ -9,7 +11,8 @@ export interface Band { min?: number; max?: number; exact?: number; includeMin: 
 export interface HourlyRule { id: string; name: string; version: number; mode: 'single' | 'add'; measures: { metric: Metric; bands: Band[] }[]; floor?:{roiBelow:number;rate:number}; sourceNote?:string }
 export interface ProjectGroup { id: string; name: string; projectIds: string[]; hourlyRuleId: string }
 export interface Scheme { name: string; version: number; fixedSalary: number; departmentIds: string[]; groups: ProjectGroup[]; employeeIds?:string[] }
-export interface SalaryDetail { groupId: string; groupName: string; projectIds: string[]; hours: number; spend: number; premium: number; roi: number; hourlySpend: number; rate: number; commission: number; matches: {metric: Metric; input: number; rate: number}[]; ruleName: string; ruleVersion: number }
+export interface SalaryComponent { metricId: string; field: PayrollMetric; fieldName: string; matchField: PayrollMetric; matchValue: number; rate: number; durationField: DurationMetric; durationName: string; hours: number; amount: number }
+export interface SalaryDetail { components?: SalaryComponent[]; groupId: string; groupName: string; projectIds: string[]; hours: number; spend: number; premium: number; roi: number; hourlySpend: number; rate: number; commission: number; matches: {metric: Metric; input: number; rate: number}[]; ruleName: string; ruleVersion: number }
 export interface Salary { employeeId: string; employeeName: string; departmentName: string; fixed: number; commission: number; total: number; details: SalaryDetail[] }
 export const metricNames: Record<Metric, string> = {roi: 'ROI', hourlySpend: '时耗', spend: '消耗'};
 export const modelNames: Record<Model, string> = {ad: '广告投放', live: '直播间', premium: '保费', schedule: '主播排班', performance: '绩效评估'};

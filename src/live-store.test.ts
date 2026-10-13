@@ -6,8 +6,9 @@ const record:LiveRecord={id:'record',projectId:'project',date:'2026-10-01',start
 const room:RoomHourly={id:'room',projectId:'project',accountId:'room-account',date:record.date,start:record.start,end:record.end,spend:100,revenue:200,clicks:20,clickRate:0.2,clickCost:5,conversions:10,conversionRate:0.5,conversionCost:10,roi:2,orders:10,viewers:100,fans:5,tips:0};
 beforeEach(()=>{
  useHub.getState().reset();
- useHub.setState({month:'2026-10',employees:['host','buyer','control'].map(id=>({id,name:id,departmentId:'dep',position:'主播',joined:'2026-01-01',status:'在职',phone:'',email:'',identities:[],role:'员工'})),departments:[{id:'dep',name:'运营',active:true}],projects:[{id:'project',name:'示例',code:'DEMO',account:'ad-account',platform:'巨量引擎',active:true,liveAccountIds:['room-account']}],liveRecords:[record],adHours:[],roomHours:[room],archivedMonths:[],liveDetails:[],monthlyRows:[],dataset:{rows:[],month:'2026-10',version:0,revision:0,published:false},revision:1,batch:null,batches:{},rules:[{id:'rule',name:'示例时薪',version:1,mode:'single',measures:[{metric:'roi',bands:[{min:0,includeMin:true,includeMax:true,rate:50}]}]}],scheme:{name:'主播薪资',version:1,fixedSalary:0,departmentIds:['dep'],employeeIds:['host'],groups:[{id:'group',name:'示例',projectIds:['project'],hourlyRuleId:'rule'}]}});
+ useHub.setState({month:'2026-10',employees:['host','buyer','control'].map(id=>({id,name:id,departmentId:'live',position:'主播',joined:'2026-01-01',status:'在职',phone:'',email:'',identities:[],role:'员工'})),departments:[{id:'live',name:'直播部',active:true}],projects:[{id:'project',name:'示例',code:'DEMO',account:'ad-account',platform:'巨量引擎',active:true,liveAccountIds:['room-account']}],liveRecords:[record],adHours:[],roomHours:[room],archivedMonths:[],liveDetails:[],monthlyRows:[],dataset:{rows:[],month:'2026-10',version:0,revision:0,published:false},revision:1,batch:null,batches:{},departmentRules:[{id:'rule',name:'示例时薪',departmentId:'live',version:1,status:'草稿',projectIds:['project'],expression:['roi'],metrics:[{id:'roi',field:'roi',durationField:'hours',bands:[{keyType:'range',min:0,includeMin:true,includeMax:true,rate:50}]}]}],payrollTasks:[],rules:[{id:'rule',name:'示例时薪',version:1,mode:'single',measures:[{metric:'roi',bands:[{min:0,includeMin:true,includeMax:true,rate:50}]}]}],scheme:{name:'主播薪资',version:1,fixedSalary:0,departmentIds:['live'],employeeIds:['host'],groups:[{id:'group',name:'示例',projectIds:['project'],hourlyRuleId:'rule'}]}});
 });
+const publishRule = () => useHub.getState().publishDepartmentRule('rule',useHub.getState().month);
 it('批量upsert拒绝重复ID且不留下部分写入',()=>{
  const before=structuredClone(useHub.getState().liveRecords);
  expect(()=>useHub.getState().saveLiveRecords([{...record,id:'new'}, {...record,id:'new'}])).toThrow('重复');
@@ -42,7 +43,7 @@ it('缺小时来源仍允许保存但统计与核算阻断',()=>{
  expect(useHub.getState().liveRecords).toHaveLength(2);
 });
 it('成功核算与归档同时更新，归档月所有来源写入入口拒绝',()=>{
- useHub.getState().cleanDataset();useHub.getState().runPayroll();
+ useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();
  expect(useHub.getState().archivedMonths).toEqual(['2026-10']);
  expect(useHub.getState().batches['2026-10']).toEqual(useHub.getState().batch);
  expect(()=>useHub.getState().sync()).toThrow('归档');
@@ -52,14 +53,15 @@ it('成功核算与归档同时更新，归档月所有来源写入入口拒绝'
 });
 it('核算失败不归档或保存批次',()=>{
  useHub.getState().cleanDataset();
- useHub.setState({scheme:{...useHub.getState().scheme,employeeIds:['absent']}});
+ publishRule();
+ useHub.setState({dataset:{...useHub.getState().dataset,rows:[]}});
  expect(()=>useHub.getState().runPayroll()).toThrow();
  expect(useHub.getState().archivedMonths).toEqual([]);
  expect(useHub.getState().batch).toBeNull();
  expect(useHub.getState().batches).toEqual({});
 });
 it('归档核算冻结完整依据，其他月和基础档案修改后仍可锁定发布',()=>{
- useHub.getState().cleanDataset();useHub.getState().runPayroll();
+ useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();
  const salaries=structuredClone(useHub.getState().batch?.salaries);
  useHub.getState().setMonth('2026-11');
  useHub.getState().saveLiveRecords([{...record,id:'nov',date:'2026-11-01'}]);
@@ -92,7 +94,7 @@ it('存在来源历史时禁止无声改变项目编码',()=>{
  expect(()=>useHub.getState().saveProject({...useHub.getState().projects[0],code:'CHANGED'})).toThrow('历史');
 });
 it('持久化只保存配置标记并使用新命名空间保留旧数据',()=>{
- expect(useHub.persist.getOptions().name).toBe('meimei-staffhub-live-v1');
+ expect(useHub.persist.getOptions().name).toBe('meimei-staffhub-department-rules-v1');
  const project=useHub.getState().projects[0];
  useHub.getState().saveProject({...project,access:{appId:'app',secretConfigured:true,authCodeConfigured:true,secret:'secret',authCode:'code'} as typeof project.access});
  const saved=useHub.persist.getOptions().partialize?.(useHub.getState()) as ReturnType<typeof useHub.getState>;
@@ -102,11 +104,11 @@ it('持久化只保存配置标记并使用新命名空间保留旧数据',()=>{
  expect(saved.session).toBeUndefined();
 });
 it('跨月核算保留各月批次并从归档快照恢复两表',()=>{
- useHub.getState().cleanDataset();useHub.getState().runPayroll();useHub.getState().lockBatch();useHub.getState().publishBatch();
+ useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();useHub.getState().lockBatch();useHub.getState().publishBatch();
  const october=structuredClone(useHub.getState().batch);
  useHub.setState({roomHours:[room,{...room,id:'nov-room',date:'2026-11-01'}]});
  useHub.getState().setMonth('2026-11');useHub.getState().saveLiveRecords([{...record,id:'nov',date:'2026-11-01'}]);
- useHub.getState().cleanDataset();useHub.getState().runPayroll();
+ useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();
  expect(useHub.getState().archivedMonths).toEqual(['2026-10','2026-11']);
  expect(useHub.getState().batches['2026-10']).toEqual(october);
  useHub.getState().setMonth('2026-10');
@@ -116,7 +118,7 @@ it('跨月核算保留各月批次并从归档快照恢复两表',()=>{
  expect(useHub.getState().liveDetails).toEqual(october?.snapshot.details);
 });
 it('归档来源和冻结依据进入持久化导出，运行时登录信息不进入',()=>{
- useHub.getState().cleanDataset();useHub.getState().runPayroll();
+ useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();
  const saved=useHub.persist.getOptions().partialize?.(useHub.getState()) as ReturnType<typeof useHub.getState>;
  expect(saved.archivedMonths).toEqual(['2026-10']);
  expect(saved.liveRecords).toEqual([record]);expect(saved.roomHours).toEqual([room]);
@@ -139,7 +141,7 @@ it('同ID记录只接受严格递增版本，旧编辑不能覆盖新版本',()=
  expect(useHub.getState().liveRecords[0].version).toBe(3);
 });
 it('归档后项目资料修改不改变冻结来源和统计',()=>{
- useHub.getState().cleanDataset();useHub.getState().runPayroll();
+ useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();
  const frozen=structuredClone(useHub.getState().batch);
  useHub.getState().saveProject({...useHub.getState().projects[0],name:'改名项目',access:{appId:'new-app',secretConfigured:true,authCodeConfigured:true}});
  useHub.getState().lockBatch();useHub.getState().publishBatch();
