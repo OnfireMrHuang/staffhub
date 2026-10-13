@@ -1,0 +1,15 @@
+import { useState } from 'react';
+import { KeyRound } from 'lucide-react';
+import type { Project } from '../domain';
+import { useHub } from '../store';
+import { prepareProjectAccess } from '../project-access';
+import { Badge, Button, Modal } from '../components';
+
+export default function ProjectConfig({project,onClose}:{project:Project;onClose:()=>void}){
+ const s=useHub(),[draft,setDraft]=useState(project),[appId,setAppId]=useState(project.access?.appId??''),[secret,setSecret]=useState(''),[error,setError]=useState('');
+ return <Modal open onOpenChange={open=>{if(!open)onClose()}} title="投放项目配置" description="维护项目、巨量引擎应用访问配置、平台账户及员工关联。"><form onSubmit={e=>{e.preventDefault();setError('');try{const configured=prepareProjectAccess(draft,appId,secret);s.saveProject(configured);setSecret('');onClose();s.notify('项目已保存，请重新清洗数据集。访问配置不代表完成平台授权。')}catch(e){setError(e instanceof Error?e.message:'保存未完成')}}}>
+  <div className="form-grid"><label>项目名称<input required value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label><label>项目编号<input required value={draft.code} onChange={e=>setDraft({...draft,code:e.target.value})}/></label><label>平台账户<input required value={draft.account} onChange={e=>setDraft({...draft,account:e.target.value})} placeholder="输入演示账户名称或编号"/></label><label>项目状态<select value={draft.active?'active':'inactive'} onChange={e=>setDraft({...draft,active:e.target.value==='active'})}><option value="active">运行中</option><option value="inactive">停用</option></select></label></div>
+  <section className="project-access-section"><div className="inline"><KeyRound size={17}/><h3>巨量引擎访问配置</h3><span className="spacer"/><Badge tone={project.access?.secretConfigured?'green':'amber'}>{project.access?.secretConfigured?'演示信息已配置':'未配置'}</Badge></div><p className="caption">用于巨量营销 / 巨量千川的平台连接，应用凭据与投放账户分别维护。</p><div className="form-grid"><label>应用 ID · app_id<input inputMode="numeric" autoComplete="off" value={appId} onChange={e=>{setAppId(e.target.value);setError('')}} placeholder="例如 123456"/></label><label>应用密钥 · secret<input type="password" autoComplete="new-password" value={secret} onChange={e=>{setSecret(e.target.value);setError('')}} placeholder={project.access?.secretConfigured?'已配置；留空保留，填写则替换':'请输入演示密钥'}/></label></div><p className="caption">{project.access?.secretConfigured?'密钥不回显；变更 app_id 时须同时填写新 secret。':'可先保存未配置访问的项目；首次配置时须同时填写 app_id 和 secret。'}</p><div className="access-demo-note"><strong>DEMO · 请使用虚构值</strong><p>仅保存 app_id 和密钥配置状态，不保存输入的 secret，也不调用平台接口。正式系统由后端保管密钥，完成账户授权后才能按小时同步。</p></div></section>
+  <div className="form-section"><h3>关联员工</h3><div className="checks wrap">{s.employees.map(e=><label key={e.id}><input type="checkbox" checked={draft.employeeIds.includes(e.id)} onChange={v=>setDraft({...draft,employeeIds:v.target.checked?[...draft.employeeIds,e.id]:draft.employeeIds.filter(id=>id!==e.id)})}/>{e.name}</label>)}</div></div>{error&&<p className="login-error" role="alert">{error}</p>}<div className="dialog-foot"><Button onClick={onClose}>取消</Button><Button variant="primary" type="submit">保存项目</Button></div>
+ </form></Modal>;
+}

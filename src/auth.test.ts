@@ -1,0 +1,11 @@
+import { expect, it } from 'vitest';
+import { authenticatePassword, authenticateSso, DEMO_PASSWORD } from './auth';
+import { seedEmployees } from './seed';
+it('管理员通过主表单登录，使用明确标注的演示凭据',()=>{expect(authenticatePassword('admin',DEMO_PASSWORD,seedEmployees)).toEqual({kind:'admin',username:'admin',method:'password'});});
+it('员工未绑定SSO也能通过账号密码登录，并定位本人',()=>{const employee={...seedEmployees[1],identities:[]};expect(authenticatePassword(employee.id,DEMO_PASSWORD,[employee])).toEqual({kind:'employee',username:employee.id,employeeId:employee.id,method:'password'});});
+it('用户名规范化但密码不去空格',()=>{expect(authenticatePassword(' ADMIN ',DEMO_PASSWORD,seedEmployees).kind).toBe('admin');expect(()=>authenticatePassword('admin',` ${DEMO_PASSWORD}`,seedEmployees)).toThrow('用户名或密码');});
+it('不存在账号、错误密码和离职员工使用统一错误提示',()=>{const inactive={...seedEmployees[0],status:'已离职' as const};for(const [username,password,staff] of [['missing',DEMO_PASSWORD,seedEmployees],['admin','wrong',seedEmployees],[inactive.id,DEMO_PASSWORD,[inactive]]] as const)expect(()=>authenticatePassword(username,password,[...staff])).toThrow('用户名或密码不正确，或账号不可用');});
+it('姓名不作为员工密码登录名',()=>{expect(()=>authenticatePassword(seedEmployees[0].name,DEMO_PASSWORD,seedEmployees)).toThrow('用户名或密码');});
+it('已预绑定的辅助SSO进入同一员工账号',()=>{const e=seedEmployees[1];expect(authenticateSso('飞书',e.id,seedEmployees)).toEqual({kind:'employee',username:e.id,employeeId:e.id,method:'sso'});});
+it('未绑定平台的辅助登录拒绝但不影响账号密码登录',()=>{const e={...seedEmployees[0],identities:[]};expect(()=>authenticateSso('飞书',e.id,[e])).toThrow('账号密码');expect(authenticatePassword(e.id,DEMO_PASSWORD,[e]).employeeId).toBe(e.id);});
+it('辅助SSO不允许离职员工或不存在的员工登录',()=>{expect(()=>authenticateSso('飞书','missing',seedEmployees)).toThrow();expect(()=>authenticateSso('飞书',seedEmployees[0].id,[{...seedEmployees[0],status:'已离职'}])).toThrow();});

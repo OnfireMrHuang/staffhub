@@ -1,0 +1,10 @@
+import { beforeEach, expect, it } from 'vitest';
+import { useHub } from './store';
+import { DEMO_PASSWORD } from './auth';
+beforeEach(()=>{useHub.getState().logout();useHub.getState().reset()});
+it('未登录不持有演示会话，管理员密码登录进入工作台',()=>{expect(useHub.getState().session).toBeNull();useHub.getState().loginPassword('admin',DEMO_PASSWORD);expect(useHub.getState().session?.kind).toBe('admin');expect(useHub.getState().page).toBe('operations');});
+it('员工密码登录进入自己而不是首位员工的资料',()=>{const employee=useHub.getState().employees[1];useHub.getState().loginPassword(employee.id,DEMO_PASSWORD);expect(useHub.getState().session?.employeeId).toBe(employee.id);expect(useHub.getState().perspective).toBe('employee');expect(useHub.getState().page).toBe('profile');});
+it('错误密码不能创建会话',()=>{expect(()=>useHub.getState().loginPassword('admin','wrong')).toThrow('用户名或密码');expect(useHub.getState().session).toBeNull();});
+it('员工登录后不能通过演示视角切换获得管理员菜单',()=>{const e=useHub.getState().employees[1];useHub.getState().loginPassword(e.id,DEMO_PASSWORD);useHub.getState().setPerspective('admin');expect(useHub.getState().perspective).toBe('employee');});
+it('退出登录清除运行时会话但保留业务数据',()=>{useHub.getState().loginPassword('admin',DEMO_PASSWORD);const facts=useHub.getState().facts;useHub.getState().logout();expect(useHub.getState().session).toBeNull();expect(useHub.getState().facts).toEqual(facts);});
+it('SSO作为辅助入口使用相同员工账号',()=>{const e=useHub.getState().employees[1];useHub.getState().loginSso('飞书',e.id);expect(useHub.getState().session).toMatchObject({kind:'employee',employeeId:e.id,method:'sso'});expect(useHub.getState().page).toBe('profile');});
