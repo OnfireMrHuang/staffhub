@@ -13,7 +13,7 @@ const employeeMap=new Map(names.map((name,i)=>[name,`MM${String(i+1).padStart(4,
 const projectNames=performance.totals.map(r=>r.project);
 const projectMap=new Map(projectNames.map((name,i)=>[name,`p${i+1}`]));
 export const seedDepartments:Department[]=[{id:'live',name:'直播部',active:true},{id:'ads',name:'投放部',active:true},{id:'creative',name:'素材部',active:true}];
-export const seedProjects:Project[]=projectNames.map((name,i)=>({id:projectMap.get(name)!,name,code:`XM${String(i+1).padStart(3,'0')}`,account:'待关联真实账户',platform:name.includes('快手')?'快手（来源渠道）':'巨量营销 / 巨量千川',active:true,employeeIds:[...new Set(usable.filter(r=>r.project===name).map(r=>employeeMap.get(r.employeeName)!))]}));
+export const seedProjects:Project[]=projectNames.map((name,i)=>({id:projectMap.get(name)!,name,code:`XM${String(i+1).padStart(3,'0')}`,account:'待关联真实账户',platform:name.includes('快手')?'快手（来源渠道）':'巨量营销 / 巨量千川',active:true,liveAccountIds:[]}));
 export const seedRules=actualRules;
 const definitions:[string,string,string[]][]=[
  ['g1','E生保项目集',['平安健康-E生保','平安健康-E生保2号']],

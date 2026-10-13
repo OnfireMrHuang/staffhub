@@ -1,0 +1,6 @@
+import { number } from '../components';
+import type { AdHourly, RoomHourly } from '../live-domain';
+export const adFields: {key:keyof AdHourly;label:string}[]=[{key:'spend',label:'消耗（元）'},{key:'payment',label:'总支付金额（元）'},{key:'impressions',label:'展示数'},{key:'clicks',label:'点击数'},{key:'conversions',label:'转化数'},{key:'conversionCost',label:'转化成本（元）'},{key:'conversionRate',label:'转化率'},{key:'orders',label:'支付订单数'}];
+export const roomFields: {key:keyof RoomHourly;label:string}[]=[{key:'spend',label:'消耗（元）'},{key:'revenue',label:'营销成交金额（元）'},{key:'clicks',label:'营销点击次数'},{key:'clickRate',label:'营销点击率'},{key:'clickCost',label:'营销点击单价（元）'},{key:'conversionRate',label:'转化率'},{key:'conversions',label:'转化数'},{key:'conversionCost',label:'转化成本（元）'},{key:'roi',label:'营销 ROI'},{key:'orders',label:'营销下单数'},{key:'viewers',label:'直播间观看人次'},{key:'fans',label:'新增粉丝数'},{key:'tips',label:'直播间打赏次数'}];
+export function metric(value:unknown,key:string){if(value===null)return '未定义';if(typeof value!=='number'||!Number.isFinite(value))return '—';return key.endsWith('Rate')?`${number(value*100,2)}%`:number(value,['spend','payment','revenue','conversionCost','clickCost','roi'].includes(key)?2:0)}
+export function beijingToday(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}

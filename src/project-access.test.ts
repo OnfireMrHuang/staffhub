@@ -1,28 +1,30 @@
-import { beforeEach, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { prepareProjectAccess } from './project-access';
-import { useHub } from './store';
-beforeEach(()=>useHub.getState().reset());
-
-it('新配置需要同时提供应用ID和密钥',()=>{
- const p=useHub.getState().projects[0];
- expect(()=>prepareProjectAccess(p,'123456','')).toThrow('secret');
- expect(()=>prepareProjectAccess(p,'','demo-only-secret')).toThrow('app_id');
- expect(()=>prepareProjectAccess(p,'abc','demo-only-secret')).toThrow('app_id');
+import type { Project } from './domain';
+const project:Project={id:'p',name:'项目',code:'P',platform:'腾讯广告',account:'ad-1',active:true,liveAccountIds:['room-1']};
+it('三个平台应用ID接受文本，凭据仅保存配置标记',()=>{
+ for(const platform of ['巨量引擎','腾讯广告','快手磁力引擎']){
+  const saved=prepareProjectAccess({...project,platform},' app-demo_A-1 ','fiction-secret','fiction-code');
+  expect(saved.access).toEqual({appId:'app-demo_A-1',secretConfigured:true,authCodeConfigured:true});
+  expect(JSON.stringify(saved)).not.toContain('fiction-secret');
+  expect(JSON.stringify(saved)).not.toContain('fiction-code');
+ }
 });
-it('保存演示状态和应用ID，但不保留密钥内容',()=>{
- const p=prepareProjectAccess(useHub.getState().projects[0],' 123456 ','demo-only-secret');
- expect(p.access).toMatchObject({appId:'123456',secretConfigured:true});
- expect(JSON.stringify(p)).not.toContain('demo-only-secret');
- useHub.getState().saveProject(p);
- expect(JSON.stringify(useHub.getState().projects)).not.toContain('demo-only-secret');
+it('首次配置应用必须配密钥，授权码必须依附完整应用配置',()=>{
+ expect(()=>prepareProjectAccess(project,'app-A','')).toThrow('secret');
+ expect(()=>prepareProjectAccess(project,'','secret')).toThrow('应用 ID');
+ expect(()=>prepareProjectAccess(project,'','','code')).toThrow('应用');
 });
-it('编辑时留空保留已配置状态，改变应用ID时要求重新输入密钥',()=>{
- const p=prepareProjectAccess(useHub.getState().projects[0],'123456','demo-only-secret');
- expect(prepareProjectAccess(p,'123456','').access).toEqual(p.access);
- expect(()=>prepareProjectAccess(p,'654321','')).toThrow('secret');
- expect(prepareProjectAccess(p,'654321','replacement-demo-secret').access?.appId).toBe('654321');
+it('留空保留状态，变更应用必须重配密钥且清除旧应用授权标记',()=>{
+ const old=prepareProjectAccess(project,'app-A','secret','code');
+ expect(prepareProjectAccess(old,'app-A','').access).toEqual(old.access);
+ expect(()=>prepareProjectAccess(old,'app-B','')).toThrow('secret');
+ expect(prepareProjectAccess(old,'app-B','new-secret').access).toEqual({appId:'app-B',secretConfigured:true,authCodeConfigured:false});
+ expect(prepareProjectAccess(old,'app-B','new-secret','new-code').access?.authCodeConfigured).toBe(true);
 });
-it('允许项目未配置应用，旧演示项目保持可编辑',()=>{
- const p={...useHub.getState().projects[0],access:undefined};
- expect(prepareProjectAccess(p,'','').access).toBeUndefined();
+it('切换平台必须重配密钥和授权码，未配置项目可先保存',()=>{
+ const old=prepareProjectAccess(project,'app-A','secret','code');
+ expect(()=>prepareProjectAccess({...old,platform:'快手磁力引擎'},'app-A','', '', old.platform)).toThrow('secret');
+ expect(prepareProjectAccess({...old,platform:'快手磁力引擎'},'app-A','new-secret','',old.platform).access?.authCodeConfigured).toBe(false);
+ expect(prepareProjectAccess(project,'','').access).toBeUndefined();
 });

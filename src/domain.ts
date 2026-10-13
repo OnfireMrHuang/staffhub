@@ -2,7 +2,7 @@ export type Model = 'ad' | 'live' | 'premium' | 'schedule' | 'performance';
 export type Metric = 'roi' | 'hourlySpend' | 'spend';
 export interface Department { id: string; name: string; active: boolean }
 export interface Employee { id: string; name: string; departmentId: string; position: string; joined: string; status: '在职' | '待入职' | '已离职'; phone: string; email: string; identities: string[]; role: string; fixedSalary?: number }
-export interface Project { id: string; name: string; code: string; account: string; platform: string; active: boolean; employeeIds: string[]; access?:{appId:string;secretConfigured:boolean} }
+export interface Project { id: string; name: string; code: string; account: string; platform: string; active: boolean; liveAccountIds: string[]; access?:{appId:string;secretConfigured:boolean;authCodeConfigured?:boolean} }
 export interface Fact { id: string; key: string; version: number; model: Model; employeeId: string; projectId: string; month: string; amount: number; confirmed: boolean }
 export interface WorkRow { employeeId: string; employeeName: string; departmentId: string; departmentName: string; projectId: string; month: string; hours: number; spend: number; premium: number; roi: number; hourlySpend: number }
 export interface Band { min?: number; max?: number; exact?: number; includeMin: boolean; includeMax: boolean; rate: number }
