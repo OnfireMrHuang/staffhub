@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { calculate, validateRule } from './domain';
-import type { Department, Employee, HourlyRule, Project, Salary, Scheme, WorkRow } from './domain';
+import type { Department, Employee, Salary } from './domain';
 import { seedDepartments, seedEmployees, seedRules } from './seed';
-import { demoAdHours, demoMonth, demoProjects, demoRecords, demoRoomHours, demoScheme } from './live-seed';
+import { demoAdHours, demoMonth, demoProducts, demoRooms, demoRecords, demoRoomHours } from './live-seed';
 import { buildLiveStatistics, validateLiveRecord } from './live-domain';
 import { fillSimulatedHours } from './live-sync';
 import type { AdHourly, LiveDetail, LiveMonthly, LiveRecord, RoomHourly } from './live-domain';
@@ -11,9 +10,11 @@ import { authenticatePassword, authenticateSso } from './auth';
 import type { DemoSession } from './auth';
 import { calculateDepartmentRules, migrateHourlyRules, validateDepartmentRule } from './payroll-rules';
 import type { DepartmentRule } from './payroll-rules';
+import type { AdvertisingProduct, LiveRoom } from './operations-domain';
+import { migrateOperationsState } from './operations-migration';
 
 export type Page = 'operations' | 'employees' | 'departments' | 'rules' | 'payroll' | 'profile' | 'roles';
-export interface Dataset { rows:WorkRow[]; month:string; version:number; revision:number; published:boolean }
+export interface Dataset { rows:LiveMonthly[]; month:string; version:number; revision:number; published:boolean }
 export interface PayrollTask {
  id:string; month:string; ruleId:string; ruleName:string; ruleVersion:number; departmentId:string;
  datasetVersion:number; datasetRevision:number;
@@ -21,7 +22,7 @@ export interface PayrollTask {
 }
 export interface PayrollSnapshot {
  records:LiveRecord[]; adHours:AdHourly[]; roomHours:RoomHourly[];
- employees:Employee[]; departments:Department[]; projects:Project[]; rules:HourlyRule[]; scheme:Scheme;
+ employees:Employee[]; departments:Department[]; products:AdvertisingProduct[]; rooms:LiveRoom[];
  details:LiveDetail[]; monthly:LiveMonthly[]; dataset:Dataset;
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
 }
@@ -30,13 +31,13 @@ export interface Role { id:string; name:string; description:string; permissions:
 interface Hub {
  session:DemoSession|null;
  loginPassword:(username:string,password:string)=>void; loginSso:(platform:string,employeeId:string)=>void; logout:()=>void;
- page:Page; opsTab:string; month:string; employees:Employee[]; departments:Department[]; projects:Project[]; rules:HourlyRule[]; scheme:Scheme;
+ page:Page; opsTab:string; month:string; employees:Employee[]; departments:Department[]; products:AdvertisingProduct[]; rooms:LiveRoom[];
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
  liveRecords:LiveRecord[]; adHours:AdHourly[]; roomHours:RoomHourly[]; archivedMonths:string[]; liveDetails:LiveDetail[]; monthlyRows:LiveMonthly[];
  dataset:Dataset; roles:Role[]; revision:number; batch:Batch|null; batches:Record<string,Batch>; syncTime:string; toast:string; perspective:'admin'|'employee';
  navigate:(page:Page,tab?:string)=>void; setMonth:(month:string)=>void; notify:(text:string)=>void; reset:()=>void;
- saveEmployee:(employee:Employee)=>void; saveDepartment:(department:Department)=>void; saveProject:(project:Project)=>void; saveLiveRecords:(records:LiveRecord[])=>void;
- cleanDataset:()=>void; saveRole:(role:Role)=>void; saveRules:(rules:HourlyRule[],scheme:Scheme)=>void;
+ saveEmployee:(employee:Employee)=>void; saveDepartment:(department:Department)=>void; saveProduct:(product:AdvertisingProduct)=>void; saveRoom:(room:LiveRoom)=>void; saveLiveRecords:(records:LiveRecord[])=>void;
+ cleanDataset:()=>void; saveRole:(role:Role)=>void;
  saveDepartmentRule:(rule:DepartmentRule)=>void; publishDepartmentRule:(id:string,month:string)=>void;
  withdrawPayrollTask:(id:string)=>void;
  runPayroll:()=>void; lockBatch:()=>void; publishBatch:()=>void; sync:()=>void; setPerspective:(value:'admin'|'employee')=>void;
@@ -51,24 +52,24 @@ const requireOpenMonth = (month:string, archivedMonths:string[]) => {
  if(archivedMonths.includes(month)) throw new Error(`${month} 已归档，不能修改或重新核算`);
 };
 // Credentials never enter the business state: only the explicit configuration flags survive.
-const safeProject = (project:Project):Project => ({
- id:project.id, name:project.name, code:project.code, account:project.account, platform:project.platform, active:project.active,
- liveAccountIds:[...project.liveAccountIds],
- ...(project.access ? {access:{appId:project.access.appId,secretConfigured:project.access.secretConfigured,authCodeConfigured:!!project.access.authCodeConfigured}} : {}),
+export const safeProduct = (product:AdvertisingProduct):AdvertisingProduct => ({
+ id:product.id,name:product.name,platform:product.platform,accountId:product.accountId,active:product.active,
+ ...(product.access ? {access:{appId:product.access.appId,secretConfigured:!!product.access.secretConfigured,authCodeConfigured:!!product.access.authCodeConfigured}} : {}),
 });
+const validRoom = (roomId:string, rooms:LiveRoom[], products:AdvertisingProduct[]) => rooms.some(room=>room.id===roomId && room.active && products.some(product=>product.id===room.productId && product.active));
 const initial = () => {
- const employees=structuredClone(seedEmployees),departments=structuredClone(seedDepartments),projects=structuredClone(demoProjects);
+ const employees=structuredClone(seedEmployees),departments=structuredClone(seedDepartments),products=structuredClone(demoProducts),rooms=structuredClone(demoRooms);
  const liveRecords=structuredClone(demoRecords),adHours=structuredClone(demoAdHours),roomHours=structuredClone(demoRoomHours);
- const {details,monthly}=buildLiveStatistics(liveRecords,roomHours,employees,departments,projects,demoMonth);
+ const {details,monthly}=buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,demoMonth);
  return {
-  page:'operations' as Page,opsTab:'datasets',month:demoMonth,employees,departments,projects,liveRecords,adHours,roomHours,
-  rules:structuredClone(seedRules),scheme:structuredClone(demoScheme),archivedMonths:[] as string[],liveDetails:details,monthlyRows:monthly,
-  departmentRules:migrateHourlyRules(seedRules,projects),payrollTasks:[] as PayrollTask[],
+  page:'operations' as Page,opsTab:'datasets',month:demoMonth,employees,departments,products,rooms,liveRecords,adHours,roomHours,
+  archivedMonths:[] as string[],liveDetails:details,monthlyRows:monthly,
+  departmentRules:migrateHourlyRules(seedRules,rooms,products),payrollTasks:[] as PayrollTask[],
   dataset:{rows:monthly,month:demoMonth,version:1,revision:1,published:true},
   roles:[
    {id:'employee',name:'员工',description:'查看本人资料与已发布工资',permissions:['本人资料','本人薪资条']},
    {id:'hr',name:'HR',description:'维护部门、员工档案及平台身份',permissions:['员工管理','部门管理','身份绑定']},
-   {id:'ops',name:'数据运营',description:'维护投放项目与运营业务数据',permissions:['投放项目','数据录入','运营数据集']},
+   {id:'ops',name:'数据运营',description:'维护投放产品、直播间与运营业务数据',permissions:['投放产品','直播间','数据录入','运营数据集']},
    {id:'salary',name:'薪酬核算',description:'配置薪酬方案并核算发布工资',permissions:['薪酬规则','薪酬核算','工资发布','工资导出']},
   ],revision:1,batch:null as Batch|null,batches:{} as Record<string,Batch>,syncTime:'2026-10-13 17:00',toast:'',perspective:'admin' as const,
  };
@@ -103,24 +104,35 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const s=get(),saved=structuredClone(department);
   set({departments:s.departments.some(d=>d.id===saved.id)?s.departments.map(d=>d.id===saved.id?saved:d):[...s.departments,saved],revision:s.revision+1});
  },
- saveProject:project=>{
-  const s=get(),code=normalText(project.code),name=normalText(project.name),account=normalText(project.account);
-  if(!code) throw new Error('项目编码不能为空');
-  if(!name) throw new Error('项目名称不能为空');
-  if(s.projects.some(p=>p.id!==project.id && normalText(p.code)===code)) throw new Error('项目编码必须唯一');
-  if(!['巨量引擎','磁力引擎','腾讯 ADQ'].includes(project.platform)) throw new Error('请选择有效的平台');
-  const liveAccountIds=[...new Set(project.liveAccountIds.map(normalText).filter(Boolean))];
-  if(!account || !liveAccountIds.length) throw new Error('请填写投放账户及至少一个直播账户');
-  const old=s.projects.find(p=>p.id===project.id);
-  const hasHistory=s.liveRecords.some(r=>r.projectId===project.id)||s.adHours.some(r=>r.projectId===project.id)||s.roomHours.some(r=>r.projectId===project.id);
-  if(old && old.code!==code && hasHistory) throw new Error('项目已有来源历史，不能改变项目编码');
-  if(old && hasHistory) {
-   const oldAccounts=new Set(old.liveAccountIds.map(normalText));
-   const sameAccounts=oldAccounts.size===liveAccountIds.length && liveAccountIds.every(id=>oldAccounts.has(id));
-   if(old.platform!==project.platform || normalText(old.account)!==account || !sameAccounts) throw new Error('已有来源历史，平台及账户绑定不可直接更改，请新建项目');
-  }
-  const saved=safeProject({...project,code,name,account,liveAccountIds});
-  set({projects:s.projects.some(p=>p.id===saved.id)?s.projects.map(p=>p.id===saved.id?saved:p):[...s.projects,saved],revision:s.revision+1});
+ saveProduct:product=>{
+  const s=get(),id=normalText(product.id),name=normalText(product.name),accountId=normalText(product.accountId);
+  if(!id || !name) throw new Error('产品 ID 和名称不能为空');
+  if(s.products.some(p=>p.id!==product.id && normalText(p.id)===id)) throw new Error('产品 ID 必须全局唯一');
+  if(s.products.some(p=>p.id!==product.id && normalText(p.name)===name)) throw new Error('产品名称必须全局唯一');
+  if(!['巨量引擎','磁力引擎','腾讯 ADQ'].includes(product.platform)) throw new Error('请选择有效的平台');
+  if(!accountId) throw new Error('投放账户不能为空');
+  const old=s.products.find(p=>p.id===product.id);
+  const hasHistory=s.liveRecords.some(r=>r.productId===product.id)||s.adHours.some(r=>r.productId===product.id)||s.roomHours.some(r=>r.productId===product.id);
+  if(old && hasHistory && (old.id!==id || old.platform!==product.platform || normalText(old.accountId)!==accountId)) throw new Error('已有来源历史，产品 ID、平台及账户绑定不可直接更改，请新建产品');
+  // Moving a product platform must not turn its existing rooms into duplicate platform sources.
+  if(s.rooms.filter(r=>r.productId===product.id).some(room=>s.rooms.some(other=>other.id!==room.id && normalText(other.platformAccountId)===normalText(room.platformAccountId) && s.products.find(p=>p.id===other.productId)?.platform===product.platform))) throw new Error('同平台直播账户只能绑定一个直播间');
+  const saved=safeProduct({...product,id,name,accountId});
+  set({products:old?s.products.map(p=>p.id===old.id?saved:p):[...s.products,saved],revision:s.revision+1});
+ },
+ saveRoom:room=>{
+  const s=get(),id=normalText(room.id),name=normalText(room.name),platformAccountId=normalText(room.platformAccountId),productId=normalText(room.productId);
+  if(!id || !name) throw new Error('直播间 ID 和名称不能为空');
+  if(s.rooms.some(r=>r.id!==room.id && normalText(r.id)===id)) throw new Error('直播间 ID 必须全局唯一');
+  if(s.rooms.some(r=>r.id!==room.id && normalText(r.name)===name)) throw new Error('直播间名称必须全局唯一');
+  const product=s.products.find(p=>p.id===productId);
+  if(!product) throw new Error('请选择有效的关联产品');
+  if(!platformAccountId) throw new Error('直播间平台账户不能为空');
+  const old=s.rooms.find(r=>r.id===room.id);
+  const hasHistory=s.liveRecords.some(r=>r.roomId===room.id)||s.adHours.some(r=>r.roomId===room.id)||s.roomHours.some(r=>r.roomId===room.id);
+  if(old && hasHistory && (old.id!==id || old.productId!==productId || normalText(old.platformAccountId)!==platformAccountId)) throw new Error('已有来源历史，直播间 ID、产品及账户绑定不可直接更改，请新建直播间');
+  if(s.rooms.some(r=>r.id!==room.id && normalText(r.platformAccountId)===platformAccountId && s.products.find(p=>p.id===r.productId)?.platform===product.platform)) throw new Error('同平台直播账户只能绑定一个直播间');
+  const saved:LiveRoom={id,name,platformAccountId,productId,active:room.active};
+  set({rooms:old?s.rooms.map(r=>r.id===old.id?saved:r):[...s.rooms,saved],revision:s.revision+1});
  },
  saveLiveRecords:records=>{
   const s=get();
@@ -135,7 +147,8 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   }
   const merged=[...s.liveRecords.filter(r=>!ids.has(r.id)),...incoming];
   for(const record of incoming) {
-   validateLiveRecord(record,s.employees,s.projects,merged,s.archivedMonths);
+   validateLiveRecord(record,s.employees,s.rooms,s.products,merged,s.archivedMonths);
+   if(!validRoom(record.roomId,s.rooms,s.products)) throw new Error('直播记录产品或直播间已停用');
    for(const [role,id] of [['主播',record.hostId],['投手',record.buyerId],['场控',record.controlId]]) {
     const employee=s.employees.find(e=>e.id===id)!;
     if(employee.status!=='在职') throw new Error(`${role}员工 ${employee.name} 必须为在职状态`);
@@ -150,16 +163,11 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  },
  cleanDataset:()=>{
   const s=get();requireOpenMonth(s.month,s.archivedMonths);
-  const {details,monthly}=buildLiveStatistics(s.liveRecords,s.roomHours,s.employees,s.departments,s.projects,s.month);
+  const {details,monthly}=buildLiveStatistics(s.liveRecords,s.roomHours,s.employees,s.departments,s.rooms,s.products,s.month);
   if(!monthly.length) throw new Error('当前月份没有直播来源数据');
   set({liveDetails:details,monthlyRows:monthly,dataset:{rows:monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
  },
  saveRole:role=>{const s=get(),saved=structuredClone(role);set({roles:s.roles.some(r=>r.id===role.id)?s.roles.map(r=>r.id===role.id?saved:r):[...s.roles,saved]});},
- saveRules:(rules,scheme)=>{
-  rules.forEach(validateRule);const s=get();
-  calculate(s.dataset.rows,s.employees,s.departments,scheme,rules,s.dataset.month);
-  set({rules:structuredClone(rules.map(r=>({...r,version:r.version+1}))),scheme:structuredClone({...scheme,version:s.scheme.version+1})});
- },
  saveDepartmentRule:rule=>{
   const s=get(),previous=s.departmentRules.find(r=>r.id===rule.id);
   if(rule.sourceFloor && !previous?.sourceFloor) throw new Error('来源优先条件仅用于迁移历史资料，不能手动新增');
@@ -167,7 +175,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   validateDepartmentRule(saved);
   if(!s.departments.some(d=>d.id===saved.departmentId && d.active)) throw new Error('请选择有效部门');
   if(saved.departmentId!=='live') throw new Error('该部门月薪规则待开发');
-  if(saved.projectIds.some(id=>!s.projects.some(p=>p.id===id && p.active))) throw new Error('请选择有效且启用的项目');
+  if(saved.roomIds.some(id=>!validRoom(id,s.rooms,s.products))) throw new Error('请选择有效且启用的直播间');
   set({departmentRules:previous?s.departmentRules.map(r=>r.id===saved.id?saved:r):[...s.departmentRules,saved]});
  },
  publishDepartmentRule:(id,month)=>{
@@ -180,9 +188,9 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   if(s.payrollTasks.some(t=>t.ruleId===id && t.month===month && t.status!=='已撤回')) throw new Error('同一规则同月不能重复发布');
   validateDepartmentRule(rule);
   if(rule.departmentId!=='live' || !s.departments.some(d=>d.id===rule.departmentId && d.active)) throw new Error('规则部门无效或月薪规则待开发');
-  if(rule.projectIds.some(projectId=>!s.projects.some(p=>p.id===projectId && p.active))) throw new Error('规则项目不存在或已停用');
-  const employeeIds=s.employees.filter(e=>e.status==='在职' && e.departmentId===rule.departmentId && s.dataset.rows.some(r=>r.employeeId===e.id && r.departmentId===rule.departmentId && r.month===month && rule.projectIds.includes(r.projectId))).map(e=>e.id);
-  if(!employeeIds.length) throw new Error('部门与项目集没有参与工作员工，不能发布核算任务');
+  if(rule.roomIds.some(roomId=>!validRoom(roomId,s.rooms,s.products))) throw new Error('规则直播间不存在或已停用');
+  const employeeIds=s.employees.filter(e=>e.status==='在职' && e.departmentId===rule.departmentId && s.dataset.rows.some(r=>r.employeeId===e.id && r.departmentId===rule.departmentId && r.month===month && rule.roomIds.includes(r.roomId))).map(e=>e.id);
+  if(!employeeIds.length) throw new Error('部门与直播间集没有参与工作员工，不能发布核算任务');
   const published=structuredClone({...rule,status:'已发布' as const});
   const task:PayrollTask={id:crypto.randomUUID(),month,ruleId:id,ruleName:rule.name,ruleVersion:rule.version,departmentId:rule.departmentId,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,status:'待核算',rule:structuredClone(published),employeeIds,created:new Date().toLocaleString('sv-SE').slice(0,19)};
   set({departmentRules:s.departmentRules.map(r=>r.id===id?published:r),payrollTasks:[...s.payrollTasks,task]});
@@ -206,16 +214,16 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const merged=new Map<string,Salary>();
   for(const task of tasks) {
    if(!s.departments.some(d=>d.id===task.departmentId && d.active)) throw new Error('核算任务部门已停用，请核对');
-   if(task.rule.projectIds.some(id=>!s.projects.some(p=>p.id===id && p.active))) throw new Error('核算任务项目已停用，请核对');
-   const currentEmployeeIds=new Set(s.employees.filter(e=>e.status==='在职' && e.departmentId===task.departmentId && s.dataset.rows.some(r=>r.employeeId===e.id && r.departmentId===task.departmentId && r.month===s.month && task.rule.projectIds.includes(r.projectId))).map(e=>e.id));
+   if(task.rule.roomIds.some(id=>!validRoom(id,s.rooms,s.products))) throw new Error('核算任务直播间已停用，请核对');
+   const currentEmployeeIds=new Set(s.employees.filter(e=>e.status==='在职' && e.departmentId===task.departmentId && s.dataset.rows.some(r=>r.employeeId===e.id && r.departmentId===task.departmentId && r.month===s.month && task.rule.roomIds.includes(r.roomId))).map(e=>e.id));
    if(currentEmployeeIds.size!==task.employeeIds.length || task.employeeIds.some(id=>!currentEmployeeIds.has(id))) throw new Error('已确认任务员工名单发生变化，请核对来源与发布任务');
    const employees=task.employeeIds.map(id=>{
     const employee=s.employees.find(e=>e.id===id);
-    if(!employee || employee.status!=='在职' || employee.departmentId!==task.departmentId || !s.dataset.rows.some(r=>r.employeeId===id && r.departmentId===task.departmentId && r.month===s.month && task.rule.projectIds.includes(r.projectId))) throw new Error('已确认任务员工的部门、在职状态或工作数据已变化，请核对');
+    if(!employee || employee.status!=='在职' || employee.departmentId!==task.departmentId || !s.dataset.rows.some(r=>r.employeeId===id && r.departmentId===task.departmentId && r.month===s.month && task.rule.roomIds.includes(r.roomId))) throw new Error('已确认任务员工的部门、在职状态或工作数据已变化，请核对');
     return employee;
    });
    if(!employees.length) throw new Error('核算任务缺少已确认员工');
-   const calculated=calculateDepartmentRules(s.dataset.rows as LiveMonthly[],employees,s.departments,[task.rule],s.month);
+   const calculated=calculateDepartmentRules(s.dataset.rows,employees,s.departments,[task.rule],s.month);
    if(calculated.length!==employees.length || employees.some(e=>!calculated.some(salary=>salary.employeeId===e.id))) throw new Error('核算任务未覆盖全部已确认员工');
    for(const salary of calculated) {
     const existing=merged.get(salary.employeeId);
@@ -228,14 +236,14 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const payrollTasks=s.payrollTasks.map(t=>t.month===s.month && t.status!=='已撤回'?{...t,status:'已核算' as const}:t);
   const snapshot:PayrollSnapshot=structuredClone({
    records:s.liveRecords.filter(r=>r.date.startsWith(s.month+'-')),adHours:s.adHours.filter(r=>r.date.startsWith(s.month+'-')),roomHours:s.roomHours.filter(r=>r.date.startsWith(s.month+'-')),
-   employees:s.employees,departments:s.departments,projects:s.projects.map(safeProject),rules:s.rules,scheme:s.scheme,details:s.liveDetails,monthly:s.monthlyRows,dataset:s.dataset,departmentRules:s.departmentRules,payrollTasks,
+   employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,details:s.liveDetails,monthly:s.monthlyRows,dataset:s.dataset,departmentRules:s.departmentRules,payrollTasks,
   });
   const batch:Batch={month:s.month,status:'已核算',salaries:structuredClone(salaries),datasetVersion:s.dataset.version,ruleVersion:Math.max(...tasks.map(t=>t.ruleVersion)),created:new Date().toLocaleString('sv-SE').slice(0,19),snapshot,logs:[
    `模拟来源版本 ${s.revision} 已确认：直播记录与直播间小时数据`,
-   `读取固定运营数据集 v${s.dataset.version}，${s.dataset.rows.length} 条员工项目月度记录`,
+   `读取固定运营数据集 v${s.dataset.version}，${s.dataset.rows.length} 条员工直播间月度记录`,
    `${tasks.length} 个已发布部门规则任务，${salaries.length} 位已确认员工`,
    ...tasks.map(t=>`${t.ruleName} v${t.ruleVersion}：发布数据集 v${t.datasetVersion}（来源修订 ${t.datasetRevision}）→ 核算数据集 v${s.dataset.version}（来源修订 ${s.dataset.revision}）`),
-   '项目集汇总 → 指标与绑定时长 → 各项薪资相加',
+   '直播间集汇总 → 指标与绑定时长 → 各项薪资相加',
    `${s.month} 核算成功：冻结员工、规则、来源与统计依据并归档`,
   ]};
   set({batch,batches:{...s.batches,[s.month]:batch},payrollTasks,archivedMonths:[...new Set([...s.archivedMonths,s.month])]});
@@ -251,13 +259,15 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  },
  sync:()=>{
   const s=get();requireOpenMonth(s.month,s.archivedMonths);
-  const simulated=fillSimulatedHours({month:s.month,projects:s.projects,records:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours});
-  const added=simulated.addedAdHours+simulated.addedRoomHours;
-  set({adHours:simulated.adHours,roomHours:simulated.roomHours,revision:s.revision+(added?1:0),syncTime:new Date().toLocaleString('sv-SE').slice(0,16),toast:`${s.month} 模拟同步完成：补齐 ${simulated.addedAdHours} 条投放、${simulated.addedRoomHours} 条直播间虚构小时数据`});
+  const simulated=fillSimulatedHours({collectAds:false,month:s.month,products:s.products,rooms:s.rooms,records:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours});
+  const added=simulated.addedRoomHours;
+  set({adHours:simulated.adHours,roomHours:simulated.roomHours,revision:s.revision+(added?1:0),syncTime:new Date().toLocaleString('sv-SE').slice(0,16),toast:`${s.month} 模拟同步完成：补齐 ${simulated.addedRoomHours} 条直播间虚构小时数据`});
  },
  setPerspective:perspective=>{if(get().session?.kind!=='admin')return;set({perspective,page:perspective==='employee'?'profile':'operations'});},
 }),{
  name:'meimei-staffhub-department-rules-v1',
+ version:1,
+ migrate:persisted=>migrateOperationsState(persisted) as ReturnType<typeof initial>,
  storage:createJSONStorage(()=>typeof localStorage!=='undefined'?localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),
- partialize:s=>({month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,projects:s.projects.map(safeProject),liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,rules:s.rules,scheme:s.scheme,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,dataset:s.dataset,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
+ partialize:s=>({month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,dataset:s.dataset,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
 }));

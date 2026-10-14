@@ -16,8 +16,9 @@ it('来源改动后旧数据集不能核算，重新统计后可核算',()=>{
 it('工资只有锁定后可发布',()=>{
  publishSeedRules();useHub.getState().runPayroll();expect(()=>useHub.getState().publishBatch()).toThrow('锁定');
 });
-it('每个默认项目均能原样保存配置',()=>{
- const projects=structuredClone(useHub.getState().projects);
- for(const project of projects) expect(()=>useHub.getState().saveProject(project)).not.toThrow();
- expect(useHub.getState().projects).toEqual(projects);
+it('每个默认产品及直播间均能原样保存配置',()=>{
+ const products=structuredClone(useHub.getState().products),rooms=structuredClone(useHub.getState().rooms);
+ for(const product of products) expect(()=>useHub.getState().saveProduct(product)).not.toThrow();
+ for(const room of rooms) expect(()=>useHub.getState().saveRoom(room)).not.toThrow();
+ expect(useHub.getState().products).toEqual(products);expect(useHub.getState().rooms).toEqual(rooms);
 });

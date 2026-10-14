@@ -3,12 +3,12 @@ import { useHub } from './store';
 import type { DepartmentRule } from './payroll-rules';
 
 beforeEach(()=>useHub.getState().reset());
-const rule = (id='task-rule', rate=50):DepartmentRule => ({id,name:id,departmentId:'live',version:1,status:'草稿',metrics:[{id:'hours',field:'hours',rate,bands:[]}],expression:['hours'],projectIds:[useHub.getState().projects[0].id]});
+const rule = (id='task-rule', rate=50):DepartmentRule => ({id,name:id,departmentId:'live',version:1,status:'草稿',metrics:[{id:'hours',field:'hours',rate,bands:[]}],expression:['hours'],roomIds:[useHub.getState().rooms[0].id]});
 const publish = (value=rule()) => { useHub.getState().saveDepartmentRule(value);useHub.getState().publishDepartmentRule(value.id,useHub.getState().month); };
 
-it('迁移六条规则为草稿，前三条绑定示例项目且没有任务',()=>{
+it('迁移六条规则为草稿，前三条绑定示例直播间且没有任务',()=>{
  const s=useHub.getState();expect(s.departmentRules).toHaveLength(6);expect(s.departmentRules.every(r=>r.status==='草稿')).toBe(true);
- expect(s.departmentRules.slice(0,3).every(r=>r.projectIds.length===1)).toBe(true);expect(s.payrollTasks).toEqual([]);
+ expect(s.departmentRules.slice(0,3).every(r=>r.roomIds.length===1)).toBe(true);expect(s.payrollTasks).toEqual([]);
  expect(()=>s.runPayroll()).toThrow('任务');
 });
 it('保存仅递增当前规则版本，发布后编辑不改变快照或确认名单',()=>{
@@ -23,19 +23,19 @@ it('保存仅递增当前规则版本，发布后编辑不改变快照或确认�
  const salary=useHub.getState().batch!.salaries.find(e=>e.employeeId===task.employeeIds[0])!;
  expect(salary.total).toBe(salary.details[0].hours*50);
 });
-it('发布校验重复、月份、数据集新鲜度、活动部门与项目',()=>{
+it('发布校验重复、月份、数据集新鲜度、活动部门与直播间',()=>{
  publish();expect(()=>useHub.getState().publishDepartmentRule('task-rule','2026-10')).toThrow('重复');
  expect(()=>useHub.getState().publishDepartmentRule('task-rule','2026-11')).toThrow('月份');
  useHub.getState().saveEmployee({...useHub.getState().employees[0],name:'新姓名'});
  expect(()=>useHub.getState().publishDepartmentRule(useHub.getState().departmentRules[0].id,'2026-10')).toThrow('重新');
- useHub.getState().cleanDataset();useHub.setState({projects:useHub.getState().projects.map((p,i)=>i? p:{...p,active:false})});
- expect(()=>useHub.getState().publishDepartmentRule(useHub.getState().departmentRules[0].id,'2026-10')).toThrow('项目');
- useHub.setState({projects:useHub.getState().projects.map(p=>({...p,active:true})),departments:useHub.getState().departments.map(d=>({...d,active:false}))});
+ useHub.getState().cleanDataset();useHub.setState({rooms:useHub.getState().rooms.map((p,i)=>i? p:{...p,active:false})});
+ expect(()=>useHub.getState().publishDepartmentRule(useHub.getState().departmentRules[0].id,'2026-10')).toThrow('直播间');
+ useHub.setState({rooms:useHub.getState().rooms.map(p=>({...p,active:true})),departments:useHub.getState().departments.map(d=>({...d,active:false}))});
  expect(()=>useHub.getState().publishDepartmentRule(useHub.getState().departmentRules[0].id,'2026-10')).toThrow('部门');
 });
-it('未绑定项目的迁移草稿不可发布，新增无项目规则不能保存',()=>{
- expect(()=>useHub.getState().publishDepartmentRule(useHub.getState().departmentRules[3].id,'2026-10')).toThrow('项目');
- expect(()=>useHub.getState().saveDepartmentRule({...rule(),projectIds:[]})).toThrow('项目');
+it('未绑定直播间的迁移草稿不可发布，新增无直播间规则不能保存',()=>{
+ expect(()=>useHub.getState().publishDepartmentRule(useHub.getState().departmentRules[3].id,'2026-10')).toThrow('直播间');
+ expect(()=>useHub.getState().saveDepartmentRule({...rule(),roomIds:[]})).toThrow('直播间');
  expect(useHub.getState().payrollTasks).toEqual([]);
 });
 it('发布不接收没有参与工作的部门员工，核算保留已确认名单',()=>{
@@ -53,16 +53,16 @@ it('已发布名单发生部门、在职状态或工作消失时阻止核算，�
 });
 it('来源更正新增参与员工时拒绝核算，不能遗漏员工并归档',()=>{
  publish();const s=useHub.getState(),frozen=structuredClone(s.payrollTasks);
- const record=s.liveRecords.find(r=>r.projectId===s.payrollTasks[0].rule.projectIds[0])!;
+ const record=s.liveRecords.find(r=>r.roomId===s.payrollTasks[0].rule.roomIds[0])!;
  const newcomer=s.employees.find(e=>e.status==='在职' && e.departmentId==='live' && !s.payrollTasks[0].employeeIds.includes(e.id))!;
  s.saveLiveRecords([{...record,version:record.version+1,hostId:newcomer.id}]);s.cleanDataset();
- expect(useHub.getState().dataset.rows.some(r=>r.employeeId===record.hostId && r.projectId===record.projectId)).toBe(true);
- expect(useHub.getState().dataset.rows.some(r=>r.employeeId===newcomer.id && r.projectId===record.projectId)).toBe(true);
+ expect(useHub.getState().dataset.rows.some(r=>r.employeeId===record.hostId && r.roomId===record.roomId)).toBe(true);
+ expect(useHub.getState().dataset.rows.some(r=>r.employeeId===newcomer.id && r.roomId===record.roomId)).toBe(true);
  expect(()=>useHub.getState().runPayroll()).toThrow('已确认任务员工名单发生变化');
  expect(useHub.getState().payrollTasks).toEqual(frozen);expect(useHub.getState().batch).toBeNull();
  expect(useHub.getState().batches).toEqual({});expect(useHub.getState().archivedMonths).toEqual([]);
 });
-it('保存草稿不创建任务，发布拒绝未刷新数据集和无人参与的项目集',()=>{
+it('保存草稿不创建任务，发布拒绝未刷新数据集和无人参与的直播间集',()=>{
  useHub.getState().saveDepartmentRule(rule());expect(useHub.getState().payrollTasks).toEqual([]);
  useHub.setState({dataset:{...useHub.getState().dataset,published:false}});
  expect(()=>useHub.getState().publishDepartmentRule('task-rule','2026-10')).toThrow('刷新');
@@ -80,7 +80,7 @@ it('任务记录发布时数据集版本，来源修正后记录实际核算版�
  expect(useHub.getState().batch!.logs.join('\n')).toContain('核算数据集 v2');
 });
 it('保存迁移规则保留只读来源保底，普通新规则不能注入来源优先条件',()=>{
- const original=useHub.getState().departmentRules.find(r=>r.sourceFloor && r.projectIds.length)!;
+ const original=useHub.getState().departmentRules.find(r=>r.sourceFloor && r.roomIds.length)!;
  useHub.getState().saveDepartmentRule({...original,sourceFloor:{roiBelow:999,rate:999},sourceNote:'替换来源'});
  const saved=useHub.getState().departmentRules.find(r=>r.id===original.id)!;
  expect(saved.sourceFloor).toEqual(original.sourceFloor);expect(saved.sourceNote).toBe(original.sourceNote);

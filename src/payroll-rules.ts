@@ -1,11 +1,12 @@
-import type { Band, Department, Employee, HourlyRule, Metric, Project, Salary, SalaryComponent, SalaryDetail } from './domain';
+import type { Band, Department, Employee, HourlyRule, Metric, Salary, SalaryComponent, SalaryDetail } from './domain';
+import type { AdvertisingProduct, LiveRoom } from './operations-domain';
 import type { LiveMonthly } from './live-domain';
 
 export type PayrollMetric = 'hours' | 'nightHours' | 'earlyHours' | 'spend' | 'premium' | 'roi' | 'hourlySpend' | 'nightSpend' | 'earlySpend' | 'roiRank' | 'sessions' | 'nightSessions' | 'earlySessions';
 export type DurationMetric = 'hours' | 'nightHours' | 'earlyHours';
 export interface RuleBand extends Band { keyType: 'exact' | 'range' | 'related'; relatedField?: PayrollMetric }
 export interface RuleMetric { id: string; field: PayrollMetric; durationField?: DurationMetric; rate?: number; bands: RuleBand[] }
-export interface DepartmentRule { id: string; name: string; departmentId: string; version: number; status: '草稿' | '已发布'; metrics: RuleMetric[]; expression: string[]; projectIds: string[]; sourceNote?: string; sourceFloor?: {roiBelow: number; rate: number} }
+export interface DepartmentRule { id: string; name: string; departmentId: string; version: number; status: '草稿' | '已发布'; metrics: RuleMetric[]; expression: string[]; roomIds: string[]; sourceNote?: string; sourceFloor?: {roiBelow: number; rate: number} }
 
 export const monthlyMetricOptions: {field: PayrollMetric; label: string; kind: '常规指标' | '时长指标'}[] = [
   {field: 'hours', label: '总直播时长', kind: '时长指标'},
@@ -28,13 +29,14 @@ const isMetric = (field: unknown): field is PayrollMetric => typeof field === 's
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const isNonnegative = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
-/** Source rules remain independent drafts; only the three demo projects are initially bound. */
-export function migrateHourlyRules(oldRules: HourlyRule[], projects: Project[]): DepartmentRule[] {
-  const projectNames = ['平安健康-E生保', '众安-就医无忧保', '众安-尊享E生'];
+/** Source rules remain independent drafts; matching source product names bind the first corresponding room. */
+export function migrateHourlyRules(oldRules: HourlyRule[], rooms: LiveRoom[], products: AdvertisingProduct[]): DepartmentRule[] {
+  const productNames = ['平安健康-E生保', '众安-就医无忧保', '众安-尊享E生', '众安-众民保百万医疗', '太平洋-长期医疗免健告版', '平安财-总部普惠保'];
   return oldRules.map((old, index) => {
     const metrics: RuleMetric[] = old.measures.map((measure, i) => ({id: `${old.id}-metric-${i + 1}`, field: measure.metric, durationField: 'hours', bands: measure.bands.map(b => ({...b, keyType: b.exact !== undefined ? 'exact' : 'range'}))}));
-    const project = index < projectNames.length ? projects.find(p => p.name === projectNames[index]) : undefined;
-    return {id: old.id, name: old.name, departmentId: 'live', version: 1, status: '草稿', metrics, expression: metrics.map(metric => metric.id), projectIds: project ? [project.id] : [], sourceNote: old.sourceNote, sourceFloor: old.floor ? {...old.floor} : undefined};
+    const product = products.find(product => product.name === productNames[index]);
+    const room = product ? rooms.find(room => room.productId === product.id) : undefined;
+    return {id: old.id, name: old.name, departmentId: 'live', version: 1, status: '草稿', metrics, expression: metrics.map(metric => metric.id), roomIds: room ? [room.id] : [], sourceNote: old.sourceNote, sourceFloor: old.floor ? {...old.floor} : undefined};
   });
 }
 
@@ -53,7 +55,7 @@ export function validateDepartmentRule(rule: DepartmentRule): void {
   if (!rule.id?.trim() || !rule.name?.trim()) throw new Error('规则名称和 ID 不能为空');
   if (rule.departmentId !== 'live') throw new Error('仅直播部支持月薪规则，其他部门待开发');
   if (!Number.isInteger(rule.version) || rule.version < 1 || !['草稿', '已发布'].includes(rule.status)) throw new Error('规则版本或状态无效');
-  if (!rule.projectIds.length || rule.projectIds.some(id => !id.trim()) || new Set(rule.projectIds).size !== rule.projectIds.length) throw new Error('项目集必须选择有效且不重复的项目');
+  if (!rule.roomIds.length || rule.roomIds.some(id => !id.trim()) || new Set(rule.roomIds).size !== rule.roomIds.length) throw new Error('直播间集合必须选择有效且不重复的直播间');
   if (!rule.metrics.length || rule.metrics.some(metric => !metric.id?.trim() || !isMetric(metric.field))) throw new Error('请选择有效指标');
   if (new Set(rule.metrics.map(metric => metric.id)).size !== rule.metrics.length || new Set(rule.metrics.map(metric => metric.field)).size !== rule.metrics.length) throw new Error('指标 ID 或字段不能重复');
   if (!rule.expression.length || new Set(rule.expression).size !== rule.expression.length || rule.expression.some(id => !rule.metrics.some(metric => metric.id === id))) throw new Error('计算表达式必须引用有效且不重复的指标');
@@ -82,10 +84,10 @@ export function validateDepartmentRule(rule: DepartmentRule): void {
       if (matchField(metric, metric.bands[i]) === matchField(metric, metric.bands[j]) && overlaps(metric.bands[i], metric.bands[j])) throw new Error(`${metricNames[metric.field]} 枚举范围重叠`);
     }
   }
-  if (rule.projectIds.length > 1 && rule.expression.some(id => {
+  if (rule.roomIds.length > 1 && rule.expression.some(id => {
     const metric = rule.metrics.find(item => item.id === id)!;
     return metric.field === 'roiRank' || metric.bands.some(band => band.keyType === 'related' && band.relatedField === 'roiRank');
-  })) throw new Error('ROI 排名不能跨多个项目汇总，请绑定单个项目');
+  })) throw new Error('ROI 排名不能跨多个直播间汇总，请绑定单个直播间');
 }
 
 export function calculateDepartmentRules(rows: LiveMonthly[], employees: Employee[], departments: Department[], rules: DepartmentRule[], month: string): Salary[] {
@@ -98,9 +100,9 @@ export function calculateDepartmentRules(rows: LiveMonthly[], employees: Employe
   for (const employee of employees.filter(employee => employee.status === '在职')) {
     const details: SalaryDetail[] = [];
     for (const rule of rules.filter(rule => rule.departmentId === employee.departmentId)) {
-      const work = rows.filter(row => row.employeeId === employee.id && row.departmentId === employee.departmentId && row.month === month && rule.projectIds.includes(row.projectId));
+      const work = rows.filter(row => row.employeeId === employee.id && row.departmentId === employee.departmentId && row.month === month && rule.roomIds.includes(row.roomId));
       if (!work.length) continue;
-      if (new Set(work.map(row => JSON.stringify([row.employeeId, row.projectId, row.month]))).size !== work.length) throw new Error(`${employee.name} 数据集基础粒度重复`);
+      if (new Set(work.map(row => JSON.stringify([row.employeeId, row.roomId, row.month]))).size !== work.length) throw new Error(`${employee.name} 数据集基础粒度重复`);
       const values = new Map<PayrollMetric, number>();
       const input = (field: PayrollMetric): number => {
         const cached = values.get(field);
@@ -150,7 +152,7 @@ export function calculateDepartmentRules(rows: LiveMonthly[], employees: Employe
       if (!isNonnegative(rate) || !isNonnegative(commission)) throw new Error(`${employee.name} 薪资汇总无效`);
       // The legacy match list only represents its original three metric types; components are authoritative.
       const matches = components.filter(item => ['roi', 'hourlySpend', 'spend'].includes(item.matchField)).map(item => ({metric: item.matchField as Metric, input: item.matchValue, rate: item.rate}));
-      details.push({groupId: rule.id, groupName: rule.name, projectIds: work.map(row => row.projectId), hours, spend, premium, roi, hourlySpend, rate, commission, matches, ruleName: rule.name, ruleVersion: rule.version, components});
+      details.push({groupId: rule.id, groupName: rule.name, projectIds: work.map(row => row.roomId), roomIds: work.map(row => row.roomId), productIds: [...new Set(work.map(row => row.productId))], hours, spend, premium, roi, hourlySpend, rate, commission, matches, ruleName: rule.name, ruleVersion: rule.version, components});
     }
     if (!details.length) continue;
     const commission = money(details.reduce((sum, detail) => sum + detail.commission, 0));
