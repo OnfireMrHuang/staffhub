@@ -4,8 +4,8 @@ import type { Department, Employee, WorkRow } from './domain';
 export interface LiveRecord { id: string; roomId: string; productId: string; date: string; start: string; end: string; hostId: string; buyerId: string; controlId: string; version: number }
 export interface AdHourly { id: string; roomId: string; productId: string; date: string; start: string; end: string; spend: number; payment: number; impressions: number; clicks: number; conversions: number; conversionCost: number; conversionRate: number; orders: number }
 export interface RoomHourly { clickRateDenominator?: number; conversionRateDenominator?: number; id: string; roomId: string; productId: string; accountId: string; date: string; start: string; end: string; spend: number; revenue: number; clicks: number; clickRate: number; clickCost: number; conversions: number; conversionRate: number; conversionCost: number; roi: number; orders: number; viewers: number; fans: number; tips: number }
-export interface LiveDetail extends LiveRecord { productName: string; roomName: string; hostName: string; buyerName: string; controlName: string; spend: number; revenue: number; clicks: number; clickRate: number | null; clickCost: number | null; conversions: number; conversionRate: number | null; conversionCost: number | null; roi: number; orders: number; viewers: number; fans: number; tips: number }
-export interface LiveMonthly extends Omit<WorkRow, 'projectId'> { roomId: string; roomName: string; productId: string; productName: string; roles: string[]; hostNames: string[]; year: number; nightHours: number; earlyHours: number; nightSpend: number; earlySpend: number; roiRank: number; sessions: number; nightSessions: number; earlySessions: number }
+export interface LiveDetail extends LiveRecord { productName: string; roomName: string; hostName: string; buyerName: string; controlName: string; spend: number; revenue: number; clicks: number; clickRate: number | null; clickCost: number | null; conversions: number; conversionRate: number | null; conversionCost: number | null; roi: number | null; orders: number; viewers: number; fans: number; tips: number; nightSpend?: number; earlySpend?: number; clickRateDenominator?: number; conversionRateDenominator?: number }
+export interface LiveMonthly extends Omit<WorkRow, 'projectId' | 'roi' | 'hourlySpend'> { roomId: string; roomName: string; productId: string; productName: string; roles: string[]; hostNames: string[]; year: number; nightHours: number; earlyHours: number; nightSpend: number; earlySpend: number; roi: number | null; hourlySpend: number | null; roiRank: number | null; sessions: number; nightSessions: number; earlySessions: number }
 export type LiveTemplateRow = Pick<LiveRecord, 'roomId' | 'date' | 'start' | 'end'>;
 
 const hourText = (minute: number) => `${String(minute / 60).padStart(2, '0')}:00`;
@@ -57,7 +57,7 @@ function aggregate(source: RoomHourly[]): Pick<LiveDetail, typeof numericFields[
     const totalDenominator = source.reduce((value, row) => value + row[denominator]!, 0);
     return totalDenominator > 0 ? numerator / totalDenominator : null;
   };
-  return {...totals, clickRate: rate('clickRate', 'clickRateDenominator', totals.clicks), clickCost: totals.clicks ? totals.spend / totals.clicks : null, conversionRate: rate('conversionRate', 'conversionRateDenominator', totals.conversions), conversionCost: totals.conversions ? totals.spend / totals.conversions : null, roi: totals.spend ? totals.revenue / totals.spend : 0};
+  return {...totals, clickRate: rate('clickRate', 'clickRateDenominator', totals.clicks), clickCost: totals.clicks ? totals.spend / totals.clicks : null, conversionRate: rate('conversionRate', 'conversionRateDenominator', totals.conversions), conversionCost: totals.conversions ? totals.spend / totals.conversions : null, roi: totals.spend ? totals.revenue / totals.spend : null};
 }
 /** Rates are ratios (0.1 = 10%). Multi-source rates require explicit, adapter-verified denominators;
  * viewer counts are never assumed to be marketing exposures. Undefined rates and costs are null. */
@@ -81,18 +81,6 @@ export function buildLiveStatistics(records: LiveRecord[], roomHours: RoomHourly
     if (sourceIndex.has(key) || sourceIds.has(source.id)) throw new Error('直播间来源小时或 ID 重复');
     sourceIds.add(source.id); sourceIndex.set(key, source);
   }
-  // A session identity is the first record start for a continuous project + three-role combination.
-  const sessionByRecord = new Map<string, string>();
-  const previousByRoom = new Map<string, {record: LiveRecord; session: string}>();
-  for (const record of [...records].sort((a, b) => interval(a).absoluteStart - interval(b).absoluteStart || a.id.localeCompare(b.id))) {
-    const previous = previousByRoom.get(record.roomId);
-    const sameTeam = previous && previous.record.hostId === record.hostId && previous.record.buyerId === record.buyerId && previous.record.controlId === record.controlId;
-    const continuous = sameTeam && interval(previous.record).absoluteEnd === interval(record).absoluteStart;
-    const session = continuous ? previous.session : JSON.stringify([record.roomId, record.hostId, record.buyerId, record.controlId, interval(record).absoluteStart]);
-    sessionByRecord.set(record.id, session); previousByRoom.set(record.roomId, {record, session});
-  }
-  type Group = {row: LiveMonthly; sessions: Set<string>; night: Set<string>; early: Set<string>};
-  const groups = new Map<string, Group>();
   const details: LiveDetail[] = [];
   for (const record of selected) {
     const room = rooms.find(room => room.id === record.roomId)!;
@@ -104,30 +92,61 @@ export function buildLiveStatistics(records: LiveRecord[], roomHours: RoomHourly
       source.push(hour); if (minute >= 120 && minute < 360) night.push(hour); if (minute >= 360 && minute < 480) early.push(hour);
     }
     const sums = aggregate(source);
-    if (sums.spend <= 0) throw new Error('直播记录消耗为零，无法计算 ROI');
-    details.push({...record, productName: product.name, roomName: room.name, hostName: employees.find(e => e.id === record.hostId)!.name, buyerName: employees.find(e => e.id === record.buyerId)!.name, controlName: employees.find(e => e.id === record.controlId)!.name, ...sums});
+    const denominator = (field: 'clickRateDenominator' | 'conversionRateDenominator') => source.every(hour => hour[field] !== undefined) ? source.reduce((sum, hour) => sum + hour[field]!, 0) : undefined;
+    details.push({...record, productName: product.name, roomName: room.name, hostName: employees.find(e => e.id === record.hostId)!.name, buyerName: employees.find(e => e.id === record.buyerId)!.name, controlName: employees.find(e => e.id === record.controlId)!.name, ...sums, nightSpend: aggregate(night).spend, earlySpend: aggregate(early).spend, clickRateDenominator: denominator('clickRateDenominator'), conversionRateDenominator: denominator('conversionRateDenominator')});
+  }
+  return {details, monthly: summarizeLiveDetails(details, employees, departments, month, records)};
+}
+
+/** Derive ratios only from effective base values, ranking valid ROI within one room/month. */
+export function deriveLiveMonthly(rows: LiveMonthly[]): LiveMonthly[] {
+  const monthly = rows.map(row => ({...row, roi: row.spend > 0 ? row.premium / row.spend : null, hourlySpend: row.hours > 0 ? row.spend / row.hours : null}));
+  return monthly.map(row => ({...row, roiRank: row.roi === null ? null : 1 + monthly.filter(other => other.roomId === row.roomId && other.month === row.month && other.roi !== null && other.roi > row.roi!).length}));
+}
+
+/** Rebuild all monthly contributions from corrected details. Context preserves continuous cross-month sessions. */
+export function summarizeLiveDetails(details: LiveDetail[], employees: Employee[], departments: Department[], month: string, contextRecords: LiveRecord[] = []): LiveMonthly[] {
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) throw new Error('统计月份无效');
+  const effective = new Map(contextRecords.map(record => [record.id, record]));
+  details.forEach(detail => effective.set(detail.id, detail));
+  const sessionByRecord = new Map<string, string>();
+  const previousByRoom = new Map<string, {record: LiveRecord; session: string}>();
+  for (const record of [...effective.values()].sort((a, b) => interval(a).absoluteStart - interval(b).absoluteStart || a.id.localeCompare(b.id))) {
+    const previous = previousByRoom.get(record.roomId);
+    const sameTeam = previous && previous.record.hostId === record.hostId && previous.record.buyerId === record.buyerId && previous.record.controlId === record.controlId;
+    const continuous = sameTeam && interval(previous.record).absoluteEnd === interval(record).absoluteStart;
+    const session = continuous ? previous.session : JSON.stringify([record.roomId, record.hostId, record.buyerId, record.controlId, interval(record).absoluteStart]);
+    sessionByRecord.set(record.id, session); previousByRoom.set(record.roomId, {record, session});
+  }
+  type Group = {row: LiveMonthly; sessions: Set<string>; night: Set<string>; early: Set<string>};
+  const groups = new Map<string, Group>();
+  for (const record of details.filter(detail => detail.date.slice(0, 7) === month)) {
+    const range = interval(record);
+    const nightHours = Math.max(0, Math.min(range.end, 360) - Math.max(range.start, 120)) / 60;
+    const earlyHours = Math.max(0, Math.min(range.end, 480) - Math.max(range.start, 360)) / 60;
     const rolePairs = [[record.hostId, '主播'], [record.buyerId, '投手'], [record.controlId, '场控']] as const;
     for (const employeeId of new Set(rolePairs.map(([id]) => id))) {
-      const key = JSON.stringify([employeeId, room.id, month]), employee = employees.find(e => e.id === employeeId)!;
+      const key = JSON.stringify([employeeId, record.roomId, month]), employee = employees.find(e => e.id === employeeId);
+      if (!employee) throw new Error('直播统计岗位员工 ID 无效');
       let group = groups.get(key);
       if (!group) {
         const department = departments.find(d => d.id === employee.departmentId);
         if (!department) throw new Error(`${employee.name} 部门归属无效`);
-        group = {row: {employeeId, employeeName: employee.name, departmentId: department.id, departmentName: department.name, roomId: room.id, roomName: room.name, productId: product.id, productName: product.name, month, year: Number(month.slice(0, 4)), roles: [], hostNames: [], hours: 0, spend: 0, premium: 0, roi: 0, hourlySpend: 0, nightHours: 0, earlyHours: 0, nightSpend: 0, earlySpend: 0, sessions: 0, nightSessions: 0, earlySessions: 0, roiRank: 0}, sessions: new Set(), night: new Set(), early: new Set()};
+        group = {row: {employeeId, employeeName: employee.name, departmentId: department.id, departmentName: department.name, roomId: record.roomId, roomName: record.roomName, productId: record.productId, productName: record.productName, month, year: Number(month.slice(0, 4)), roles: [], hostNames: [], hours: 0, spend: 0, premium: 0, roi: null, hourlySpend: null, nightHours: 0, earlyHours: 0, nightSpend: 0, earlySpend: 0, sessions: 0, nightSessions: 0, earlySessions: 0, roiRank: null}, sessions: new Set(), night: new Set(), early: new Set()};
         groups.set(key, group);
       }
       const row = group.row;
       for (const [id, role] of rolePairs) if (id === employeeId && !row.roles.includes(role)) row.roles.push(role);
       const hostName = employees.find(e => e.id === record.hostId)!.name;
       if (!row.hostNames.includes(hostName)) row.hostNames.push(hostName);
-      row.hours += (range.end - range.start) / 60; row.spend += sums.spend; row.premium += sums.revenue;
-      row.nightHours += night.length; row.earlyHours += early.length;
-      row.nightSpend += aggregate(night).spend; row.earlySpend += aggregate(early).spend;
+      const hours = (range.end - range.start) / 60;
+      row.hours += hours; row.spend += record.spend; row.premium += record.revenue;
+      row.nightHours += nightHours; row.earlyHours += earlyHours;
+      row.nightSpend += record.nightSpend ?? record.spend * (nightHours / hours);
+      row.earlySpend += record.earlySpend ?? record.spend * (earlyHours / hours);
       const session = sessionByRecord.get(record.id)!;
-      group.sessions.add(session); if (night.length) group.night.add(session); if (early.length) group.early.add(session);
+      group.sessions.add(session); if (nightHours) group.night.add(session); if (earlyHours) group.early.add(session);
     }
   }
-  const monthly = [...groups.values()].map(({row, sessions, night, early}) => ({...row, roles: ['主播', '投手', '场控'].filter(role => row.roles.includes(role)), roi: row.premium / row.spend, hourlySpend: row.spend / row.hours, sessions: sessions.size, nightSessions: night.size, earlySessions: early.size}));
-  for (const row of monthly) row.roiRank = 1 + monthly.filter(other => other.roomId === row.roomId && other.roi > row.roi).length;
-  return {details, monthly};
+  return deriveLiveMonthly([...groups.values()].map(({row, sessions, night, early}) => ({...row, roles: ['主播', '投手', '场控'].filter(role => row.roles.includes(role)), sessions: sessions.size, nightSessions: night.size, earlySessions: early.size})));
 }

@@ -99,9 +99,11 @@ export function calculateDepartmentRules(rows: LiveMonthly[], employees: Employe
   const salaries: Salary[] = [];
   for (const employee of employees.filter(employee => employee.status === '在职')) {
     const details: SalaryDetail[] = [];
-    for (const rule of rules.filter(rule => rule.departmentId === employee.departmentId)) {
-      const work = rows.filter(row => row.employeeId === employee.id && row.departmentId === employee.departmentId && row.month === month && rule.roomIds.includes(row.roomId));
+    const effectiveDepartmentNames = new Set<string>();
+    for (const rule of rules) {
+      const work = rows.filter(row => row.employeeId === employee.id && row.departmentId === rule.departmentId && row.month === month && rule.roomIds.includes(row.roomId));
       if (!work.length) continue;
+      effectiveDepartmentNames.add(departments.find(department => department.id === rule.departmentId)!.name);
       if (new Set(work.map(row => JSON.stringify([row.employeeId, row.roomId, row.month]))).size !== work.length) throw new Error(`${employee.name} 数据集基础粒度重复`);
       const values = new Map<PayrollMetric, number>();
       const input = (field: PayrollMetric): number => {
@@ -114,7 +116,7 @@ export function calculateDepartmentRules(rows: LiveMonthly[], employees: Employe
           value = input(field === 'roi' ? 'premium' : 'spend') / denominator;
         } else {
           if (work.some(row => !isNonnegative(row[field]))) throw new Error(`${employee.name} ${metricNames[field]} 数据缺失或无效`);
-          value = field === 'roiRank' ? work[0][field] : work.reduce((sum, row) => sum + row[field], 0);
+          value = field === 'roiRank' ? work[0][field]! : work.reduce((sum, row) => sum + row[field]!, 0);
         }
         if (!isNonnegative(value)) throw new Error(`${employee.name} ${metricNames[field]} 汇总数据无效`);
         values.set(field, value);
@@ -157,7 +159,7 @@ export function calculateDepartmentRules(rows: LiveMonthly[], employees: Employe
     if (!details.length) continue;
     const commission = money(details.reduce((sum, detail) => sum + detail.commission, 0));
     if (!isNonnegative(commission)) throw new Error(`${employee.name} 薪资汇总无效`);
-    salaries.push({employeeId: employee.id, employeeName: employee.name, departmentName: departments.find(department => department.id === employee.departmentId)!.name, fixed: 0, commission, total: commission, details});
+    salaries.push({employeeId: employee.id, employeeName: employee.name, departmentName: [...effectiveDepartmentNames].join('、'), fixed: 0, commission, total: commission, details});
   }
   return salaries;
 }

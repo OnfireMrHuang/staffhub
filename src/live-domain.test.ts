@@ -29,7 +29,7 @@ describe('直播业务统计',()=>{
  it('缺任一账户小时即阻断而非默认零',()=>expect(()=>build([record()],rooms().filter(r=>r.id!=='a-4'))).toThrow(/缺少.*小时/));
  it('拒绝重复源小时和重复记录ID及项目重叠',()=>{expect(()=>build([record()],[...rooms(),room(2)])).toThrow(/重复/);expect(()=>build([record(),record()])).toThrow(/重复/);expect(()=>build([record(),record({id:'r2'})])).toThrow(/重叠/);});
  it('拒绝非小时源和不属于项目的直播账户',()=>{expect(()=>build([record()],rooms().map((r,i)=>i? r:{...r,end:'04:00'}))).toThrow(/小时/);expect(()=>build([record()],[...rooms(),room(2,'unlinked')])).toThrow(/账户/);});
- it('零消耗及负数来源无法静默生成有效ROI',()=>{expect(()=>build([record()],rooms().map(r=>({...r,spend:0})))).toThrow(/消耗/);expect(()=>build([record()],rooms().map((r,i)=>i?r:{...r,revenue:-1}))).toThrow(/无效/);});
+ it('零消耗产生未定义ROI并排除排名，负数来源仍拒绝',()=>{const result=build([record()],rooms().map(r=>({...r,spend:0})));expect(result.details[0].roi).toBeNull();expect(result.monthly[0]).toMatchObject({roi:null,roiRank:null,hourlySpend:0});expect(()=>build([record()],rooms().map((r,i)=>i?r:{...r,revenue:-1}))).toThrow(/无效/);});
  it('仅统计所选月份，跨月连续场次仍去重',()=>{const records=[record({date:'2026-09-30',start:'23:00',end:'24:00'}),record({id:'r2',date:'2026-10-01',start:'00:00',end:'02:00'})];const source=['a'].flatMap(a=>[room(0,a),room(1,a)]);const result=build(records,source);expect(result.details).toHaveLength(1);expect(result.monthly[0]).toMatchObject({hours:2,sessions:1});});
 });
 
@@ -114,3 +114,5 @@ it('模拟同步按产品和直播间小时补齐，保留既有来源并且幂�
  expect(again.addedAdHours).toBe(0);expect(again.addedRoomHours).toBe(0);
  expect(new Set(first.adHours.map(r=>JSON.stringify([r.productId,r.roomId,r.date,r.start]))).size).toBe(192);
 });
+
+it('保留真实来源班次金额与可验证比率分母供人工纠正重算',()=>{const result=build([record()],rooms().map((r,i)=>({...r,spend:i<4?25:200})));expect(result.details[0]).toMatchObject({nightSpend:100,earlySpend:400,clickRateDenominator:600,conversionRateDenominator:120});});

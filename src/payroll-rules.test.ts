@@ -96,3 +96,6 @@ describe('department payroll rules', () => {
     }
   });
 });
+
+it('按有效统计部门核算，不用员工当前部门覆盖当期归属',()=>{const result=calculate([rule()],[row({departmentName:'直播部'})],[{...employee,departmentId:'ads'}]);expect(result).toHaveLength(1);expect(result[0]).toMatchObject({employeeId:'e1',departmentName:'直播部',commission:100});});
+it('未定义排名不能参与档位匹配',()=>{expect(()=>calculate([rule({metrics:[{id:'m1',field:'roiRank',durationField:'hours',bands:[band()]}]})],[row({roiRank:null})])).toThrow(/排名.*无效|排名.*缺失/);});
