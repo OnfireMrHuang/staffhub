@@ -4,7 +4,7 @@ import type { Department, Employee, WorkRow } from './domain';
 export interface LiveRecord { id: string; roomId: string; productId: string; date: string; start: string; end: string; hostId: string; buyerId: string; controlId: string; version: number }
 export interface AdHourly { id: string; roomId: string; productId: string; date: string; start: string; end: string; spend: number; payment: number; impressions: number; clicks: number; conversions: number; conversionCost: number; conversionRate: number; orders: number }
 export interface RoomHourly { clickRateDenominator?: number; conversionRateDenominator?: number; id: string; roomId: string; productId: string; accountId: string; date: string; start: string; end: string; spend: number; revenue: number; clicks: number; clickRate: number; clickCost: number; conversions: number; conversionRate: number; conversionCost: number; roi: number; orders: number; viewers: number; fans: number; tips: number }
-export interface LiveDetail extends LiveRecord { productName: string; roomName: string; hostName: string; buyerName: string; controlName: string; spend: number; revenue: number; clicks: number; clickRate: number | null; clickCost: number | null; conversions: number; conversionRate: number | null; conversionCost: number | null; roi: number | null; orders: number; viewers: number; fans: number; tips: number; nightSpend?: number; earlySpend?: number; clickRateDenominator?: number; conversionRateDenominator?: number }
+export interface LiveDetail extends LiveRecord { sourceRecordId?: string; productName: string; roomName: string; hostName: string; buyerName: string; controlName: string; spend: number; revenue: number; clicks: number; clickRate: number | null; clickCost: number | null; conversions: number; conversionRate: number | null; conversionCost: number | null; roi: number | null; orders: number; viewers: number; fans: number; tips: number; nightSpend?: number; earlySpend?: number; clickRateDenominator?: number; conversionRateDenominator?: number }
 export interface LiveMonthly extends Omit<WorkRow, 'projectId' | 'roi' | 'hourlySpend'> { roomId: string; roomName: string; productId: string; productName: string; roles: string[]; hostNames: string[]; year: number; nightHours: number; earlyHours: number; nightSpend: number; earlySpend: number; roi: number | null; hourlySpend: number | null; roiRank: number | null; sessions: number; nightSessions: number; earlySessions: number }
 export type LiveTemplateRow = Pick<LiveRecord, 'roomId' | 'date' | 'start' | 'end'>;
 
@@ -108,6 +108,9 @@ export function deriveLiveMonthly(rows: LiveMonthly[]): LiveMonthly[] {
 export function summarizeLiveDetails(details: LiveDetail[], employees: Employee[], departments: Department[], month: string, contextRecords: LiveRecord[] = []): LiveMonthly[] {
   if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) throw new Error('统计月份无效');
   const effective = new Map(contextRecords.map(record => [record.id, record]));
+  // Normalized hour contributions replace their parent span in session context; keeping
+  // both would interleave overlapping spans and falsely inflate continuous sessions.
+  details.forEach(detail => { if (detail.sourceRecordId) effective.delete(detail.sourceRecordId); });
   details.forEach(detail => effective.set(detail.id, detail));
   const sessionByRecord = new Map<string, string>();
   const previousByRoom = new Map<string, {record: LiveRecord; session: string}>();

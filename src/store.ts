@@ -15,6 +15,9 @@ import { migrateOperationsState } from './operations-migration';
 import { applyDatasetCorrections, monthlyRowKey, prepareDetailCorrection, prepareMonthlyCorrection } from './dataset-corrections';
 import type { CorrectionAudit, DatasetTable, DetailOverride, MonthlyOverride } from './dataset-corrections';
 
+import { buildRoomReports, applyReportOverrides, prepareReportCorrection, getRoomReportDefinition, roomReportDefinitions, roomReportBindings } from './room-reports';
+import type { ReportRow, ReportPeriod, ReportOverride, ReportAudit, FrozenRoomReports } from './room-reports';
+
 export type Page = 'operations' | 'employees' | 'departments' | 'rules' | 'payroll' | 'profile' | 'roles';
 export interface Dataset { rows:LiveMonthly[]; month:string; version:number; revision:number; published:boolean }
 export interface PayrollTask {
@@ -27,6 +30,7 @@ export interface PayrollSnapshot {
  employees:Employee[]; departments:Department[]; products:AdvertisingProduct[]; rooms:LiveRoom[];
  details:LiveDetail[]; monthly:LiveMonthly[]; dataset:Dataset;
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
+ roomReports?:FrozenRoomReports;
  detailOverrides?:DetailOverride[]; monthlyOverrides?:MonthlyOverride[]; correctionAudit?:CorrectionAudit[];
 }
 export interface Batch { month:string; status:'已核算'|'已锁定'|'已发布'; salaries:Salary[]; datasetVersion:number; ruleVersion:number; created:string; logs:string[]; snapshot:PayrollSnapshot }
@@ -37,6 +41,7 @@ interface Hub {
  page:Page; opsTab:string; month:string; employees:Employee[]; departments:Department[]; products:AdvertisingProduct[]; rooms:LiveRoom[];
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
  liveRecords:LiveRecord[]; adHours:AdHourly[]; roomHours:RoomHourly[]; archivedMonths:string[]; liveDetails:LiveDetail[]; monthlyRows:LiveMonthly[];
+ reportHours:ReportRow[]; reportDays:ReportRow[]; reportOverrides:ReportOverride[]; reportAudit:ReportAudit[];
  detailOverrides:DetailOverride[]; monthlyOverrides:MonthlyOverride[]; correctionAudit:CorrectionAudit[];
  dataset:Dataset; roles:Role[]; revision:number; batch:Batch|null; batches:Record<string,Batch>; syncTime:string; toast:string; perspective:'admin'|'employee';
  navigate:(page:Page,tab?:string)=>void; setMonth:(month:string)=>void; notify:(text:string)=>void; reset:()=>void;
@@ -44,6 +49,8 @@ interface Hub {
  cleanDataset:()=>void; saveRole:(role:Role)=>void;
  saveDatasetCorrection:(table:DatasetTable,key:string,patch:Record<string,unknown>,reason:string,expectedVersion:number)=>void;
  restoreDatasetCorrection:(table:DatasetTable,key:string,reason:string,expectedVersion:number)=>void;
+ saveReportCorrection:(period:ReportPeriod,key:string,patch:Record<string,unknown>,reason:string,expectedVersion:number)=>void;
+ restoreReportCorrection:(period:ReportPeriod,key:string,reason:string,expectedVersion:number)=>void;
  saveDepartmentRule:(rule:DepartmentRule)=>void; publishDepartmentRule:(id:string,month:string)=>void;
  withdrawPayrollTask:(id:string)=>void;
  runPayroll:()=>void; lockBatch:()=>void; publishBatch:()=>void; sync:()=>void; setPerspective:(value:'admin'|'employee')=>void;
@@ -65,9 +72,16 @@ export const safeProduct = (product:AdvertisingProduct):AdvertisingProduct => ({
 const validRoom = (roomId:string, rooms:LiveRoom[], products:AdvertisingProduct[]) => rooms.some(room=>room.id===roomId && room.active && products.some(product=>product.id===room.productId && product.active));
 /** Compute a fresh candidate without writing any month. All affected months must validate
  * before a correction can replace the current visible data. */
-const effectiveStatistics = (s:Hub, month:string, detailOverrides=s.detailOverrides, monthlyOverrides=s.monthlyOverrides) => {
+const effectiveStatistics = (s:Hub, month:string, detailOverrides=s.detailOverrides, monthlyOverrides=s.monthlyOverrides, reportOverrides=s.reportOverrides) => {
  const baseline=buildLiveStatistics(s.liveRecords,s.roomHours,s.employees,s.departments,s.rooms,s.products,month);
- return applyDatasetCorrections(baseline.details,detailOverrides,monthlyOverrides,s.employees,s.departments,s.rooms,s.products,month,s.liveRecords);
+ const legacy=applyDatasetCorrections(baseline.details,detailOverrides,[],s.employees,s.departments,s.rooms,s.products,month,s.liveRecords);
+ const baseReports=buildRoomReports(s.liveRecords,s.roomHours,s.employees,s.departments,s.rooms,s.products,month,detailOverrides);
+ const relevant=reportOverrides.filter(item=>item.sourceMonth===month);
+ const reports=applyReportOverrides(baseReports,relevant,s.employees,s.departments,s.liveRecords);
+ // Historical aggregate corrections retain their original identity and audit. The
+ // normalized report contributions always own monthly values.
+ const monthly=applyDatasetCorrections(reports.contributions,[],monthlyOverrides,s.employees,s.departments,s.rooms,s.products,month,s.liveRecords).monthly;
+ return {details:legacy.details,monthly,reportHours:reports.hourly,reportDays:reports.daily,reportContributions:reports.contributions};
 };
 const requireCorrectionDataset = (s:Hub, expectedVersion:number, reason:string) => {
  requireOpenMonth(s.month,s.archivedMonths);
@@ -77,6 +91,11 @@ const requireCorrectionDataset = (s:Hub, expectedVersion:number, reason:string) 
  if(!reason.trim()) throw new Error('请填写修订原因');
 };
 const correctionMonth = (table:DatasetTable,row:LiveDetail|LiveMonthly) => table==='details'?(row as LiveDetail).date.slice(0,7):(row as LiveMonthly).month;
+const reportTouchesRecord = (override:ReportOverride,id:string) => {
+ if(override.row.sourceRecordId===id || override.row.sourceRecordIds.includes(id)) return true;
+ // Compatibility with an early normalized report row that listed hour identities.
+ return override.row.sourceRecordIds.some(key=>{try{const value:unknown=JSON.parse(key);return Array.isArray(value)&&value.length===2&&value[0]===id&&typeof value[1]==='string'&&/^\d{2}:00$/.test(value[1]);}catch{return false;}});
+};
 const auditTime = () => new Date().toLocaleString('sv-SE').slice(0,19);
 const equalRowValue = (before:unknown,after:unknown):boolean => Array.isArray(before) && Array.isArray(after)
  ?before.length===after.length && before.every((value,index)=>value===after[index]):before===after;
@@ -88,9 +107,11 @@ const initial = () => {
  const employees=structuredClone(seedEmployees),departments=structuredClone(seedDepartments),products=structuredClone(demoProducts),rooms=structuredClone(demoRooms);
  const liveRecords=structuredClone(demoRecords),adHours=structuredClone(demoAdHours),roomHours=structuredClone(demoRoomHours);
  const {details,monthly}=buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,demoMonth);
+ const reports=buildRoomReports(liveRecords,roomHours,employees,departments,rooms,products,demoMonth,[]);
  return {
   page:'operations' as Page,opsTab:'datasets',month:demoMonth,employees,departments,products,rooms,liveRecords,adHours,roomHours,
   archivedMonths:[] as string[],liveDetails:details,monthlyRows:monthly,
+  reportHours:reports.hourly,reportDays:reports.daily,reportOverrides:[] as ReportOverride[],reportAudit:[] as ReportAudit[],
   detailOverrides:[] as DetailOverride[],monthlyOverrides:[] as MonthlyOverride[],correctionAudit:[] as CorrectionAudit[],
   departmentRules:migrateHourlyRules(seedRules,rooms,products),payrollTasks:[] as PayrollTask[],
   dataset:{rows:monthly,month:demoMonth,version:1,revision:1,published:true},
@@ -115,12 +136,12 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   if(s.month===month) {set({batch});return;}
   if(batch && s.archivedMonths.includes(month)) {
    const snapshot=structuredClone(batch.snapshot);
-   set({month,batch,dataset:snapshot.dataset,liveDetails:snapshot.details,monthlyRows:snapshot.monthly});
+   set({month,batch,dataset:snapshot.dataset,liveDetails:snapshot.details,monthlyRows:snapshot.monthly,reportHours:snapshot.roomReports?.hourly??[],reportDays:snapshot.roomReports?.daily??[]});
   } else {
-   let statistics:ReturnType<typeof effectiveStatistics>={details:[],monthly:[]};
+   let statistics:ReturnType<typeof effectiveStatistics>={details:[],monthly:[],reportHours:[],reportDays:[],reportContributions:[]};
    try {statistics=effectiveStatistics(s,month);} catch { /* Missing sources remain stale until repaired and refreshed. */ }
    const published=statistics.monthly.length>0;
-   set({month,batch,liveDetails:statistics.details,monthlyRows:statistics.monthly,dataset:{rows:statistics.monthly,month,version:s.dataset.version+1,revision:published?s.revision:-1,published}});
+   set({month,batch,liveDetails:statistics.details,monthlyRows:statistics.monthly,reportHours:statistics.reportHours,reportDays:statistics.reportDays,dataset:{rows:statistics.monthly,month,version:s.dataset.version+1,revision:published?s.revision:-1,published}});
   }
  },
  notify:toast=>set({toast}),reset:()=>set(initial()),
@@ -175,6 +196,10 @@ export const useHub = create<Hub>()(persist((set,get)=>({
    if(previous) requireOpenMonth(previous.date.slice(0,7),s.archivedMonths);
    requireOpenMonth(record.date.slice(0,7),s.archivedMonths);
    if(previous && record.version<=previous.version) throw new Error('直播记录版本已更新，请刷新后重新编辑（新版本必须递增）');
+   if(previous && (['productId','roomId','date','start','end','hostId','buyerId','controlId'] as const).some(field=>previous[field]!==record[field])) {
+    const overlay=s.reportOverrides.find(item=>reportTouchesRecord(item,record.id));
+    if(overlay) throw new Error(`该原始记录关联已保存的${overlay.period==='hourly'?'时报':'日报'}人工修订，请先恢复关联的时报 / 日报修订，再修改来源日期、直播间、三岗或时段`);
+   }
   }
   const merged=[...s.liveRecords.filter(r=>!ids.has(r.id)),...incoming];
   for(const record of incoming) {
@@ -194,9 +219,9 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  },
  cleanDataset:()=>{
   const s=get();requireOpenMonth(s.month,s.archivedMonths);
-  const {details,monthly}=effectiveStatistics(s,s.month);
+  const {details,monthly,reportHours,reportDays}=effectiveStatistics(s,s.month);
   if(!monthly.length) throw new Error('当前月份没有直播来源数据');
-  set({liveDetails:details,monthlyRows:monthly,dataset:{rows:monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
+  set({liveDetails:details,monthlyRows:monthly,reportHours,reportDays,dataset:{rows:monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
  },
  saveDatasetCorrection:(table,key,patch,reason,expectedVersion)=>{
   const s=get();requireCorrectionDataset(s,expectedVersion,reason);
@@ -223,7 +248,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   // patch, so unchanged submitted bases also remain a no-op.
   if(sameCorrectionRow(before,effectiveAfter) || Object.entries(patch).every(([field,value])=>equalRowValue((before as unknown as Record<string,unknown>)[field],value))) throw new Error('没有修改数据，请调整后再保存');
   const audit:CorrectionAudit={id:crypto.randomUUID(),table,key:originalKey,sourceMonth,targetMonth,reason:reason.trim(),operator:s.session?.username??'admin',at:auditTime(),action:'修改',before:structuredClone(before),after:structuredClone(effectiveAfter)};
-  set({detailOverrides,monthlyOverrides,correctionAudit:[...s.correctionAudit,audit],liveDetails:current.details,monthlyRows:current.monthly,dataset:{rows:current.monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
+  set({detailOverrides,monthlyOverrides,correctionAudit:[...s.correctionAudit,audit],liveDetails:current.details,monthlyRows:current.monthly,reportHours:current.reportHours,reportDays:current.reportDays,dataset:{rows:current.monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
  },
  restoreDatasetCorrection:(table,key,reason,expectedVersion)=>{
   const s=get();requireCorrectionDataset(s,expectedVersion,reason);
@@ -239,7 +264,37 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const current=candidates.get(s.month)!;
   const after=table==='details'?current.details.find(row=>row.id===override.key):current.monthly.find(row=>monthlyRowKey(row)===override.key);
   const audit:CorrectionAudit={id:crypto.randomUUID(),table,key:override.key,sourceMonth:override.sourceMonth,targetMonth:correctionMonth(table,before),reason:reason.trim(),operator:s.session?.username??'admin',at:auditTime(),action:'恢复自动',before:structuredClone(before),after:after?structuredClone(after):null};
-  set({detailOverrides,monthlyOverrides,correctionAudit:[...s.correctionAudit,audit],liveDetails:current.details,monthlyRows:current.monthly,dataset:{rows:current.monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
+  set({detailOverrides,monthlyOverrides,correctionAudit:[...s.correctionAudit,audit],liveDetails:current.details,monthlyRows:current.monthly,reportHours:current.reportHours,reportDays:current.reportDays,dataset:{rows:current.monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
+ },
+ saveReportCorrection:(period,key,patch,reason,expectedVersion)=>{
+  const s=get();requireCorrectionDataset(s,expectedVersion,reason);
+  const before=(period==='hourly'?s.reportHours:s.reportDays).find(row=>row.key===key);
+  if(!before) throw new Error('当前报表行不存在，请刷新后重新编辑');
+  const definition=getRoomReportDefinition(before.roomId);
+  if(!definition) throw new Error('该直播间未绑定后台报表定义，不能修订');
+  const allowed=new Set(definition.fields.filter(field=>field.editable).map(field=>field.key));
+  if(Object.keys(patch).some(field=>!allowed.has(field as keyof ReportRow))) throw new Error('提交包含本报表只读或不支持的字段');
+  const after=prepareReportCorrection(before,patch,s.employees,s.rooms,s.products);
+  if(Object.entries(patch).every(([field,value])=>equalRowValue((before as unknown as Record<string,unknown>)[field],value))) throw new Error('没有修改数据，请调整后再保存');
+  const old=s.reportOverrides.find(item=>item.period===period&&item.key===key),sourceMonth=old?.sourceMonth??before.date.slice(0,7);
+  requireOpenMonth(sourceMonth,s.archivedMonths);requireOpenMonth(after.date.slice(0,7),s.archivedMonths);
+  const reportOverrides=[...s.reportOverrides.filter(item=>item.period!==period||item.key!==key),{period,key,sourceMonth,row:structuredClone(after)}];
+  const candidate=effectiveStatistics(s,s.month,s.detailOverrides,s.monthlyOverrides,reportOverrides);
+  const effective=(period==='hourly'?candidate.reportHours:candidate.reportDays).find(row=>row.key===key)!;
+  const audit:ReportAudit={id:crypto.randomUUID(),period,key,sourceMonth,reason:reason.trim(),operator:s.session?.username??'admin',at:auditTime(),action:'修改',before:structuredClone(before),after:structuredClone(effective)};
+  set({reportOverrides,reportAudit:[...s.reportAudit,audit],reportHours:candidate.reportHours,reportDays:candidate.reportDays,liveDetails:candidate.details,monthlyRows:candidate.monthly,dataset:{rows:candidate.monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
+ },
+ restoreReportCorrection:(period,key,reason,expectedVersion)=>{
+  const s=get();requireCorrectionDataset(s,expectedVersion,reason);
+  const override=s.reportOverrides.find(item=>item.period===period&&item.key===key);
+  const before=(period==='hourly'?s.reportHours:s.reportDays).find(row=>row.key===key);
+  if(!override||!before) throw new Error('当前行没有可恢复的人工修订');
+  requireOpenMonth(override.sourceMonth,s.archivedMonths);
+  const reportOverrides=s.reportOverrides.filter(item=>item!==override);
+  const candidate=effectiveStatistics(s,s.month,s.detailOverrides,s.monthlyOverrides,reportOverrides);
+  const after=(period==='hourly'?candidate.reportHours:candidate.reportDays).find(row=>row.key===key)??null;
+  const audit:ReportAudit={id:crypto.randomUUID(),period,key,sourceMonth:override.sourceMonth,reason:reason.trim(),operator:s.session?.username??'admin',at:auditTime(),action:'恢复自动',before:structuredClone(before),after:after?structuredClone(after):null};
+  set({reportOverrides,reportAudit:[...s.reportAudit,audit],reportHours:candidate.reportHours,reportDays:candidate.reportDays,liveDetails:candidate.details,monthlyRows:candidate.monthly,dataset:{rows:candidate.monthly,month:s.month,version:s.dataset.version+1,revision:s.revision,published:true}});
  },
  saveRole:role=>{const s=get(),saved=structuredClone(role);set({roles:s.roles.some(r=>r.id===role.id)?s.roles.map(r=>r.id===role.id?saved:r):[...s.roles,saved]});},
  saveDepartmentRule:rule=>{
@@ -310,7 +365,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const payrollTasks=s.payrollTasks.map(t=>t.month===s.month && t.status!=='已撤回'?{...t,status:'已核算' as const}:t);
   const snapshot:PayrollSnapshot=structuredClone({
    records:s.liveRecords.filter(r=>r.date.startsWith(s.month+'-')),adHours:s.adHours.filter(r=>r.date.startsWith(s.month+'-')),roomHours:s.roomHours.filter(r=>r.date.startsWith(s.month+'-')),
-   employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,details:s.liveDetails,monthly:s.monthlyRows,dataset:s.dataset,departmentRules:s.departmentRules,payrollTasks,
+   employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,details:s.liveDetails,monthly:s.monthlyRows,dataset:s.dataset,roomReports:{hourly:s.reportHours,daily:s.reportDays,contributions:effectiveStatistics(s,s.month).reportContributions,definitions:roomReportDefinitions,bindings:roomReportBindings,overrides:s.reportOverrides.filter(item=>item.sourceMonth===s.month),audit:s.reportAudit.filter(item=>item.sourceMonth===s.month)},departmentRules:s.departmentRules,payrollTasks,
    detailOverrides:s.detailOverrides.filter(item=>item.sourceMonth===s.month || item.row.date.startsWith(s.month+'-')),
    monthlyOverrides:s.monthlyOverrides.filter(item=>item.sourceMonth===s.month || item.row.month===s.month),
    correctionAudit:s.correctionAudit.filter(item=>item.sourceMonth===s.month || item.targetMonth===s.month),
@@ -345,6 +400,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  name:'meimei-staffhub-department-rules-v1',
  version:1,
  migrate:persisted=>migrateOperationsState(persisted) as ReturnType<typeof initial>,
+ merge:(persisted,current)=>{const saved=persisted as Partial<Hub>;return {...current,...saved,reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]};},
  storage:createJSONStorage(()=>typeof localStorage!=='undefined'?localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),
- partialize:s=>({month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,dataset:s.dataset,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
+ partialize:s=>({month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,dataset:s.dataset,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
 }));

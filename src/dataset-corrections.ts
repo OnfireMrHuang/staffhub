@@ -90,6 +90,7 @@ export function applyDatasetCorrections(baseDetails: LiveDetail[], detailOverrid
   if (new Set(baseDetails.map(row => row.id)).size !== baseDetails.length) throw new Error('明细数据集原键重复');
   const changes = new Map(detailOverrides.map(override => [override.key, override.row]));
   const effectiveRecords = new Map(contextRecords.map(record => [record.id, record]));
+  baseDetails.forEach(detail => { if(detail.sourceRecordId) effectiveRecords.delete(detail.sourceRecordId); });
   baseDetails.forEach(detail => effectiveRecords.set(detail.id, detail));
   changes.forEach((detail, key) => effectiveRecords.set(key, detail));
   const context = [...effectiveRecords.values()];
