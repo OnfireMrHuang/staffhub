@@ -1,7 +1,8 @@
 import { beforeEach, expect, it } from 'vitest';
 import { useHub } from './store';
 import { monthlyRowKey } from './dataset-corrections';
-beforeEach(()=>useHub.getState().reset());
+const archiveCurrentMonth = () => { useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState();s.archivePayroll(s.month,s.batch!.review!.version); };
+beforeEach(()=>{useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});});
 const save=(period:'hourly'|'daily',key:string,patch:Record<string,unknown>,reason='平台对账')=>useHub.getState().saveReportCorrection(period,key,patch,reason,useHub.getState().dataset.version);
 it('hour → day → month corrections survive refresh with independent monthly final authority',()=>{
  const s=useHub.getState(),hour=s.reportHours[0],day=s.reportDays.find(d=>d.key===hour.dailyKey)!,original=s.monthlyRows.find(r=>r.roomId===hour.roomId&&r.employeeId===hour.hostId)!;
@@ -33,7 +34,7 @@ it('reason/version/archive/derived/grain guards reject atomically and restore ke
 });
 it('snapshots freeze report values/definitions/audit and old archives do not synthesize reports',()=>{
  const s=useHub.getState(),hour=s.reportHours[0];save('hourly',hour.key,{spend:hour.spend+10});
- const rule=useHub.getState().departmentRules[0];useHub.getState().publishDepartmentRule(rule.id,s.month);useHub.getState().runPayroll();
+ const rule=useHub.getState().departmentRules[0];useHub.getState().publishDepartmentRule(rule.id,s.month);useHub.getState().runPayroll();archiveCurrentMonth();
  const snapshot=useHub.getState().batch!.snapshot;
  expect(snapshot.roomReports!.contributions.length).toBeGreaterThan(0);expect(snapshot.roomReports!.hourly[0].spend).toBe(hour.spend+10);expect(snapshot.roomReports!.definitions).toHaveLength(2);expect(snapshot.roomReports!.audit).toHaveLength(1);
  const saved=structuredClone(snapshot.roomReports);useHub.setState({reportHours:[],reportDays:[]});useHub.getState().setMonth('2026-11');useHub.getState().setMonth(s.month);
@@ -69,7 +70,7 @@ it('unbound historical rooms keep explicit monthly compatibility and cannot edit
 });
 it('raw identity changes under hourly and daily overlays reject atomically; restore unlocks input',()=>{
  for(const period of ['hourly','daily'] as const){
-  useHub.getState().reset();const s=useHub.getState(),row=(period==='hourly'?s.reportHours:s.reportDays)[0],record=s.liveRecords.find(r=>r.id===row.sourceRecordId||row.sourceRecordIds.includes(r.id)||row.sourceRecordIds.some(key=>key.includes(r.id)))!;
+  useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState(),row=(period==='hourly'?s.reportHours:s.reportDays)[0],record=s.liveRecords.find(r=>r.id===row.sourceRecordId||row.sourceRecordIds.includes(r.id)||row.sourceRecordIds.some(key=>key.includes(r.id)))!;
   save(period,row.key,{spend:row.spend+10});const before=useHub.getState(),original=structuredClone(before.liveRecords);
   expect(()=>before.saveLiveRecords([{...record,hostId:record.buyerId,version:record.version+1}])).toThrow('先恢复');
   expect(useHub.getState().liveRecords).toEqual(original);expect(useHub.getState().revision).toBe(before.revision);expect(useHub.getState().reportAudit).toEqual(before.reportAudit);
@@ -88,7 +89,7 @@ it('report overlay guard allows unrelated new raw rows before hourly sync',()=>{
 it('archive freezes recomputed hour/day/month ratios after layered corrections',()=>{
  const s=useHub.getState(),hour=s.reportHours[0];save('hourly',hour.key,{spend:2000,revenue:6000});
  const day=useHub.getState().reportDays.find(d=>d.key===hour.dailyKey)!;save('daily',day.key,{revenue:40000});
- const rule=useHub.getState().departmentRules[0];useHub.getState().publishDepartmentRule(rule.id,s.month);useHub.getState().runPayroll();
+ const rule=useHub.getState().departmentRules[0];useHub.getState().publishDepartmentRule(rule.id,s.month);useHub.getState().runPayroll();archiveCurrentMonth();
  const snapshot=useHub.getState().batch!.snapshot,frozenHour=snapshot.roomReports!.hourly.find(h=>h.key===hour.key)!,frozenDay=snapshot.roomReports!.daily.find(d=>d.key===day.key)!,monthly=snapshot.monthly.find(r=>r.employeeId===hour.hostId&&r.roomId===hour.roomId)!;
  expect(frozenHour.roi).toBe(3);expect(frozenDay.roi).toBe(40000/day.spend);expect(monthly.roi).toBe(monthly.premium/monthly.spend);
  useHub.setState({roomHours:s.roomHours.map(row=>({...row,spend:1,revenue:999,roi:999})),reportHours:[],reportDays:[]});

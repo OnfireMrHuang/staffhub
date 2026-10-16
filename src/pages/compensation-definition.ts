@@ -1,5 +1,6 @@
 import { blankConditionGroup, compensationMetricOptions, type CalculationType, type CompensationRule, type HourlyItem, type NewRuleBand, type Scope } from '../compensation-rules';
-export const scopeLabels:Record<Scope,string>={global:'全局规则',rooms:'直播间规则',employees:'员工规则'};
+import { normalizeCurrentCompensationRule } from '../compensation-rule-migration';
+export const scopeLabels:Record<Scope,string>={global:'全局规则',rooms:'直播间规则',employees:'员工规则（历史）'};
 export const calculationLabels:Record<CalculationType,string>={allowance:'补贴规则',premium:'保费系数规则',hourly:'时薪规则'};
 export const hourlyKindLabels:Record<HourlyItem['kind'],string>={metric:'统计指标加成',special:'特殊时段加成',guarantee:'条件保薪'};
 export const compensationMetricLabel=(field:string)=>compensationMetricOptions.find(o=>o.field===field)?.label||field;
@@ -11,7 +12,7 @@ export function editableHourlyBand(band:NewRuleBand):NewRuleBand {
  return {keyType:'range',min:band.exact,max:band.exact,includeMin:true,includeMax:true,rate:band.rate};
 }
 export function createCompensationRule(scope:Scope):CompensationRule {
- return {id:`compensation-${uid()}`,name:'',version:0,status:'草稿',definitionVersion:2,scope,roomIds:[],...(scope==='employees'?{employeeCondition:blankConditionGroup()}:{}),type:'allowance',allowance:{field:'nightSessions',amount:20}};
+ return {id:`compensation-${uid()}`,name:'',version:0,status:'草稿',definitionVersion:2,scope:scope==='employees'?'global':scope,roomIds:[],type:'allowance',allowance:{field:'nightSessions',amount:20}};
 }
 export function withHourlyKind(rule:CompensationRule,kind:HourlyItem['kind']):CompensationRule {
  const items:HourlyItem[]=kind==='metric'?[]:[{id:uid(),name:hourlyKindLabels[kind],kind,rate:0,...(kind==='guarantee'?{condition:blankConditionGroup()}:{} )}];
@@ -28,7 +29,7 @@ export function withHourlyItems(rule:CompensationRule,items:HourlyItem[]):Compen
  return {...rule,hourly:{...config,items,formula:config.kind==='guarantee'?{mode:'guarantee',itemId:items[0]?.id||''}:{mode:'additions',itemIds:items.map(item=>item.id)}}};
 }
 export function editableCompensationRule(source:CompensationRule):CompensationRule {
- const rule=structuredClone(source);
+ const rule=structuredClone(normalizeCurrentCompensationRule(source));
  if(rule.hourly)rule.hourly.items=rule.hourly.items.map(item=>({...item,...(item.bands?{bands:item.bands.map(editableHourlyBand)}:{})}));
  if(rule.definitionVersion===2)return rule;
  rule.definitionVersion=2;

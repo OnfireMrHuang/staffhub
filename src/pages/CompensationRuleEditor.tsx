@@ -15,7 +15,7 @@ export function CompensationRuleForm({rule,rooms,rules=[],onChange,readOnly=fals
  return <fieldset className="department-rule-form compensation-form" disabled={readOnly}>
   <label>规则分类<input aria-label="规则分类" value={scopeLabels[rule.scope]} readOnly/></label>
   {rule.scope==='rooms'&&<CompensationRoomPicker rule={rule} rooms={rooms} rules={rules} readOnly={readOnly} onChange={roomIds=>onChange({...rule,roomIds})}/>}
-  {rule.scope==='employees'&&<ConditionBuilder label="员工筛选条件" fields={conditionFieldOptions.filter(f=>f.field.startsWith('employee.'))} value={rule.employeeCondition||blankConditionGroup()} onChange={employeeCondition=>onChange({...rule,employeeCondition})} readOnly={readOnly}/>}
+  {readOnly&&rule.scope==='employees'&&<ConditionBuilder label="历史员工筛选条件" fields={conditionFieldOptions.filter(f=>f.field.startsWith('employee.'))} value={rule.employeeCondition||blankConditionGroup()} onChange={()=>{}} readOnly/>}
   <CompensationRuleDefinition rule={rule} onChange={onChange} readOnly={readOnly}/>
  </fieldset>;
 }

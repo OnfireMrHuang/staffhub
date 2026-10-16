@@ -4,6 +4,7 @@ import type {CompensationRule} from './compensation-rules';
 import {listRoomRuleSets,type RoomRuleSet} from './room-rule-sets';
 import {createCompensationRule,withType} from './pages/compensation-definition';
 import {prepareRoomRuleSetDraft} from './pages/RoomRuleSetEditor';
+const archiveCurrentMonth = () => { useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState();s.archivePayroll(s.month,s.batch!.review!.version); };
 
 const member=(id:string,type:CompensationRule['type'],roomIds=[useHub.getState().rooms[0].id]):CompensationRule=>({id,name:id,version:1,status:'草稿',scope:'rooms',roomIds,type,...(type==='allowance'?{allowance:{field:'nightSessions' as const,amount:20}}:type==='premium'?{premium:{items:[{id:'p',name:'正常保费',field:'regularPremium' as const,coefficient:1.5}]}}:{hourly:{duration:'hours' as const,items:[{id:'h',name:'ROI 加成',kind:'metric' as const,field:'roi',bands:[{keyType:'range' as const,min:12,includeMin:true,includeMax:false,rate:50}]}],formula:{mode:'additions' as const,itemIds:['h']}}})});
 const draft=(types:CompensationRule['type'][]=['allowance','hourly','premium'],id='set'):RoomRuleSet=>({id,roomIds:[useHub.getState().rooms[0].id],rules:types.map(type=>member(`${id}-${type}`,type))});
@@ -12,7 +13,7 @@ const business=()=>structuredClone(useHub.persist.getOptions().partialize!(useHu
 const publish=()=>{useHub.getState().saveRoomRuleSet(draft());useHub.getState().publishRoomRuleSet('set','2026-10');};
 
 beforeEach(()=>{
- useHub.getState().reset();
+ useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});
  const s=useHub.getState(),employee={...s.employees[0],status:'在职' as const},room=s.rooms[0],product=s.products.find(item=>item.id===room.productId)!;
  const row={...s.dataset.rows.find(item=>item.roomId===room.id)!,employeeId:employee.id,employeeName:employee.name,departmentId:employee.departmentId,roomId:room.id,productId:product.id,month:'2026-10',hours:10,nightHours:2,earlyHours:3,regularHours:5,premium:1000,nightPremium:0,earlyPremium:200,regularPremium:800,spend:100,roi:10,hourlySpend:10,sessions:4,nightSessions:2,earlySessions:2,roiRank:1};
  useHub.setState({employees:[employee],rooms:[room],products:[product],liveRecords:[],roomHours:[],adHours:[],dataset:{rows:[row],month:'2026-10',revision:1,version:1,published:true},monthlyRows:[row],revision:1,compensationRules:[],compensationTasks:[],payrollTasks:[]});
@@ -140,7 +141,7 @@ it('blocks member removal and group deletion atomically if any pending related m
 });
 
 it('deletes all group members, withdraws pending across months and releases rooms without changing historical payroll',()=>{
- publish();useHub.getState().runPayroll();const frozen=structuredClone(useHub.getState().batch),completed=structuredClone(useHub.getState().compensationTasks);
+ publish();useHub.getState().runPayroll();archiveCurrentMonth();const frozen=structuredClone(useHub.getState().batch),completed=structuredClone(useHub.getState().compensationTasks);
  useHub.setState({compensationTasks:[...completed,...completed.map(task=>({...task,id:`future-${task.id}`,month:'2026-11',status:'待核算' as const}))]});
  useHub.getState().deleteRoomRuleSet('set');
  expect(listRoomRuleSets(useHub.getState().compensationRules)).toEqual([]);expect(useHub.getState().compensationRules.every(rule=>!!rule.deletedAt)).toBe(true);

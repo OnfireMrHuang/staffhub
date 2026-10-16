@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { useHub } from './store';
 import type { LiveRecord, RoomHourly, LiveMonthly } from './live-domain';
+const archiveCurrentMonth = () => { useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState();s.archivePayroll(s.month,s.batch!.review!.version); };
 
 const record:LiveRecord={id:'record',roomId:'room',productId:'product',date:'2026-10-01',start:'02:00',end:'03:00',hostId:'host',buyerId:'buyer',controlId:'control',version:1};
 const hourly:RoomHourly={id:'hour',roomId:'room',productId:'product',accountId:'account',date:record.date,start:record.start,end:record.end,spend:100,revenue:200,clicks:20,clickRate:0.2,clickCost:5,conversions:10,conversionRate:0.5,conversionCost:10,roi:2,orders:10,viewers:100,fans:5,tips:0};
@@ -114,7 +115,7 @@ it('人工部门归属用于发布和核算，工资快照冻结修订及原因�
  useHub.setState({employees});useHub.getState().cleanDataset();saveMonthly({departmentId:'live',hours:4,spend:400,premium:800});
  useHub.getState().publishDepartmentRule('rule','2026-10');
  expect(useHub.getState().payrollTasks[0].employeeIds).toContain('host');
- useHub.getState().runPayroll();
+ useHub.getState().runPayroll();archiveCurrentMonth();
  const batch=useHub.getState().batch!;
  expect(batch.salaries.find(s=>s.employeeId==='host')).toMatchObject({total:200,departmentName:'直播部'});
  expect(batch.snapshot.monthly.find(r=>r.employeeId==='host')?.hours).toBe(4);

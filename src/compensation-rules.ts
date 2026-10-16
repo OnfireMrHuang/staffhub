@@ -2,6 +2,7 @@ import type { Band, Department, Employee, Salary } from './domain';
 import type { LiveMonthly } from './live-domain';
 import type { LiveRoom } from './operations-domain';
 
+/** `employees` is retained only for frozen historical rule/task compatibility. Current definitions use global or rooms. */
 export type Scope = 'global' | 'rooms' | 'employees';
 export type CalculationType = 'allowance' | 'premium' | 'hourly';
 export type NewDuration = 'hours' | 'nightHours' | 'earlyHours' | 'regularHours';

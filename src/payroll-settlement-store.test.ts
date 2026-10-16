@@ -2,9 +2,10 @@ import { beforeEach, expect, it } from 'vitest';
 import { useHub } from './store';
 import { monthlyRowKey } from './dataset-corrections';
 import type { CompensationRule } from './compensation-rules';
+const archiveCurrentMonth = () => { useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState();s.archivePayroll(s.month,s.batch!.review!.version); };
 
 beforeEach(() => {
-  useHub.getState().reset();
+  useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});
   const s = useHub.getState();
   const source = s.dataset.rows.find(row => row.roles.includes('主播'))!;
   const employee = s.employees.find(item => item.id === source.employeeId)!;
@@ -48,13 +49,12 @@ it('imports unmatched hosts with zero salary when only one room has rules', () =
 
 it('freezes source statistics and scope amounts alongside the settlement version', () => {
   publish();
-  useHub.getState().runPayroll();
+  useHub.getState().runPayroll();archiveCurrentMonth();
   const s = useHub.getState();
   const result = structuredClone(s.batch!.compensationResult!);
   expect(result).toMatchObject({ settlementVersion: 2 });
   expect(result.rows[0]).toMatchObject({ statistics: { hours: 10, nightSessions: 2 }, scopes: { global: { allowance: 40, guarantee: 0, additions: 0 } }, total: 40 });
   useHub.setState({ dataset: { ...s.dataset, rows: s.dataset.rows.map(row => ({ ...row, hours: 99 })) } });
-  useHub.getState().lockBatch();
   useHub.getState().publishBatch();
   expect(useHub.getState().batch!.compensationResult).toEqual(result);
   const options = useHub.persist.getOptions();

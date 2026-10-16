@@ -49,7 +49,9 @@ it('实际旧版本持久化重载完成迁移，再次原生重载保留新核�
  useHub.persist.setOptions({storage});await useHub.persist.rehydrate();
  const state=useHub.getState();expect(state.products[0].name).toBe('自定义产品');expect(state.liveRecords[0].version).toBe(8);expect(state.roomHours).toHaveLength(2);expect(state.payrollTasks).toEqual([]);
  expect(JSON.parse(contents.get(key)!).version).toBe(1);
+ useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});
  state.publishDepartmentRule('custom-rule','2026-10');state.runPayroll();
+ useHub.getState().archivePayroll('2026-10',useHub.getState().batch!.review!.version);
  const tasks=structuredClone(useHub.getState().payrollTasks),batch=structuredClone(useHub.getState().batch);
  expect(tasks).toHaveLength(1);expect(batch?.salaries[0].total).toBe(63);
  await useHub.persist.rehydrate();

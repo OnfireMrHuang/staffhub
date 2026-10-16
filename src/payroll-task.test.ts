@@ -1,8 +1,9 @@
 import { beforeEach, expect, it } from 'vitest';
 import { useHub } from './store';
 import type { DepartmentRule } from './payroll-rules';
+const archiveCurrentMonth = () => { useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState();s.archivePayroll(s.month,s.batch!.review!.version); };
 
-beforeEach(()=>useHub.getState().reset());
+beforeEach(()=>{useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});});
 const rule = (id='task-rule', rate=50):DepartmentRule => ({id,name:id,departmentId:'live',version:1,status:'草稿',metrics:[{id:'hours',field:'hours',rate,bands:[]}],expression:['hours'],roomIds:[useHub.getState().rooms[0].id]});
 const publish = (value=rule()) => { useHub.getState().saveDepartmentRule(value);useHub.getState().publishDepartmentRule(value.id,useHub.getState().month); };
 
@@ -45,7 +46,7 @@ it('发布不接收没有参与工作的部门员工，核算保留已确认名�
 });
 it('已发布名单发生部门、在职状态或工作消失时阻止核算，不静默缩小名单',()=>{
  for(const change of ['department','status','work']) {
-  useHub.getState().reset();publish();const s=useHub.getState(),id=s.payrollTasks[0].employeeIds[0];
+  useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});publish();const s=useHub.getState(),id=s.payrollTasks[0].employeeIds[0];
   if(change==='work') { const rows=s.dataset.rows.filter(r=>r.employeeId!==id);useHub.setState({dataset:{...s.dataset,rows}}); }
   else {s.saveEmployee({...s.employees.find(e=>e.id===id)!,...(change==='department'?{departmentId:'ads'}:{status:'已离职' as const})});s.cleanDataset();}
   expect(()=>useHub.getState().runPayroll()).toThrow('确认');expect(useHub.getState().archivedMonths).toEqual([]);
@@ -88,8 +89,8 @@ it('保存迁移规则保留只读来源保底，普通新规则不能注入来�
  expect(useHub.getState().departmentRules.find(r=>r.id===original.id)!.sourceFloor).toEqual(original.sourceFloor);
  expect(()=>useHub.getState().saveDepartmentRule({...rule(),sourceFloor:{roiBelow:2,rate:999}})).toThrow('来源');
 });
-it('同月所有任务成功后合并每位员工的规则金额并归档完整快照',()=>{
- publish(rule('first',50));publish(rule('second',25));useHub.getState().runPayroll();
+it('同月所有任务成功后合并每位员工的规则金额，手动归档完整快照',()=>{
+ publish(rule('first',50));publish(rule('second',25));useHub.getState().runPayroll();archiveCurrentMonth();
  const s=useHub.getState();expect(s.payrollTasks.every(t=>t.status==='已核算')).toBe(true);expect(s.archivedMonths).toEqual(['2026-10']);
  const salary=s.batch!.salaries.find(e=>e.employeeId===s.payrollTasks[0].employeeIds[0])!;
  expect(salary.fixed).toBe(0);expect(salary.details).toHaveLength(2);expect(salary.total).toBe(salary.details[0].hours*75);
@@ -121,7 +122,7 @@ it('撤回待核算任务保留历史，修正规则后重新发布仅按新版�
  expect(s.payrollTasks.map(t=>t.status)).toEqual(['已撤回','已核算']);
  expect(s.batch!.snapshot.payrollTasks).toEqual(s.payrollTasks);
  expect(s.batch!.logs.join('\n')).toContain('1 个已发布部门规则任务');
- expect(()=>s.withdrawPayrollTask(replacement.id)).toThrow('归档');expect(()=>s.withdrawPayrollTask(original.id)).toThrow('归档');
+ archiveCurrentMonth();expect(()=>s.withdrawPayrollTask(replacement.id)).toThrow('归档');expect(()=>s.withdrawPayrollTask(original.id)).toThrow('归档');
 });
 it('撤回旧版本任务不能覆盖已修改的新版本规则',()=>{
  publish(rule('edited',100));const taskId=useHub.getState().payrollTasks[0].id;

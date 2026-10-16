@@ -23,7 +23,7 @@ it.each([2, undefined] as const)('uses the calculated frozen rule name and versi
   const source = initial.dataset.rows.find(row => row.roles.includes('主播'))!;
   const row = { ...source, nightSessions: 2 };
   useHub.setState({
-   ...initial, month: row.month, employees: initial.employees.filter(employee => employee.id === row.employeeId),
+   ...initial, session:{kind:'admin',username:'admin',method:'password'}, month: row.month, employees: initial.employees.filter(employee => employee.id === row.employeeId),
    rooms: initial.rooms.filter(room => room.id === row.roomId), liveRecords: [], roomHours: [], adHours: [],
    dataset: { rows: [row], month: row.month, revision: 1, version: 1, published: true }, monthlyRows: [row], revision: 1,
    compensationRules: [], compensationTasks: [], payrollTasks: [], archivedMonths: [], batch: null, batches: {},
@@ -47,5 +47,10 @@ it.each([2, undefined] as const)('uses the calculated frozen rule name and versi
   expect(html).toContain('¥60.00');
   expect(html).not.toContain('撤回的旧补贴A');
   expect(html).not.toContain('后改草稿C');
+  const appliedSalary={...batch.salaries[0],total:75,commission:75};
+  const appliedHtml=renderToStaticMarkup(<SalaryModal salary={appliedSalary} onClose={()=>{}} month={row.month} version={batch.datasetVersion}/>);
+  expect(appliedHtml).toContain('当前已应用月薪 ¥75.00');
+  expect(appliedHtml).toContain('以下为原始核算依据，原始月薪 ¥60.00');
+  expect(appliedHtml).not.toContain('= ¥75.00');
  } finally { useHub.setState(before, true); }
 });

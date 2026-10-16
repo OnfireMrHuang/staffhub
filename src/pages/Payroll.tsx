@@ -1,42 +1,41 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
-import { ArrowRight, Calculator, Check, CircleCheck, FileCheck2, FileText, LockKeyhole, Play, Send, ShieldCheck, Users, Wallet } from 'lucide-react';
+import { Calculator, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useHub } from '../store';
 import type { Salary } from '../domain';
 import { metricNames } from '../domain';
 import { monthlyMetricOptions } from '../payroll-rules';
 import { premiumFieldOptions, conditionFieldOptions, type CompensationResult, type CompensationRule, type ConditionGroup } from '../compensation-rules';
-import { calculationLabels, compensationExpression, compensationMetricLabel, scopeLabels } from './CompensationRuleEditor';
-import PayrollSettlementTable from './PayrollSettlementTable';
-import { buildPayrollSettlementWorkbook } from '../payroll-settlement-sheet';
+import { compensationMetricLabel } from './CompensationRuleEditor';
+import { Badge, Empty, Modal, number, Panel, Person, SearchBox, yuan } from '../components';
+import { monthlyPayrollTasks, type MonthlyTaskStatus } from '../payroll-task-view';
+import PayrollTaskDetail from './PayrollTaskDetail';
+import { payrollSettlementLayout } from '../payroll-settlement-sheet';
 import '../compensation-rules.css';
-import { attempt, Badge, Button, Empty, exportSheet, ExportButton, InlineLink, Modal, number, Panel, Person, SearchBox, SectionTitle, Stat, yuan } from '../components';
+import '../payroll-tasks.css';
 
-export default function Payroll(){
- const s=useHub(),[search,setSearch]=useState(''),[selected,setSelected]=useState<Salary|null>(null),[running,setRunning]=useState(false),[step,setStep]=useState(0),[logs,setLogs]=useState(false),[confirm,setConfirm]=useState<'lock'|'publish'|null>(null),[error,setError]=useState(''),[withdrawId,setWithdrawId]=useState<{id:string;model:'legacy'|'compensation'}|null>(null);
- const batch=s.batch?.month===s.month?s.batch:null,archived=s.archivedMonths.includes(s.month),taskRooms=batch?.snapshot.rooms??s.rooms,taskDepartments=batch?.snapshot.departments??s.departments;
- const legacyTasks=(batch?.snapshot.payrollTasks??s.payrollTasks).filter(t=>t.month===s.month),newTasks=(batch?.snapshot.compensationTasks??(batch?[]:s.compensationTasks)).filter(t=>t.month===s.month),allTasks=[...newTasks,...legacyTasks],tasks=allTasks.filter(t=>t.status!=='已撤回'),mixedTasks=newTasks.some(t=>t.status==='待核算')&&legacyTasks.some(t=>t.status==='待核算');
- const withdrawingGroup=withdrawId?.model==='compensation'&&newTasks.find(task=>task.id===withdrawId.id)?.roomRuleSet;
- const rows=batch?.salaries.filter(e=>e.employeeName.includes(search)||e.employeeId.toLowerCase().includes(search.toLowerCase()))||[];
- const layered=batch?.compensationResult?.settlementVersion===2;
- const exportPayroll=()=>{if(!batch)return;if(layered&&batch.compensationResult)XLSX.writeFile(buildPayrollSettlementWorkbook(batch.compensationResult),`主播月度薪酬核算表-${batch.month}.xlsx`);else exportSheet(`月度薪资表-${batch.month}`,batch.salaries.map(r=>({'员工ID':r.employeeId,'员工名称':r.employeeName,'部门':r.departmentName,'薪资月份':batch.month,'规则计算金额':r.total,'应发金额':r.total,'状态':batch.status,'数据集版本':batch.datasetVersion})))};
-
- const run=()=>{setError('');setRunning(true);setStep(0);setTimeout(()=>setStep(1),200);setTimeout(()=>setStep(2),450);setTimeout(()=>{try{s.runPayroll();setStep(3)}catch(e){setError(e instanceof Error?e.message:'核算失败');setRunning(false)}},700)};
- const total=batch?.salaries.reduce((v,r)=>v+r.total,0)||0,applicable=new Set(tasks.flatMap(t=>t.employeeIds)).size;
- return <><div className="page-heading"><div><span className="eyebrow">MONTHLY PAYROLL</span><h1>薪酬核算</h1><p>按主播、直播间与月份分层核算，汇总员工工资并保存归档依据。</p></div><div className="actions"><label className="business-month-selector">核算月份<input type="month" aria-label="核算月份" value={s.month} onChange={e=>e.target.value&&s.setMonth(e.target.value)}/></label>{batch&&<ExportButton onClick={exportPayroll}/>}<Button variant="primary" disabled={archived||!tasks.length||mixedTasks} onClick={run}><Play size={15}/>{archived?'本月已归档':'开始月度核算'}</Button></div></div>
- <div className="payroll-banner"><div className="payroll-month"><span>{s.month.slice(0,4)}</span><strong>{s.month.slice(5)}<em>月</em></strong></div><div><div className="inline"><h2>月度薪酬核算</h2><Badge tone={batch?'green':'gray'}>{batch?.status||'待核算'}</Badge>{archived&&<Badge tone="gray">来源已归档</Badge>}</div><p>{tasks.length} 条已发布规则任务 · {applicable} 位参与员工 · 固定月度汇总 v{batch?.datasetVersion??s.dataset.version}</p></div><div className="spacer"/><div className="payroll-stages">{['核算','锁定','发布'].map((text,i)=>{const current=batch?batch.status==='已核算'?0:batch.status==='已锁定'?1:2:-1;return <span key={text} className={current>=i?'complete':''}><i>{current>=i?<Check size={13}/>:i+1}</i>{text}{i!==2&&<span className="stage-line"/>}</span>})}</div></div>
- <Panel><SectionTitle title="本月核算任务" description="冻结发布版本与适用范围，逐行计算基础、直播间和员工规则。"><Button onClick={()=>s.navigate('rules')}>配置并发布规则<ArrowRight size={15}/></Button></SectionTitle>{mixedTasks&&<p className="rule-error" role="alert">本月同时存在新版与旧版待核算任务，请先撤回旧版任务后再核算。</p>}{allTasks.length?<div className="table-scroll"><table><thead><tr><th>规则 / 任务</th><th>分类 / 类型</th><th>适用范围</th><th>计算配置</th><th>员工</th><th>状态</th><th/></tr></thead><tbody>{allTasks.map(t=>{const modern='scope' in t;return <tr key={t.id}><td><strong>{t.ruleName}</strong><small>v{t.ruleVersion} · {t.month}</small>{!modern&&<span className="compensation-task-model">旧版任务</span>}</td><td>{modern?`${scopeLabels[t.scope]} / ${calculationLabels[t.type]}`:taskDepartments.find(d=>d.id===t.departmentId)?.name||t.departmentId}</td><td>{modern?(t.scope==='global'?'在职主播月度数据':t.scope==='employees'?'主播员工条件筛选':t.rule.roomIds.map(id=>taskRooms.find(r=>r.id===id)?.name||id).join('、')):t.rule.roomIds.map(id=>taskRooms.find(r=>r.id===id)?.name||id).join('、')}{modern&&<small>{t.rowKeys.length} 行 · 参考日 {t.referenceDate}</small>}</td><td>{modern?compensationExpression(t.rule):t.rule.expression.map(id=>monthlyMetricOptions.find(o=>o.field===t.rule.metrics.find(m=>m.id===id)?.field)?.label||id).join(' + ')}</td><td>{t.employeeIds.length} 人</td><td><Badge tone={t.status==='已核算'?'green':t.status==='已撤回'?'gray':'amber'}>{t.status}</Badge></td><td>{t.status==='待核算'&&!archived&&<InlineLink onClick={()=>setWithdrawId({id:t.id,model:modern?'compensation':'legacy'})}>{modern&&t.roomRuleSet?'撤回规则集':'撤回任务'}</InlineLink>}</td></tr>})}</tbody></table></div>:<Empty title="本月还没有核算任务" description="前往薪酬规则，保存并发布规则后，这里会生成任务。"/>}</Panel>
- {error&&<div className="error-box"><strong>核算未完成：{error}</strong><InlineLink onClick={()=>s.navigate('operations','datasets')}>检查员工月度汇总</InlineLink></div>}
- <div className="stats"><Stat label="本月核算人数" value={<>{batch?.salaries.length||'—'}<em>人</em></>} foot={`${applicable} 位发布时确认的参与员工`} icon={<Users size={18}/>}/><Stat label="规则任务" value={<>{tasks.length}<em>条</em></>} foot="同月任务全部成功后归档" icon={<FileCheck2 size={18}/>}/><Stat label="规则计算合计" value={batch?yuan(total):'—'} foot={batch&&!layered?'沿用归档时的核算口径':'逐行比较保底与加成金额，再加补贴'} icon={<Calculator size={18}/>}/><Stat label="月度应发金额" value={batch?yuan(total):'—'} foot={batch?`${batch.status} · ${batch.month}`:'先发布规则，再核算任务'} icon={<Wallet size={18}/>} accent/></div>
- {layered&&batch?.compensationResult&&<Panel><SectionTitle title="主播月度薪酬核算表" description="每行对应一位主播、一个直播间和一个月份；直播数据统计保留冻结原值。"/><div className="settlement-legend"><strong>每行月薪 = max（最终保底金额，累计加成金额）+ 总计补贴</strong><span>系数保费先更新 ROI 与排名，用于后续时薪规则。</span></div><div className="toolbar"><SearchBox value={search} onChange={setSearch} placeholder="搜索员工姓名 / ID"/><span className="spacer"/><Badge tone="gray">五组指标 · 金额单位：元</Badge></div><PayrollSettlementTable result={batch.compensationResult} search={search}/></Panel>}
- <Panel><SectionTitle title="员工工资汇总" description={batch?`核算完成于 ${batch.created}，点击员工明细查看每项薪资。`:'所有当月任务使用确认的月度汇总统一计算，失败时不生成部分工资。'}>{batch&&<Button onClick={()=>setLogs(true)}><FileText size={15}/>核算日志</Button>}{batch?.status==='已核算'&&<Button variant="primary" onClick={()=>setConfirm('lock')}><LockKeyhole size={15}/>确认并锁定</Button>}{batch?.status==='已锁定'&&<Button variant="primary" onClick={()=>setConfirm('publish')}><Send size={15}/>发布薪资条</Button>}{batch?.status==='已发布'&&<Button onClick={()=>s.setPerspective('employee')}><Users size={15}/>查看员工端</Button>}</SectionTitle>
- {batch?<><div className="toolbar">{!layered&&<SearchBox value={search} onChange={setSearch}/>}<span className="spacer"/><Badge tone="gray">本地演示 · 未实际发放</Badge></div><div className="table-scroll"><table><thead><tr><th>员工</th><th>部门</th><th>参与规则</th><th className="align-right">月度应发</th><th>状态</th><th/></tr></thead><tbody>{rows.map(r=><tr key={r.employeeId}><td><Person name={r.employeeName} id={r.employeeId}/></td><td>{r.departmentName}</td><td>{batch.compensationResult?new Set(batch.compensationResult.rows.filter(row=>row.employeeId===r.employeeId).flatMap(row=>row.matchedRuleIds)).size:r.details.length} 条</td><td className="numeric align-right strong green-text">{yuan(r.total)}</td><td><Badge>{batch.status}</Badge></td><td><InlineLink onClick={()=>setSelected(r)}>计算明细</InlineLink></td></tr>)}</tbody></table></div><div className="table-foot"><span>共 {rows.length} 位员工</span><span>{layered?'员工月薪 = 各直播间月薪之和':'沿用归档时的薪资计算口径'}</span></div></>:<Empty title="完成规则发布后，开始月度核算" description="按基础、直播间、员工三层计算，先比较保底与加成金额，再加总补贴。"><div className="actions"><Button onClick={()=>s.navigate('operations','datasets')}>查看工作数据</Button><Button variant="primary" disabled={!tasks.length||mixedTasks} onClick={run}><Play size={15}/>开始核算</Button></div></Empty>}</Panel>
- <div className="info-strip"><ShieldCheck size={21}/><div><strong>整月全部成功后归档</strong><p>所有任务及员工结果一次保存，冻结规则、人员和来源。归档后禁止追加任务或变更历史数据；确认发布后员工才能看到薪资条。</p></div></div>
- <Modal open={!!withdrawId} onOpenChange={v=>!v&&setWithdrawId(null)} title={withdrawingGroup?'撤回规则集任务':'撤回待核算任务'} description={withdrawingGroup?`撤回同一规则集本月的全部 ${withdrawingGroup.ruleIds.length} 条任务，保留原发布快照及撤回记录。重新发布时整组生成新任务。`:'保留原发布快照及撤回记录，该任务不再参与核算。修改草稿并重新发布后会生成新任务。'}><div className="dialog-foot"><Button onClick={()=>setWithdrawId(null)}>取消</Button><Button variant="primary" onClick={()=>attempt(()=>{if(withdrawId?.model==='compensation')s.withdrawCompensationTask(withdrawId.id);else if(withdrawId)s.withdrawPayrollTask(withdrawId.id);setWithdrawId(null)},'任务已撤回，可修改规则后重新发布。')}>确认撤回</Button></div></Modal>
- <SalaryModal salary={selected} onClose={()=>setSelected(null)} month={s.month} version={batch?.datasetVersion}/>
- <Modal open={running} onOpenChange={v=>{if(!v&&step===3)setRunning(false)}} title={step===3?'月度核算完成':'正在计算本月薪资'} description="执行本地规则任务，不进行真实工资发放。"><div className="clean-steps">{['确认当月任务、在职主播与月度汇总版本','计算三个范围的系数保费，更新 ROI 与同直播间排名','逐规则时薪乘时长，比较保底与加成金额后加补贴','逐行汇总员工月薪，全部成功后冻结快照并归档'].map((text,i)=><div key={text} className={i<=step?'done':''}><span>{i<=step?<Check size={17}/>:i+1}</span><strong>{text}</strong></div>)}</div>{step===3&&<div className="dialog-foot"><span className="muted">{useHub.getState().batch?.salaries.length} 位员工全部核算成功</span><Button variant="primary" onClick={()=>setRunning(false)}>查看月度薪资表</Button></div>}</Modal>
- <Modal open={logs} onOpenChange={setLogs} title="核算任务日志" description={`统计期间 ${batch?.month} · 当前状态 ${batch?.status}`}><div className="task-log">{batch?.logs.map((l,i)=><div key={i}><CircleCheck size={17}/><span><small>STEP 0{i+1}</small>{l}</span></div>)}</div></Modal>
- <Modal open={!!confirm} onOpenChange={v=>!v&&setConfirm(null)} title={confirm==='lock'?'确认并锁定本月工资':'发布员工薪资条'} description={confirm==='lock'?'确认工资及其冻结数据、规则依据。':'发布后员工端只查看本人薪资条，仅改变本地演示状态。'}><div className="confirmation-summary"><span>薪资月份<strong>{batch?.month}</strong></span><span>员工人数<strong>{batch?.salaries.length} 人</strong></span><span>应发总额<strong>{yuan(total)}</strong></span></div><div className="dialog-foot"><Button onClick={()=>setConfirm(null)}>取消</Button><Button variant="primary" onClick={()=>attempt(()=>{if(confirm==='lock')s.lockBatch();else s.publishBatch();setConfirm(null)},confirm==='lock'?'工资已锁定，可继续发布。':'薪资条已发布，可切换员工端查看。')}>{confirm==='lock'?<LockKeyhole size={15}/>:<Send size={15}/>}确认{confirm==='lock'?'锁定':'发布'}</Button></div></Modal></>;
+export default function Payroll() {
+ const state = useHub();
+ const [search, setSearch] = useState(''), [month, setMonth] = useState(''), [status, setStatus] = useState('');
+ const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+ const tasks = monthlyPayrollTasks(state);
+ const openTask = (taskMonth: string) => { state.setMonth(taskMonth); setSelectedMonth(taskMonth); };
+ const selected = tasks.find(task => task.month === selectedMonth);
+ if (selected) return <PayrollTaskDetail task={selected} onBack={() => setSelectedMonth(null)} />;
+ const query = search.trim().toLocaleLowerCase();
+ const rows = tasks.filter(task => (!month || task.month === month) && (!status || task.status === status)
+  && `${task.month} ${task.tasks.map(rule => rule.ruleName).join(' ')}`.toLocaleLowerCase().includes(query));
+ return <Panel className="payroll-task-list">
+  <div className="toolbar payroll-task-filters" aria-label="核算任务筛选栏">
+   <SearchBox value={search} onChange={setSearch} placeholder="搜索核算月份 / 规则名称" />
+   <select aria-label="筛选核算月份" value={month} onChange={event => setMonth(event.target.value)}><option value="">全部月份</option>{tasks.map(task => <option key={task.month} value={task.month}>{task.month}</option>)}</select>
+   <select aria-label="筛选任务状态" value={status} onChange={event => setStatus(event.target.value)}><option value="">全部状态</option>{(['待核算','待复核','待应用','待重新核算','已归档','已撤回'] as MonthlyTaskStatus[]).map(value => <option key={value}>{value}</option>)}</select>
+   <span className="spacer" /><span className="muted">{rows.length} 项任务</span>
+  </div>
+  {rows.length ? <div className="table-scroll"><table aria-label="核算任务列表"><thead><tr><th>核算任务</th><th>发布规则</th><th>员工人数</th><th>状态</th><th>更新时间</th><th /></tr></thead><tbody>{rows.map(task => <tr key={task.month} className="payroll-task-row" onClick={() => openTask(task.month)}>
+   <td><button className="payroll-task-open" onClick={event => { event.stopPropagation(); openTask(task.month); }}>{task.month} 月度薪酬核算</button></td>
+   <td>{task.tasks.filter(rule => rule.status !== '已撤回').length} 条</td><td>{task.employees} 人</td><td><Badge tone={task.status === '已归档' ? 'green' : task.status === '已撤回' ? 'gray' : 'amber'}>{task.status}</Badge></td><td>{task.updatedAt || '—'}</td><td><ChevronRight size={16} aria-hidden="true" /></td>
+  </tr>)}</tbody></table></div> : <Empty title="暂无核算任务" description={tasks.length ? '请调整筛选条件。' : '发布薪酬规则后，系统按月份生成核算任务。'} />}
+ </Panel>;
 }
 
 export function SalaryModal({salary,onClose,month,version}:{salary:Salary|null;onClose:()=>void;month:string;version?:number}){
@@ -61,12 +60,12 @@ export function CompensationSalaryDetails({salary,result,rules=[]}:{salary:Salar
 function LayeredCompensationSalaryDetails({salary,result,rules}:{salary:Salary;result:CompensationResult;rules:SalaryRule[]}) {
  const rows=result.rows.filter(row=>row.employeeId===salary.employeeId);
  const ruleName=(id:string)=>{const rule=rules.find(rule=>rule.id===id);return rule?`${rule.name}${rule.version===undefined?'':` · v${rule.version}`}`:id;};
- const scopeNames={global:'基础核算',rooms:'直播间核算',employees:'员工核算'};
- const scopeOrder=['global','rooms','employees'] as const;
+ const scopeNames={global:'全局核算',rooms:'直播间核算',employees:'历史员工核算'};
+ const scopeOrder=payrollSettlementLayout(result).groups.some(group=>group.key==='employees')?(['global','rooms','employees'] as const):(['global','rooms'] as const);
  const amount=(value:number|null|undefined)=>value==null?'未定义':yuan(value);
  const metric=(value:number|null|undefined,digits=4)=>value==null?'未定义':number(value,digits);
  return <>
-  <div className="salary-detail-head"><Person name={salary.employeeName} id={salary.employeeId}/><Badge tone="gray">{salary.departmentName}</Badge><span className="spacer"/><span>月度应发<strong>{yuan(salary.total)}</strong></span></div>
+  <div className="salary-detail-head"><Person name={salary.employeeName} id={salary.employeeId}/><Badge tone="gray">{salary.departmentName}</Badge><span className="spacer"/><span>原始核算月薪<strong>{yuan(salary.total)}</strong></span></div>
   <div className="settlement-formula"><strong>每个直播间月薪 = max（最终保底金额，累计加成金额）+ 总计补贴</strong><p>员工月薪 = 各直播间月薪之和。保底逐规则先乘时长再取最大金额；加成逐规则先乘时长再累加。条件日期参考：{result.referenceDate}。</p></div>
   {rows.map(row=><article key={`${row.month}-${row.roomId}`} className="compensation-row-trace">
    <div className="inline"><strong>{row.roomName}</strong><Badge tone="gray">{row.month}</Badge><Badge tone="gray">{row.matchedRuleIds.length} 条适用规则</Badge><span className="spacer"/><strong className="green-text">{yuan(row.total)}</strong></div>
@@ -97,12 +96,13 @@ function LayeredCompensationSalaryDetails({salary,result,rules}:{salary:Salary;r
     return <tr key={`${calculation.ruleId}-${index}`}><td>{ruleName(calculation.ruleId)}</td><td>{scopeNames[calculation.scope]}</td><td>{calculation.type==='hourly'?(calculation.mode==='guarantee'?'保底':'加成'):calculation.type==='premium'?'系数保费':'补贴'}</td><td>{evidence}{items.map((item,itemIndex)=><small key={`${item.itemId}-${itemIndex}`}>{item.name} · {item.field?`${compensationMetricLabel(item.field)} ${metric(item.value)}`:'直接时薪'} · {item.matched?'命中':'未命中'} · {yuan(item.rate)} / h</small>)}{candidate?.items.map(item=><small key={item.id}>{item.name}：{premiumFieldOptions.find(option=>option.field===item.field)?.label||item.field} {yuan(item.value)} × {number(item.coefficient,4)} = {yuan(item.amount)}</small>)}</td><td>{calculation.matched===undefined?'—':calculation.matched?'命中':'未命中'}</td><td>{selection}</td><td className="numeric align-right strong">{yuan(calculation.amount)}</td></tr>;
    })}</tbody></table></div>:<p className="compensation-trace-formula">本行无逐规则金额，核算金额按冻结结果展示。</p>}
    {row.conditions.length>0&&<details className="compensation-evidence"><summary>条件取值与判断依据</summary>{row.conditions.map((evidence,index)=><p key={index}><strong>{ruleName(evidence.ruleId)} · {evidence.matched?'命中':'未命中'}</strong> · {conditionEvidenceText(evidence.condition)}<br/>{Object.entries(evidence.values).map(([field,value])=>`${conditionFieldOptions.find(f=>f.field===field)?.label||field}：${typeof value==='boolean'?(value?'是':'否'):value}`).join('；')}</p>)}</details>}
-   <div className="settlement-outcome"><div><span>直播间月薪 · 比较金额后加补贴</span><p>三个范围的保底金额取最大，加成金额和补贴分别求和。</p></div><strong>{`max（${amount(row.guarantee)}，${amount(row.additions)}）+ ${yuan(row.allowance)} = ${yuan(row.total)}`}</strong></div>
+   <div className="settlement-outcome"><div><span>直播间月薪 · 比较金额后加补贴</span><p>各范围的保底金额取最大，加成金额和补贴分别求和。</p></div><strong>{`max（${amount(row.guarantee)}，${amount(row.additions)}）+ ${yuan(row.allowance)} = ${yuan(row.total)}`}</strong></div>
   </article>)}
   <div className="settlement-outcome"><span>员工月薪 · {rows.length} 个直播间</span><strong>{rows.map(row=>yuan(row.total)).join(' + ')} = {yuan(salary.total)}</strong></div>
  </>;
 }
 
 function CompensationSalaryModal({salary,onClose,month,version,result,rules}:{salary:Salary|null;onClose:()=>void;month:string;version?:number;result:CompensationResult;rules?:SalaryRule[]}) {
- return <Modal open={!!salary} onOpenChange={v=>!v&&onClose()} title={`${salary?.employeeName||''} · ${month} 薪资明细`} description={`数据集 v${version||1} · 合并规则与核算依据已冻结。`} wide>{salary&&<CompensationSalaryDetails salary={salary} result={result} rules={rules}/>}</Modal>;
+ const originalSalary=result.salaries.find(item=>item.employeeId===salary?.employeeId)??salary;
+ return <Modal open={!!salary} onOpenChange={v=>!v&&onClose()} title={`${salary?.employeeName||''} · ${month} 薪资明细`} description={`数据集 v${version||1} · 合并规则与核算依据已冻结。`} wide>{salary&&originalSalary&&<>{salary.total!==originalSalary.total&&<div className="payroll-review-notice">当前已应用月薪 {yuan(salary.total)}；以下为原始核算依据，原始月薪 {yuan(originalSalary.total)}。</div>}<CompensationSalaryDetails salary={originalSalary} result={result} rules={rules}/></>}</Modal>;
 }

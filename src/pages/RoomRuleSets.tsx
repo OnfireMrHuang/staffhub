@@ -16,7 +16,7 @@ export default function RoomRuleSets() {
  const title=(set:RoomRuleSet)=>`${set.roomIds.map(id=>s.rooms.find(room=>room.id===id)?.name||id).join('、')||'直播间'}规则集`;
  const version=(set:RoomRuleSet)=>Math.max(...set.rules.map(rule=>rule.version),0);
  const save=(set:RoomRuleSet)=>{s.saveRoomRuleSet(set);s.notify('直播间规则集草稿已保存');setEditor(null)};
- const publish=()=>{if(!publishing)return;try{s.publishRoomRuleSet(publishing.id,publishMonth);s.notify(`规则集已发布，已生成 ${publishing.rules.length} 条核算任务`);setPublishing(null)}catch(e){setPublishError(e instanceof Error?e.message:'请核对发布范围')}};
+ const publish=()=>{if(!publishing)return;try{s.publishRoomRuleSet(publishing.id,publishMonth);s.notify(`已发布 ${publishing.rules.length} 条规则，加入对应月份核算任务`);setPublishing(null)}catch(e){setPublishError(e instanceof Error?e.message:'请核对发布范围')}};
  const remove=()=>{if(!deleting)return;try{s.deleteRoomRuleSet(deleting.id);s.notify('规则集已删除，相关待核算任务已撤回');setDeleting(null)}catch(e){setDeleteError(e instanceof Error?e.message:'删除未完成，请核对核算任务')}};
  const pendingDeleteCount=s.compensationTasks.filter(task=>task.status==='待核算'&&task.rule.scope==='rooms'&&roomRuleSetId(task.rule)===deleting?.id).length;
  let referenceDate='',previewError='';
@@ -38,7 +38,7 @@ export default function RoomRuleSets() {
    <div className="department-publish-summary"><div><span>规则集</span><strong>{deleting&&title(deleting)}</strong></div><div><span>包含规则</span><strong>{deleting?.rules.length} 条</strong></div><div><span>待撤回任务</span><strong>{pendingDeleteCount} 条</strong></div></div>
    <p className="caption">历史工资、已核算任务和归档快照保留。</p>{deleteError&&<p className="rule-error" role="alert">{deleteError}</p>}<div className="dialog-foot"><Button onClick={()=>setDeleting(null)}>取消</Button><Button variant="primary" onClick={remove}>确认删除规则集</Button></div>
   </Modal>
-  <Modal open={!!publishing} onOpenChange={value=>!value&&setPublishing(null)} title="发布直播间规则集" description="整组发布，每类规则生成一条任务并共同参与本月核算。">
+  <Modal open={!!publishing} onOpenChange={value=>!value&&setPublishing(null)} title="发布直播间规则集" description="整组发布，全部规则加入对应月份的核算任务。">
    <div className="department-publish-summary"><label>核算月份<input aria-label="规则集发布月份" type="month" value={publishMonth} onChange={e=>{setPublishMonth(e.target.value);setPublishError('')}}/></label><div><span>规则集</span><strong>{publishing&&`${title(publishing)} · v${version(publishing)}`}</strong></div><div><span>日期参考</span><strong>{referenceDate||'月份无效'}（核算月末）</strong></div><div><span>命中主播数据</span><strong>{people.size} 人 · {rows.length} 行 · {number(hours,2)} 小时</strong></div><div><span>数据集</span><strong>v{s.dataset.version} · {fresh?'已更新':'请先生成所选月份最新数据集'}</strong></div></div>
    <div className="compensation-history-list">{publishing?.rules.map(rule=><div key={rule.id} className="compensation-history-item"><Badge tone="gray">{calculationLabels[rule.type]}</Badge><div><strong>{rule.name}</strong><small>{compensationExpression(rule)}</small></div></div>)}</div>
    {oldTasks.length>0&&<p className="rule-error" role="alert">本月仍有 {oldTasks.length} 条旧版待核算任务，请先撤回后再发布。</p>}{(publishError||previewError)&&<p className="rule-error" role="alert">{publishError||previewError}</p>}

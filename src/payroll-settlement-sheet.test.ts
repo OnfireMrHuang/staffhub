@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
 import type { CompensationResult, PayrollRowCalculation } from './compensation-rules';
 import type { LiveMonthly } from './live-domain';
-import { buildPayrollSettlementWorkbook, payrollSettlementCells, payrollSettlementColumns, payrollSettlementGroups } from './payroll-settlement-sheet';
+import { buildPayrollSettlementWorkbook, payrollSettlementCells, payrollSettlementColumns, payrollSettlementGroups, payrollSettlementLayout } from './payroll-settlement-sheet';
 
 const statistics: LiveMonthly = {
   employeeId: 'e1', employeeName: '冻结姓名', departmentId: 'live', departmentName: '直播部',
@@ -39,7 +39,21 @@ const statisticLabels = ['员工ID', '员工名称', '部门ID', '部门名称',
 const scopeLabels = ['补贴金额', '保底金额', '加成金额', '系数加成后保费'];
 
 describe('layered payroll workbook', () => {
-  it('exports all 48 columns under five merged group headers in the monthly statistics order', () => {
+  it('shows current results with 44 columns and only global and room rule groups', () => {
+    const current = result();
+    current.rows[0].scopes!.employees = { allowance: 0, guarantee: 0, additions: 0, premium: 0, matchedRuleIds: [] };
+    const layout = payrollSettlementLayout(current);
+    expect(layout.columns).toHaveLength(44);
+    expect(layout.groups.map(group => group.key)).toEqual(['statistics', 'global', 'rooms', 'result']);
+    expect(payrollSettlementColumns).toEqual(layout.columns);
+    expect(payrollSettlementGroups).toEqual(layout.groups);
+    expect(payrollSettlementCells(current.rows[0], layout)).toHaveLength(44);
+    const sheet = buildPayrollSettlementWorkbook(current).Sheets['主播月度薪酬核算表'];
+    expect(sheet['!ref']).toBe('A1:AR3');
+    expect(XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 })[1]).toEqual([...statisticLabels, ...scopeLabels, ...scopeLabels, '总计补贴', '系数加成后总计保费', '总计月薪']);
+  });
+
+  it('retains all 48 columns under five groups for historical employee-scope evidence', () => {
     const workbook = buildPayrollSettlementWorkbook(result());
     expect(workbook.SheetNames).toEqual(['主播月度薪酬核算表', '员工工资汇总']);
     const sheet = workbook.Sheets['主播月度薪酬核算表'];
@@ -53,11 +67,24 @@ describe('layered payroll workbook', () => {
       { s: { r: 0, c: 45 }, e: { r: 0, c: 47 } },
     ]);
     expect([rows[0][0], rows[0][33], rows[0][37], rows[0][41], rows[0][45]])
-      .toEqual(['直播数据统计', '基础核算指标', '直播间核算指标', '员工核算指标', '结果指标']);
+      .toEqual(['直播数据统计', '全局核算指标', '直播间核算指标', '员工核算指标（历史）', '结果指标']);
     expect(rows[1]).toEqual([...statisticLabels, ...scopeLabels, ...scopeLabels, ...scopeLabels, '总计补贴', '系数加成后总计保费', '总计月薪']);
-    expect(payrollSettlementGroups.map(group => group.count)).toEqual([33, 4, 4, 4, 3]);
-    expect(payrollSettlementColumns.map(column => column.label)).toEqual(rows[1]);
-    expect(new Set(payrollSettlementColumns.map(column => column.key)).size).toBe(48);
+    const layout = payrollSettlementLayout(result());
+    expect(layout.groups.map(group => group.count)).toEqual([33, 4, 4, 4, 3]);
+    expect(layout.columns.map(column => column.label)).toEqual(rows[1]);
+    expect(new Set(layout.columns.map(column => column.key)).size).toBe(48);
+  });
+
+  it('keeps zero-amount historical employee matches and rule traces visible', () => {
+    const input = result();
+    input.rows[0].scopes!.employees = { allowance: 0, guarantee: 0, additions: 0, premium: 0, matchedRuleIds: ['old-rule'] };
+    expect(payrollSettlementLayout(input).columns).toHaveLength(48);
+    input.rows[0].scopes = undefined;
+    input.rows[0].ruleCalculations = [{ ruleId: 'old-rule', scope: 'employees', type: 'allowance', amount: 0 }];
+    expect(payrollSettlementLayout(input).columns).toHaveLength(48);
+    input.rows[0].ruleCalculations = [];
+    input.rows[0].durationGroups = [{ scope: 'employees', duration: 'hours', hours: 0, guarantee: 0, additions: 0, rate: 0, amount: 0, items: [] }];
+    expect(payrollSettlementLayout(input).columns).toHaveLength(48);
   });
 
   it('keeps frozen source values distinct from effective settlement values and exports numeric cells', () => {
@@ -75,7 +102,7 @@ describe('layered payroll workbook', () => {
     }
     expect(sheet.AB3.z).toBe('0.0000');
     expect(sheet.AV3.z).toBe('0.00');
-    expect(values).toEqual(payrollSettlementCells(input.rows[0]));
+    expect(values).toEqual(payrollSettlementCells(input.rows[0], payrollSettlementLayout(input)));
     expect(input).toEqual(before);
   });
 
@@ -85,8 +112,8 @@ describe('layered payroll workbook', () => {
     expect(values[22]).toBe('未定义');
     expect(values[26]).toBe(0);
     expect(values[27]).toBe('未定义');
-    expect(values.slice(33, 45)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    expect(values.slice(45)).toEqual([120, 1800, 1520]);
+    expect(values.slice(33, 41)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(values.slice(41)).toEqual([120, 1800, 1520]);
   });
 
   it('uses only frozen trace identity when statistics were not saved', () => {
@@ -111,7 +138,7 @@ describe('layered payroll workbook', () => {
 
   it('retains both worksheet structures when no settlement rows exist', () => {
     const workbook = buildPayrollSettlementWorkbook({ settlementVersion: 2, rows: [], salaries: [], referenceDate: '2026-10-31' });
-    expect(workbook.Sheets['主播月度薪酬核算表']['!ref']).toBe('A1:AV2');
+    expect(workbook.Sheets['主播月度薪酬核算表']['!ref']).toBe('A1:AR2');
     expect(workbook.Sheets['员工工资汇总']['!ref']).toBe('A1:E1');
   });
 });

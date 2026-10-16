@@ -9,10 +9,10 @@ it('renders typed boolean, date, numeric and nested AND/OR condition controls',(
  const html=renderToStaticMarkup(<ConditionBuilder value={{kind:'group',operator:'and',children:[{kind:'condition',field:'employee.nonCompeteSigned',operator:'eq',value:false},{kind:'condition',field:'employee.joined',operator:'withinMonths',value:3},{kind:'group',operator:'or',children:[{kind:'condition',field:'monthly.earlySessions',operator:'gte',value:2}]}]}} onChange={()=>{}}/>);
  expect(html).toContain('全部满足（AND）'); expect(html).toContain('任一满足（OR）'); expect(html).toContain('添加条件组'); expect(html).toContain('未签署 / 否'); expect(html).toContain('最近月数'); expect(html).toContain('type="number"');
 });
-it('exposes selectable count metrics and named premium items while keeping employee targeting',()=>{
- const rule=createCompensationRule('employees');
+it('exposes selectable count metrics and named premium items without employee targeting',()=>{
+ const rule=createCompensationRule('global');
  const html=renderToStaticMarkup(<CompensationRuleForm rule={rule} rooms={[]} onChange={()=>{}}/>);
- expect(html).toContain('员工筛选条件'); expect(html).toContain('夜班场次'); expect(html).toContain('补贴计数指标'); expect(html).toContain('早班场次'); expect(html).toContain('补贴金额');
+ expect(html).not.toContain('员工筛选条件'); expect(html).toContain('夜班场次'); expect(html).toContain('补贴计数指标'); expect(html).toContain('早班场次'); expect(html).toContain('补贴金额');
  const premium=withType(rule,'premium');
  const p=renderToStaticMarkup(<CompensationRuleForm rule={premium} rooms={[]} onChange={()=>{}}/>);
  for(const label of ['保费系数规则','新增系数项','系数项1名称','系数项1保费字段','系数项1保费系数','保费计算公式']) expect(p).toContain(label);
@@ -40,8 +40,8 @@ it('groups multiple selected additions before multiplying the duration',()=>{
  expect(html).toContain('(ROI 加成 + 时耗加成) × 总直播时长');
 });
 
-it('fixes category and places employee targeting before the shared rule definition',()=>{
+it('fixes the global category and removes the obsolete employee condition editor',()=>{
  const html=renderToStaticMarkup(<CompensationRuleForm rule={createCompensationRule('employees')} rooms={[]} onChange={()=>{}}/>);
  expect(html).not.toMatch(/<select[^>]*aria-label="规则分类"/);
- expect(html.indexOf('员工筛选条件')).toBeLessThan(html.indexOf('aria-label="规则名称"'));
+ expect(html).toContain('全局规则');expect(html).not.toContain('员工筛选条件');expect(html).not.toContain('员工规则');
 });

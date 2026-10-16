@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import Rules from './Rules';
 import RoomRuleSets from './RoomRuleSets';
 import Payroll, { CompensationSalaryDetails } from './Payroll';
+import PayrollTaskDetail from './PayrollTaskDetail';
+import { monthlyPayrollTasks } from '../payroll-task-view';
 import { calculateCompensation, type CompensationRule } from '../compensation-rules';
 import { useHub } from '../store';
 // SSR should render the test's explicit current snapshot rather than Zustand's hydration baseline.
@@ -14,10 +16,10 @@ vi.mock('../store',async importOriginal=>{
 
 it('provides scope categories with a single add action and no page-level explanations or month picker',()=>{
  const html=renderToStaticMarkup(<Rules/>);
- expect(html.match(/role="tab"/g)).toHaveLength(3);
- for(const text of ['全局规则','直播间规则','员工规则','新增薪酬规则','补贴规则','系数规则','查看详情','编辑规则']) expect(html).toContain(text);
+ expect(html.match(/role="tab"/g)).toHaveLength(2);
+ for(const text of ['全局规则','直播间规则','新增薪酬规则','补贴规则','系数规则','查看详情','编辑规则']) expect(html).toContain(text);
  expect(html.match(/新增薪酬规则/g)).toHaveLength(1);
- for(const text of ['COMPENSATION RULES','来源与历史规则','规则核算月份','按适用范围配置补贴','补贴 → 系数 → 时薪']) expect(html).not.toContain(text);
+ for(const text of ['员工规则','COMPENSATION RULES','来源与历史规则','规则核算月份','按适用范围配置补贴','补贴 → 系数 → 时薪']) expect(html).not.toContain(text);
  expect(html.indexOf('role="tablist"')).toBeLessThan(html.indexOf('compensation-category'));
  expect(html).toMatch(/<section class="compensation-category" aria-label="全局规则">[\s\S]*?新增薪酬规则/);
 });
@@ -47,13 +49,19 @@ it('renders frozen merged row calculations including premium transformation and 
  for(const text of ['正常保费','有效系数','有效保费','有效 ROI','触发保薪最大值','加成合计','最终时薪','常规加成','夜班','¥860.00','¥1,100.00']) expect(html).toContain(text);
  expect(html).toContain(result.referenceDate); expect(html).toContain(row.roomName);
 });
-it('payroll displays both task models, withdrawal affordances and a mixed-model block',()=>{
+it('groups task models into a readonly monthly list and exposes actions only in current-page details',()=>{
  const before=useHub.getState(),s=useHub.getInitialState(),rule=s.compensationRules[0],legacy=s.departmentRules[0],common={month:s.month,ruleVersion:1,datasetVersion:1,datasetRevision:0,status:'待核算' as const,employeeIds:[s.employees[0].id],created:'2026-10-15'};
  try{
-  useHub.setState({batch:null,month:s.month,compensationTasks:[{...common,id:'new',ruleId:rule.id,ruleName:rule.name,scope:rule.scope,type:rule.type,referenceDate:'2026-10-31',rule,rowKeys:['row']}],payrollTasks:[{...common,id:'old',ruleId:legacy.id,ruleName:legacy.name,departmentId:legacy.departmentId,rule:legacy}]});
+  useHub.setState({batch:null,batches:{},archivedMonths:[],session:{kind:'admin',username:'admin',method:'password'},month:s.month,compensationTasks:[{...common,id:'new',ruleId:rule.id,ruleName:rule.name,scope:rule.scope,type:rule.type,referenceDate:'2026-10-31',rule,rowKeys:['row']}],payrollTasks:[{...common,id:'old',ruleId:legacy.id,ruleName:legacy.name,departmentId:legacy.departmentId,rule:legacy}]});
   const html=renderToStaticMarkup(<Payroll/>);
-  for(const text of ['分类 / 类型','适用范围','计算配置','本月核算任务','全局规则 / 补贴规则','旧版任务','先撤回旧版任务','撤回任务','参考日 2026-10-31']) expect(html).toContain(text);
-  expect(html.match(/撤回任务/g)).toHaveLength(2);
-  expect(html).toMatch(/disabled=""[^>]*><svg[^>]*[\s\S]*?开始月度核算/);
+  expect(html).toContain('核算任务筛选栏');
+  expect(html).toContain('核算任务列表');
+  expect(html.match(/月度薪酬核算<\/button>/g)).toHaveLength(1);
+  expect(html).toContain('2 条');
+  for(const text of ['<h1','撤回任务','开始月度核算','月度核算明细','核算规则依据']) expect(html).not.toContain(text);
+  const detail=renderToStaticMarkup(<PayrollTaskDetail task={monthlyPayrollTasks(useHub.getState())[0]} onBack={()=>{}}/>);
+  for(const text of ['返回任务列表','核算规则依据','先在规则依据中撤回旧版任务','撤回任务']) expect(detail).toContain(text);
+  expect(detail.match(/撤回任务/g)).toHaveLength(2);
+  expect(detail).not.toContain('role="dialog"');
  }finally{useHub.setState(before,true)}
 });
