@@ -53,10 +53,11 @@ const notes:Record<string,string>={
  sessions:'同直播间同三岗组合连续记录合并场次，每位员工每场只计一次。',
  nightSessions:'合并场次与夜班有正时长交集计一次，不是时长。',
  earlySessions:'合并场次与早班有正时长交集计一次，不是时长。',
+ waitingSalaryDays:'人工填写的非负整数天数，不自动计算。未填写时未定义，0表示已确认为0天；刷新保留人工修正，归档冻结。',
 };
 function indicators(fields:{key:string;label:string}[]):StructureField[]{return fields.map(f=>{
  const duration=durationKeys.has(f.key);
- const type=duration?'时间跨度 / 小时（h）':f.key==='hourlySpend'?'金额效率 / 元每小时':['roiRank','spendRank'].includes(f.key)?'整数名次':countKeys.has(f.key)?`非负整数 / ${f.key.includes('Sessions')||f.key==='sessions'?'场':f.key==='viewers'?'人次':f.key==='orders'?'单':'次'}`:ratioKeys.has(f.key)?f.key==='roi'?'比值':'比例 / 显示百分比':'金额 / 单价（元）';
+ const type=duration?'时间跨度 / 小时（h）':f.key==='waitingSalaryDays'?'非负整数 / 天':f.key==='hourlySpend'?'金额效率 / 元每小时':['roiRank','spendRank'].includes(f.key)?'整数名次':countKeys.has(f.key)?`非负整数 / ${f.key.includes('Sessions')||f.key==='sessions'?'场':f.key==='viewers'?'人次':f.key==='orders'?'单':'次'}`:ratioKeys.has(f.key)?f.key==='roi'?'比值':'比例 / 显示百分比':'金额 / 单价（元）';
  return {name:f.label,key:f.key,type,note:notes[f.key],kind:'指标',metricType:duration?'时长指标':'常规指标'};
 })}
 export default function LiveDatasetSchema({table,open,onClose,notice}:{table:DatasetTable;open:boolean;onClose:()=>void;notice?:string}){

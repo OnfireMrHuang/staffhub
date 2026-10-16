@@ -155,6 +155,17 @@ it('旧月度缺失新字段不补零、不重新分配，显式早班基础修�
  expect(editMonthly({nightPremium:0,earlyPremium:0,hours:10},old)).toMatchObject({earlyPremium:0,regularPremium:1200,regularHours:4});
 });
 
+it('等待薪资天数仅人工填写，允许零天，省略时保留现值且不替缺失值补零',()=>{
+ expect(editMonthly({}).waitingSalaryDays).toBeUndefined();
+ expect(editMonthly({waitingSalaryDays:0}).waitingSalaryDays).toBe(0);
+ const edited=editMonthly({waitingSalaryDays:15});
+ expect(editMonthly({spend:600},edited).waitingSalaryDays).toBe(15);
+ expect(apply([],[monthOverride(edited)]).monthly.find(r=>r.employeeId===edited.employeeId)?.waitingSalaryDays).toBe(15);
+});
+it.each([-1,1.5,NaN,Infinity,'2',null,undefined,Number.MAX_SAFE_INTEGER+1])('拒绝非整数或无效等待薪资天数 %s',waitingSalaryDays=>{
+ expect(()=>editMonthly({waitingSalaryDays})).toThrow(/等待薪资天数/);
+});
+
 it('修改整段时段后月度保费拆分保持未知，可通过月度已核验基础值修复',()=>{
  const corrected=editDetail({start:'04:00',end:'10:00'});
  const result=apply([override(corrected)]),row=result.monthly[0];

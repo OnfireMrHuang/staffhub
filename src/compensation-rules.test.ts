@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import type {Employee} from './domain';
 import type {LiveMonthly} from './live-domain';
 import type {LiveRoom} from './operations-domain';
-import {calculateCompensation,referenceDateForMonth,matchesCompensationRule,validateCompensationRule,type CompensationRule,type ConditionGroup,type HourlyItem,type NewDuration,type NewRuleBand} from './compensation-rules';
+import {allowanceCountOptions,conditionFieldOptions,calculateCompensation,referenceDateForMonth,matchesCompensationRule,validateCompensationRule,type CompensationRule,type ConditionGroup,type HourlyItem,type NewDuration,type NewRuleBand} from './compensation-rules';
 const employee:Employee={id:'e1',name:'甲',departmentId:'live',position:'主播',joined:'2026-07-31',status:'在职',phone:'',email:'',identities:[],role:'',nonCompeteSigned:true};
 const room:LiveRoom & {openedOn:string}={id:'r1',name:'一',platformAccountId:'a',productId:'p',active:true,openedOn:'2026-07-31'};
 const deps=[{id:'live',name:'直播部',active:true}];
@@ -108,6 +108,19 @@ it('正常保费排除夜班与早班，系数规则有效保费不计入夜班�
 });
 
 describe('configurable compensation definitions',()=>{
+ it('等待薪资天数可作为计数和条件指标，未填写时阻止引用，零天合法',()=>{
+  expect(allowanceCountOptions).toContainEqual({field:'waitingSalaryDays',label:'等待薪资天数',type:'number'});
+  expect(conditionFieldOptions).toContainEqual({field:'monthly.waitingSalaryDays',label:'等待薪资天数',type:'number'});
+  const configured=rule({definitionVersion:2,allowance:{field:'waitingSalaryDays',amount:30}});
+  expect(calculate([configured],[row({waitingSalaryDays:12})]).rows[0]).toMatchObject({allowance:360,allowanceItems:[{field:'waitingSalaryDays',sessions:12,amount:360}]});
+  expect(calculate([configured],[row({waitingSalaryDays:0})]).rows[0].allowance).toBe(0);
+  expect(()=>calculate([configured])).toThrow(/等待薪资天数.*缺失/);
+  expect(()=>calculate([rule()])).not.toThrow();
+  const guarantee=hourly('waiting',[{...flat('wait',60,'guarantee'),condition:condition('monthly.waitingSalaryDays',10,'gte')}],'hours',true);
+  expect(calculate([guarantee],[row({waitingSalaryDays:12})]).rows[0].total).toBe(600);
+  expect(()=>calculate([guarantee])).toThrow(/等待薪资天数.*缺失/);
+  expect(()=>calculate([guarantee],[row({waitingSalaryDays:1.5})])).toThrow(/整数/);
+ });
  it('uses the selected count metric for allowances and records its source',()=>{
   const configured=rule({definitionVersion:2,allowance:{field:'earlySessions',amount:30}});
   const result=calculate([configured],[row({nightSessions:2,earlySessions:5})]);

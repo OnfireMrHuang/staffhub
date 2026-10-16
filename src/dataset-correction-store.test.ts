@@ -101,27 +101,28 @@ it('月度跨月碰撞及目标已有记录缺小时来源整笔拒绝，不写�
 });
 
 it('刷新、持久化重载保存覆盖和历史，持久化版本保持兼容',async()=>{
- saveDetail({spend:200});saveMonthly({spend:350,premium:700});
- useHub.getState().cleanDataset();expect(hostRow()).toMatchObject({spend:350,roi:2});
+ saveDetail({spend:200});saveMonthly({spend:350,premium:700,waitingSalaryDays:12});
+ useHub.getState().cleanDataset();expect(hostRow()).toMatchObject({spend:350,roi:2,waitingSalaryDays:12});
  const saved=structuredClone(useHub.persist.getOptions().partialize!(useHub.getState()));
  useHub.persist.setOptions({storage:{getItem:()=>({state:saved,version:1}),setItem:()=>{},removeItem:()=>{}}});
  useHub.getState().reset();await useHub.persist.rehydrate();useHub.getState().cleanDataset();
- expect(hostRow()).toMatchObject({spend:350,roi:2});expect(useHub.getState().detailOverrides).toHaveLength(1);expect(useHub.getState().correctionAudit).toHaveLength(2);
+ expect(hostRow()).toMatchObject({spend:350,roi:2,waitingSalaryDays:12});expect(useHub.getState().detailOverrides).toHaveLength(1);expect(useHub.getState().correctionAudit).toHaveLength(2);
  expect(useHub.persist.getOptions().name).toBe('meimei-staffhub-department-rules-v1');expect(useHub.persist.getOptions().version).toBe(1);
 });
 
 it('人工部门归属用于发布和核算，工资快照冻结修订及原因且不改基础档案',()=>{
  const employees=useHub.getState().employees.map(e=>e.id==='host'?{...e,departmentId:'ads'}:e);
- useHub.setState({employees});useHub.getState().cleanDataset();saveMonthly({departmentId:'live',hours:4,spend:400,premium:800});
+ useHub.setState({employees});useHub.getState().cleanDataset();saveMonthly({departmentId:'live',hours:4,spend:400,premium:800,waitingSalaryDays:7});
  useHub.getState().publishDepartmentRule('rule','2026-10');
  expect(useHub.getState().payrollTasks[0].employeeIds).toContain('host');
  useHub.getState().runPayroll();archiveCurrentMonth();
  const batch=useHub.getState().batch!;
  expect(batch.salaries.find(s=>s.employeeId==='host')).toMatchObject({total:200,departmentName:'直播部'});
- expect(batch.snapshot.monthly.find(r=>r.employeeId==='host')?.hours).toBe(4);
+ expect(batch.snapshot.monthly.find(r=>r.employeeId==='host')).toMatchObject({hours:4,waitingSalaryDays:7});
  expect(batch.snapshot.monthlyOverrides).toHaveLength(1);expect(batch.snapshot.correctionAudit?.[0].reason).toBe('核对月度');
  expect(useHub.getState().employees.find(e=>e.id==='host')?.departmentId).toBe('ads');
  expect(()=>saveMonthly({hours:5})).toThrow('归档');
+ expect(()=>saveMonthly({waitingSalaryDays:8})).toThrow('归档');
  expect(useHub.getState().batch!.snapshot).toEqual(batch.snapshot);
 });
 

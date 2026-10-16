@@ -6,12 +6,14 @@ import type { LiveRoom } from './operations-domain';
 export type Scope = 'global' | 'rooms' | 'employees';
 export type CalculationType = 'allowance' | 'premium' | 'hourly';
 export type NewDuration = 'hours' | 'nightHours' | 'earlyHours' | 'regularHours';
-export type CompensationMetric = NewDuration | 'spend' | 'premium' | 'regularPremium' | 'nightPremium' | 'earlyPremium' | 'regularSpend' | 'adCost' | 'policyCost' | 'spendRank' | 'roi' | 'hourlySpend' | 'nightSpend' | 'earlySpend' | 'roiRank' | 'sessions' | 'nightSessions' | 'earlySessions';
-export type Condition = {kind:'condition'; field:string; operator:'eq'|'ne'|'gt'|'gte'|'lt'|'lte'|'withinMonths'; value:string|number|boolean};
+export type CompensationMetric = NewDuration | 'spend' | 'premium' | 'regularPremium' | 'nightPremium' | 'earlyPremium' | 'regularSpend' | 'adCost' | 'policyCost' | 'spendRank' | 'roi' | 'hourlySpend' | 'nightSpend' | 'earlySpend' | 'roiRank' | 'sessions' | 'nightSessions' | 'earlySessions' | 'waitingSalaryDays';
+export type DateTransform = 'year'|'month';
+/** Literal values/withinMonths remain readable for frozen historical conditions. New date conditions compare typed fields. */
+export type Condition = {kind:'condition'; field:string; operator:'eq'|'ne'|'gt'|'gte'|'lt'|'lte'|'withinMonths'; transform?:DateTransform; compareField?:string; value?:string|number|boolean};
 export type ConditionGroup = {kind:'group'; operator:'and'|'or'; children:(Condition|ConditionGroup)[]};
 export interface NewRuleBand extends Band {keyType:'exact'|'range'|'related'; relatedField?:CompensationMetric}
 export interface HourlyItem {id:string; name:string; kind:'metric'|'special'|'guarantee'; field?:string; bands?:NewRuleBand[]; rate?:number; condition?:ConditionGroup}
-export type CountMetric = 'nightSessions'|'earlySessions';
+export type CountMetric = 'nightSessions'|'earlySessions'|'waitingSalaryDays';
 export type PremiumField = 'premium'|'nightPremium'|'earlyPremium'|'regularPremium';
 export interface PremiumItem {id:string;name:string;field:PremiumField;coefficient:number}
 export interface LegacyPremiumConfig {normalField:'regularPremium';earlyField:'earlyPremium';coefficient:number;condition:ConditionGroup}
@@ -51,9 +53,9 @@ export const durationOptions: (FieldOption & {field:NewDuration})[] = [
 ];
 export const compensationMetricOptions: (FieldOption & {field:CompensationMetric})[] = [
   ...durationOptions,
-  ...([['spend','总消耗'],['premium','有效总保费'],['regularPremium','正常保费'],['nightPremium','夜班保费'],['regularSpend','正常消耗'],['adCost','AD成本（待定义）'],['policyCost','保单成本（待定义）'],['spendRank','消耗排名'],['earlyPremium','早班保费'],['roi','有效 ROI'],['hourlySpend','时耗'],['nightSpend','夜班消耗'],['earlySpend','早班消耗'],['roiRank','有效 ROI 排名'],['sessions','直播场次'],['nightSessions','夜班场次'],['earlySessions','早班场次']] as [CompensationMetric,string][]).map(([field,label]) => ({field,label,type:'number' as const})),
+  ...([['spend','总消耗'],['premium','有效总保费'],['regularPremium','正常保费'],['nightPremium','夜班保费'],['regularSpend','正常消耗'],['adCost','AD成本（待定义）'],['policyCost','保单成本（待定义）'],['spendRank','消耗排名'],['earlyPremium','早班保费'],['roi','有效 ROI'],['hourlySpend','时耗'],['nightSpend','夜班消耗'],['earlySpend','早班消耗'],['roiRank','有效 ROI 排名'],['sessions','直播场次'],['nightSessions','夜班场次'],['earlySessions','早班场次'],['waitingSalaryDays','等待薪资天数']] as [CompensationMetric,string][]).map(([field,label]) => ({field,label,type:'number' as const})),
 ];
-export const allowanceCountOptions=compensationMetricOptions.filter(option=>['nightSessions','earlySessions'].includes(option.field));
+export const allowanceCountOptions=compensationMetricOptions.filter(option=>['nightSessions','earlySessions','waitingSalaryDays'].includes(option.field));
 export const premiumFieldOptions:FieldOption[]=[{field:'premium',label:'总保费',type:'number'},{field:'nightPremium',label:'夜班保费',type:'number'},{field:'earlyPremium',label:'早班保费',type:'number'},{field:'regularPremium',label:'正常保费',type:'number'}];
 export const conditionFieldOptions: FieldOption[] = [
   {field:'employee.id',label:'员工 ID',type:'string'}, {field:'employee.name',label:'员工姓名',type:'string'},
@@ -61,8 +63,19 @@ export const conditionFieldOptions: FieldOption[] = [
   {field:'employee.status',label:'员工状态',type:'string'}, {field:'employee.joined',label:'入职日期',type:'date'},
   {field:'employee.nonCompeteSigned',label:'已签竞业协议',type:'boolean'}, {field:'room.id',label:'直播间 ID',type:'string'},
   {field:'room.name',label:'直播间名称',type:'string'}, {field:'room.openedOn',label:'直播间开播日期',type:'date'},
+  {field:'context.referenceDate',label:'核算基准日（月末）',type:'date'},
+  {field:'monthly.year',label:'月度汇总年份',type:'number'}, {field:'monthly.month',label:'月度汇总月份',type:'number'},
   ...compensationMetricOptions.map(option => ({...option,field:`monthly.${option.field}`})),
 ];
+export function conditionResultType(condition:Pick<Condition,'field'|'transform'>,fields:FieldOption[]=conditionFieldOptions):FieldOption['type']|undefined {
+  const type=fields.find(option=>option.field===condition.field)?.type;
+  if(condition.transform===undefined) return type;
+  return type==='date' && ['year','month'].includes(condition.transform)?'number':undefined;
+}
+export function conditionComparisonFields(condition:Pick<Condition,'field'|'transform'>,fields:FieldOption[]=conditionFieldOptions):FieldOption[] {
+  const type=conditionResultType(condition,fields);
+  return type===undefined?[]:fields.filter(option=>option.type===type);
+}
 export interface ConditionEvidence {ruleId:string;itemId?:string;condition:ConditionGroup;matched:boolean;values:Record<string,string|number|boolean>}
 export interface HourlyItemCalculation {ruleId:string;itemId:string;name:string;kind:HourlyItem['kind'];rate:number;matched:boolean;field?:string;value?:number}
 export interface DurationGroupCalculation {scope?:Scope;duration:NewDuration;hours:number;guarantee:number;additions:number;rate:number;amount:number;items:HourlyItemCalculation[]}
@@ -96,7 +109,7 @@ const money = (value:number):number => {
 const isMetric = (field:unknown):field is CompensationMetric => compensationMetricOptions.some(option => option.field === field);
 const isDuration = (field:unknown):field is NewDuration => durationOptions.some(option => option.field === field);
 function dateNumber(value:unknown,label:string):number {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${label} 日期缺失或无效`);
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number(value.slice(0,4))<1) throw new Error(`${label} 日期缺失或无效`);
   const timestamp=Date.parse(`${value}T00:00:00Z`);
   if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0,10)!==value) throw new Error(`${label} 日期无效`);
   return timestamp;
@@ -119,6 +132,18 @@ function validateCondition(group:ConditionGroup,allowedFields?:Set<string>,seen=
     const option=conditionFieldOptions.find(option=>option.field===child.field);
     if (!option || (allowedFields && !allowedFields.has(child.field))) throw new Error('条件字段无效或不适用于此规则');
     if (!['eq','ne','gt','gte','lt','lte','withinMonths'].includes(child.operator)) throw new Error('条件运算符无效');
+    const resultType=conditionResultType(child);
+    if(!resultType) throw new Error('时间函数无效或不适用于此字段');
+    if(child.compareField!==undefined) {
+      const comparison=conditionFieldOptions.find(option=>option.field===child.compareField);
+      if(!comparison || (allowedFields && !allowedFields.has(comparison.field))) throw new Error('比较字段无效或不适用于此规则');
+      if(Object.prototype.hasOwnProperty.call(child,'value')) throw new Error('字段比较不能同时设置固定条件值');
+      if(comparison.type!==resultType) throw new Error('比较字段类型不一致：日期须比较日期字段，时间函数须比较数值字段');
+      if(child.operator==='withinMonths') throw new Error('字段比较不能使用相对月数运算');
+      if(!['number','date'].includes(resultType) && !['eq','ne'].includes(child.operator)) throw new Error('文本和布尔条件仅支持等于或不等于');
+      continue;
+    }
+    if(child.transform!==undefined) throw new Error('应用时间函数后必须选择数值比较字段');
     if (child.operator==='withinMonths') {
       if (option.type!=='date' || !Number.isSafeInteger(child.value) || !nonnegative(child.value)) throw new Error('日期月数必须为非负整数');
     } else if (option.type==='date') dateNumber(child.value,option.label);
@@ -215,7 +240,9 @@ function metricValue(row:LiveMonthly,field:CompensationMetric):number {
     if (!denominator) throw new Error(field==='roi'?'消耗为零，无法计算 ROI':'时长为零，无法计算时耗');
     value=(field==='roi'?validNumber(row.premium,'保费'):validNumber(row.spend,'消耗'))/denominator;
   } else value=source[field];
-  return validNumber(value,compensationMetricOptions.find(option=>option.field===field)!.label);
+  const valid=validNumber(value,compensationMetricOptions.find(option=>option.field===field)!.label);
+  if(field==='waitingSalaryDays' && !Number.isSafeInteger(valid)) throw new Error('等待薪资天数必须为非负安全整数');
+  return valid;
 }
 function contextFor(row:LiveMonthly,employees:Employee[],rooms:LiveRoom[],month:string):Context {
   const employee=employees.find(employee=>employee.id===row.employeeId),room=rooms.find(room=>room.id===row.roomId);
@@ -225,7 +252,14 @@ function contextFor(row:LiveMonthly,employees:Employee[],rooms:LiveRoom[],month:
 function conditionValue(field:string,context:Context):string|number|boolean {
   const option=conditionFieldOptions.find(option=>option.field===field)!;
   const [source,key]=field.split('.');
-  const value:unknown=source==='monthly'?metricValue(context.row,key as CompensationMetric):source==='employee'?(context.employee as unknown as Record<string,unknown>)[key]:(context.room as unknown as Record<string,unknown>)[key];
+  let value:unknown;
+  if(source==='monthly' && key==='year') {
+    value=context.row.year;
+    if(!Number.isSafeInteger(value) || (value as number)<1 || (value as number)>9999) throw new Error('年份 数据缺失或数值无效');
+  } else if(source==='monthly' && key==='month') {
+    referenceDateForMonth(context.row.month);
+    value=Number(context.row.month.slice(5,7));
+  } else value=source==='monthly'?metricValue(context.row,key as CompensationMetric):source==='employee'?(context.employee as unknown as Record<string,unknown>)[key]:source==='context'?context.referenceDate:(context.room as unknown as Record<string,unknown>)[key];
   if (option.type==='date') {dateNumber(value,option.label);return value as string;}
   if (typeof value!==option.type || (option.type==='number'&&!nonnegative(value))) throw new Error(`${option.label} 数据缺失或类型无效`);
   return value as string|number|boolean;
@@ -233,8 +267,14 @@ function conditionValue(field:string,context:Context):string|number|boolean {
 function evaluateCondition(group:ConditionGroup,context:Context,values:Record<string,string|number|boolean>):boolean {
   const results=group.children.map(child=>{
     if (child.kind==='group') return evaluateCondition(child,context,values);
-    const value=conditionValue(child.field,context);values[child.field]=value;
+    let value=conditionValue(child.field,context);values[child.field]=value;
+    if(child.transform!==undefined) {
+      const date=new Date(dateNumber(value,child.field));
+      value=child.transform==='year'?date.getUTCFullYear():date.getUTCMonth()+1;
+      values[`${child.transform}(${child.field})`]=value;
+    }
     if (child.operator==='withinMonths') {
+      values['context.referenceDate']=context.referenceDate;
       const reference=new Date(`${context.referenceDate}T00:00:00Z`),day=reference.getUTCDate();
       reference.setUTCDate(1); reference.setUTCMonth(reference.getUTCMonth()-(child.value as number));
       const monthEnd=new Date(reference);monthEnd.setUTCMonth(monthEnd.getUTCMonth()+1);monthEnd.setUTCDate(0);
@@ -243,13 +283,15 @@ function evaluateCondition(group:ConditionGroup,context:Context,values:Record<st
       const date=dateNumber(value,child.field);
       return date>=reference.getTime() && date<=dateNumber(context.referenceDate,'核算基准');
     }
+    const comparison=child.compareField!==undefined?conditionValue(child.compareField,context):child.value!;
+    if(child.compareField!==undefined) values[child.compareField]=comparison;
     // Every condition is evaluated, including alternatives, so required missing inputs never hide behind short circuiting.
-    if (child.operator==='eq') return value===child.value;
-    if (child.operator==='ne') return value!==child.value;
-    if (child.operator==='gt') return value>child.value;
-    if (child.operator==='gte') return value>=child.value;
-    if (child.operator==='lt') return value<child.value;
-    return value<=child.value;
+    if (child.operator==='eq') return value===comparison;
+    if (child.operator==='ne') return value!==comparison;
+    if (child.operator==='gt') return value>comparison;
+    if (child.operator==='gte') return value>=comparison;
+    if (child.operator==='lt') return value<comparison;
+    return value<=comparison;
   });
   return group.operator==='and'?results.every(Boolean):results.some(Boolean);
 }
@@ -293,7 +335,10 @@ export function calculateCompensation(rows:LiveMonthly[],employees:Employee[],de
     for (const option of compensationMetricOptions) {
       if (['roi','hourlySpend','roiRank'].includes(option.field)) continue;
       const value=(row as EnrichedMonthly)[option.field];
-      if (value!==undefined) validNumber(value,option.label);
+      if (value!==undefined) {
+        validNumber(value,option.label);
+        if(option.field==='waitingSalaryDays') metricValue(row,option.field);
+      }
     }
     // Optional derived fields are recomputed; source early contribution is never invented.
     if (row.nightHours!==undefined || row.earlyHours!==undefined) metricValue(row,'regularHours');

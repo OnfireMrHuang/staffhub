@@ -9,7 +9,7 @@ export interface CorrectionAudit { id: string; table: DatasetTable; key: string;
 export function monthlyRowKey(row: Pick<LiveMonthly, 'employeeId' | 'roomId' | 'month'>): string { return JSON.stringify([row.employeeId, row.roomId, row.month]); }
 
 const detailFields = ['productId', 'roomId', 'date', 'start', 'end', 'hostId', 'buyerId', 'controlId', 'spend', 'revenue', 'clicks', 'conversions', 'orders', 'viewers'];
-const monthlyFields = ['employeeId', 'departmentId', 'productId', 'roomId', 'month', 'hours', 'nightHours', 'earlyHours', 'spend', 'premium', 'nightPremium', 'earlyPremium', 'nightSpend', 'earlySpend', 'sessions', 'nightSessions', 'earlySessions', 'hostNames'];
+const monthlyFields = ['employeeId', 'departmentId', 'productId', 'roomId', 'month', 'hours', 'nightHours', 'earlyHours', 'spend', 'premium', 'nightPremium', 'earlyPremium', 'nightSpend', 'earlySpend', 'sessions', 'nightSessions', 'earlySessions', 'hostNames', 'waitingSalaryDays'];
 const detailAssociations = ['productId', 'roomId', 'date', 'start', 'end', 'hostId', 'buyerId', 'controlId'] as const;
 const monthlyAssociations = ['employeeId', 'departmentId', 'productId', 'roomId', 'month'] as const;
 const monthlyAmounts = ['hours', 'nightHours', 'earlyHours', 'spend', 'premium', 'nightSpend', 'earlySpend'] as const;
@@ -74,6 +74,7 @@ export function prepareMonthlyCorrection(row: LiveMonthly, patch: Record<string,
   const names = catalogNames(next.roomId, next.productId, rooms, products);
   if (monthlyAssociations.some(field => next[field] !== row[field])) checkJoined(employee, next.month, true);
   checkNumbers(next, monthlyAmounts, monthlyCounts);
+  if ((Object.hasOwn(patch, 'waitingSalaryDays') || next.waitingSalaryDays !== undefined) && (!nonnegative(next.waitingSalaryDays) || !Number.isSafeInteger(next.waitingSalaryDays))) throw new Error('等待薪资天数必须为非负安全整数');
   if ((Object.hasOwn(patch, 'earlyPremium') && !nonnegative(next.earlyPremium)) || (next.earlyPremium !== undefined && (!nonnegative(next.earlyPremium) || next.earlyPremium > next.premium))) throw new Error('早班保费必须为有限非负数且不能超过总保费');
   if ((Object.hasOwn(patch, 'nightPremium') && !nonnegative(next.nightPremium)) || (next.nightPremium !== undefined && (!nonnegative(next.nightPremium) || next.nightPremium > next.premium))) throw new Error('夜班保费必须为有限非负数且不能超过总保费');
   if (next.nightPremium !== undefined && next.earlyPremium !== undefined && next.nightPremium + next.earlyPremium > next.premium + 1e-9) throw new Error('夜早班保费之和不能超过总保费');

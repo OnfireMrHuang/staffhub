@@ -19,10 +19,11 @@ export const monthlyFields: {key:keyof LiveMonthly;label:string}[]=[
  {key:'roi',label:'ROI'},{key:'hourlySpend',label:'时耗'},
  {key:'adCost',label:'AD成本'},{key:'policyCost',label:'保单成本'},
  {key:'roiRank',label:'ROI排名'},{key:'spendRank',label:'消耗排名'},
+ {key:'waitingSalaryDays',label:'等待薪资天数'},
 ];
 export const monthlyColumns=[...monthlyDimensions,...monthlyFields];
 export const pendingMonthlyFields=new Set<keyof LiveMonthly>(['adCost','policyCost']);
-export const monthlyCountFields=new Set<keyof LiveMonthly>(['roiRank','spendRank','nightSessions','earlySessions']);
+export const monthlyCountFields=new Set<keyof LiveMonthly>(['roiRank','spendRank','nightSessions','earlySessions','waitingSalaryDays']);
 export function monthlyCellValue(row:LiveMonthly,key:keyof LiveMonthly):string|number {
  if(pendingMonthlyFields.has(key)) return '待定义';
  const value=row[key];
