@@ -1,0 +1,33 @@
+.settlement-scroll{max-height:580px;isolation:isolate;border-top:1px solid #e0e8e5;border-bottom:1px solid #e0e8e5;outline-offset:-3px}
+.settlement-table{min-width:5600px;width:max-content;border-collapse:separate;border-spacing:0;font-size:12px}
+.settlement-table th,.settlement-table td{min-width:112px;padding:12px 15px;white-space:nowrap;border-right:1px solid #dce5e155}
+.settlement-table thead th{position:sticky;z-index:3;text-align:center;font-weight:600}
+.settlement-table thead tr:first-child th{top:0;height:43px;font-size:13px;letter-spacing:.02em;border-bottom:1px solid #c7d7ce}
+.settlement-table thead tr:nth-child(2) th{top:43px;height:43px;font-size:11px}
+.settlement-table .settlement-statistics{--settlement-fill:#f7f9fa;--settlement-heading:#e8eef1;--settlement-ink:#48606c}
+.settlement-table .settlement-global,.settlement-scope-global{--settlement-fill:#f0f8f3;--settlement-heading:#dceee2;--settlement-ink:#2e6546}
+.settlement-table .settlement-rooms,.settlement-scope-rooms{--settlement-fill:#f0f5fc;--settlement-heading:#dfeafa;--settlement-ink:#355a89}
+.settlement-table .settlement-employees,.settlement-scope-employees{--settlement-fill:#faf5ed;--settlement-heading:#f2e6d2;--settlement-ink:#806036}
+.settlement-table .settlement-result{--settlement-fill:#edf7f4;--settlement-heading:#cce7df;--settlement-ink:#195d4e}
+.settlement-table thead tr:first-child th{background:var(--settlement-heading);color:var(--settlement-ink)}
+.settlement-table thead tr:nth-child(2) th,.settlement-table td{background:var(--settlement-fill);color:var(--settlement-ink)}
+.settlement-table tbody tr:hover td{background:var(--settlement-heading)}
+.settlement-table [data-column="employeeId"],.settlement-table [data-column="employeeName"]{position:sticky;z-index:2;min-width:120px;width:120px;max-width:120px}
+.settlement-table [data-column="employeeId"]{left:0}
+.settlement-table [data-column="employeeName"]{left:120px;border-right:2px solid #c4d4cf;box-shadow:4px 0 7px #30463b0a}
+.settlement-table thead [data-column="employeeId"],.settlement-table thead [data-column="employeeName"]{z-index:4}
+.settlement-table [data-column="global.allowance"],.settlement-table [data-column="rooms.allowance"],.settlement-table [data-column="employees.allowance"],.settlement-table [data-column="result.allowance"]{border-left:2px solid #bed0c8}
+.settlement-empty{padding:22px;color:#64746c;text-align:center;font-size:13px}
+.settlement-legend{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin:0 22px 18px;color:#617169;font-size:12px;line-height:1.8}
+.settlement-legend strong{color:#355e4b;font-weight:600}
+.settlement-scope-table{width:100%;min-width:650px}
+.settlement-scope-table tbody td{background:var(--settlement-fill);color:var(--settlement-ink)}
+.settlement-scope-table tbody td:first-child{font-weight:600}
+.settlement-outcome{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:18px;padding:16px 18px;border:1px solid #c9dfd4;border-radius:8px;background:#f0f8f3;font-size:13px;color:#355d48;line-height:1.8}
+.settlement-outcome strong{font-size:15px;overflow-wrap:anywhere}
+.settlement-outcome p{margin:5px 0 0;color:#64746c;font-size:12px}
+.settlement-rule-table{min-width:740px}
+.settlement-rule-table td small{display:block;max-width:260px;white-space:normal;line-height:1.7}
+.settlement-formula{padding:14px 16px;border:1px solid #dce8e0;border-radius:8px;background:#f6faf7;font-size:13px;line-height:1.9;color:#466650}
+.settlement-formula p{margin:5px 0 0;font-size:12px;color:#64746c}
+@media(max-width:760px){.settlement-legend{margin:0 15px 15px;font-size:11px}.settlement-outcome{display:block;padding:13px}.settlement-outcome strong{font-size:13px}.settlement-scroll{max-height:65vh}}

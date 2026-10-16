@@ -1,0 +1,64 @@
+{
+  "description": "虚构固定样例的独立手算期望值；不从生产结算引擎生成。金额单位元。",
+  "month": "2026-10",
+  "sourceRowCount": 5,
+  "settledRowCount": 4,
+  "excludedEmployeeIds": ["example-wu"],
+  "scopeMetricOrder": ["allowance", "premium", "guarantee", "additions"],
+  "rows": [
+    {
+      "employeeId": "example-lin", "roomId": "example-room-a", "employeeName": "林晓", "roomName": "示例一号房",
+      "sourcePremium": 24000, "sourceRoi": 2.4, "sourceRank": 3,
+      "scopes": {
+        "global": {"allowance": 300, "premium": 30000, "guarantee": 5000, "additions": 5500},
+        "rooms": {"allowance": 0, "premium": 0, "guarantee": 0, "additions": 1000},
+        "employees": {"allowance": 150, "premium": 40000, "guarantee": 6600, "additions": 300}
+      },
+      "effectivePremium": 40000, "effectiveRoi": 4, "effectiveRank": 1,
+      "totalAllowance": 450, "finalGuarantee": 6600, "totalAdditions": 6800, "total": 7250,
+      "rules": {"g-night-allowance": 200, "g-early-allowance": 100, "g-premium": 30000, "g-premium-alternative": 25000, "g-floor-total": 5000, "g-floor-night": 4000, "g-roi-addition": 4500, "g-rank-addition": 1000, "r-regular-addition": 1000, "e-night-allowance": 150, "e-premium": 40000, "e-floor-early": 6600, "e-floor-total": 5500, "e-early-addition": 300}
+    },
+    {
+      "employeeId": "example-zhou", "roomId": "example-room-a", "employeeName": "周宁", "roomName": "示例一号房",
+      "sourcePremium": 30000, "sourceRoi": 3, "sourceRank": 1,
+      "scopes": {
+        "global": {"allowance": 120, "premium": 28000, "guarantee": 4000, "additions": 2000},
+        "rooms": {"allowance": 0, "premium": 0, "guarantee": 0, "additions": 1000},
+        "employees": {"allowance": 0, "premium": 0, "guarantee": 0, "additions": 0}
+      },
+      "effectivePremium": 28000, "effectiveRoi": 2.8, "effectiveRank": 3,
+      "totalAllowance": 120, "finalGuarantee": 4000, "totalAdditions": 3000, "total": 4120,
+      "rules": {"g-night-allowance": 100, "g-early-allowance": 20, "g-premium": 28000, "g-premium-alternative": 28000, "g-floor-total": 4000, "g-floor-night": 4000, "g-roi-addition": 1600, "g-rank-addition": 400, "r-regular-addition": 1000}
+    },
+    {
+      "employeeId": "example-chen", "roomId": "example-room-a", "employeeName": "陈雨", "roomName": "示例一号房",
+      "sourcePremium": 26000, "sourceRoi": 2.6, "sourceRank": 2,
+      "scopes": {
+        "global": {"allowance": 120, "premium": 30000, "guarantee": 3000, "additions": 3000},
+        "rooms": {"allowance": 0, "premium": 0, "guarantee": 0, "additions": 600},
+        "employees": {"allowance": 45, "premium": 36000, "guarantee": 4400, "additions": 200}
+      },
+      "effectivePremium": 36000, "effectiveRoi": 3.6, "effectiveRank": 2,
+      "totalAllowance": 165, "finalGuarantee": 4400, "totalAdditions": 3800, "total": 4565,
+      "rules": {"g-night-allowance": 60, "g-early-allowance": 60, "g-premium": 30000, "g-premium-alternative": 27000, "g-floor-total": 3000, "g-floor-night": 2000, "g-roi-addition": 2700, "g-rank-addition": 300, "r-regular-addition": 600, "e-night-allowance": 45, "e-premium": 36000, "e-floor-early": 4400, "e-floor-total": 3300, "e-early-addition": 200}
+    },
+    {
+      "employeeId": "example-lin", "roomId": "example-room-b", "employeeName": "林晓", "roomName": "示例二号房",
+      "sourcePremium": 10000, "sourceRoi": 2.5, "sourceRank": 1,
+      "scopes": {
+        "global": {"allowance": 50, "premium": 9000, "guarantee": 2000, "additions": 1200},
+        "rooms": {"allowance": 0, "premium": 0, "guarantee": 0, "additions": 600},
+        "employees": {"allowance": 30, "premium": 9000, "guarantee": 2200, "additions": 50}
+      },
+      "effectivePremium": 9000, "effectiveRoi": 2.25, "effectiveRank": 1,
+      "totalAllowance": 80, "finalGuarantee": 2200, "totalAdditions": 1850, "total": 2280,
+      "rules": {"g-night-allowance": 40, "g-early-allowance": 10, "g-premium": 9000, "g-premium-alternative": 9000, "g-floor-total": 2000, "g-floor-night": 1000, "g-roi-addition": 800, "g-rank-addition": 400, "r-regular-addition": 600, "e-night-allowance": 30, "e-premium": 9000, "e-floor-early": 1100, "e-floor-total": 2200, "e-early-addition": 50}
+    }
+  ],
+  "employees": [
+    {"employeeId": "example-lin", "employeeName": "林晓", "total": 9530},
+    {"employeeId": "example-zhou", "employeeName": "周宁", "total": 4120},
+    {"employeeId": "example-chen", "employeeName": "陈雨", "total": 4565}
+  ],
+  "total": 18215
+}

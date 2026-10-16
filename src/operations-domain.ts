@@ -10,6 +10,7 @@ export interface AdvertisingProduct {
 }
 
 export interface LiveRoom {
+  openedOn?: string;
   id: string;
   name: string;
   platformAccountId: string;

@@ -88,3 +88,64 @@ it('multiple native hourly platform rates never become an invented daily average
  expect(reports.hourly.every(row=>row.clickRate===0.17&&row.conversionRate===0.12)).toBe(true);
  expect(reports.daily[0]).toMatchObject({clickRate:null,conversionRate:null});
 });
+
+
+it('非均匀小时成交经日报修正后按实际贡献分配早班保费且不改时报测量值',()=>{
+ const record={...demoRecords[0],start:'05:00',end:'09:00'};
+ const source=demoRoomHours.filter(h=>h.roomId===record.roomId&&h.date===record.date&&h.start>=record.start&&h.end<=record.end).map(h=>({...h,revenue:h.start==='06:00'?900:h.start==='07:00'?300:100}));
+ const base=buildRoomReports([record],source,seedEmployees,seedDepartments,demoRooms,demoProducts,'2026-10',[]),day=base.daily[0];
+ expect(base.hourly.map(h=>h.earlyPremium)).toEqual([0,900,300,0]);
+ expect(day.earlyPremium).toBe(1200);
+ const edited=prepareReportCorrection(day,{revenue:2800},seedEmployees,demoRooms,demoProducts);
+ const report=applyReportOverrides(base,[{period:'daily',key:day.key,sourceMonth:'2026-10',row:edited}],seedEmployees,seedDepartments,[record]);
+ expect(report.daily[0].earlyPremium).toBe(2400);
+ expect(report.hourly.map(h=>h.revenue)).toEqual(base.hourly.map(h=>h.revenue));
+ expect(summarizeLiveDetails(report.contributions,seedEmployees,seedDepartments,'2026-10',[record])[0]).toMatchObject({premium:2800,nightPremium:200,earlyPremium:2400,regularPremium:200,regularHours:1});
+});
+it('小时早班成交修订传递到日报和月度早班保费',()=>{
+ const base=build(),hour=base.hourly.find(h=>h.start==='06:00')!;
+ const edited=prepareReportCorrection(hour,{revenue:hour.revenue+777},seedEmployees,demoRooms,demoProducts);
+ const report=applyReportOverrides(base,[{period:'hourly',key:hour.key,sourceMonth:'2026-10',row:edited}],seedEmployees,seedDepartments,demoRecords);
+ expect(report.daily.find(d=>d.key===hour.dailyKey)!.earlyPremium).toBe(base.daily.find(d=>d.key===hour.dailyKey)!.earlyPremium!+777);
+ const before=summarizeLiveDetails(base.contributions,seedEmployees,seedDepartments,'2026-10',demoRecords)[0];
+ const matching=summarizeLiveDetails(report.contributions,seedEmployees,seedDepartments,'2026-10',demoRecords).find(r=>r.employeeId===before.employeeId&&r.roomId===before.roomId)!;
+ const expectedDelta=before.employeeId===hour.hostId||before.employeeId===hour.buyerId||before.employeeId===hour.controlId?777:0;
+ expect(matching.earlyPremium).toBeCloseTo(before.earlyPremium!+expectedDelta);
+});
+
+
+it('缺失早班成交的历史整段修订经日报金额修订后仍未知，不从原始小时补回',()=>{
+ const raw=buildLiveStatistics(demoRecords,demoRoomHours,seedEmployees,seedDepartments,demoRooms,demoProducts,'2026-10').details[0];
+ const legacy={...raw,earlyPremium:undefined};
+ const base=buildRoomReports(demoRecords,demoRoomHours,seedEmployees,seedDepartments,demoRooms,demoProducts,'2026-10',[{key:raw.id,sourceMonth:'2026-10',row:legacy}]);
+ const day=base.daily.find(row=>row.sourceRecordIds.includes(raw.id))!;
+ expect(day.earlyPremium).toBeUndefined();
+ const edited=prepareReportCorrection(day,{revenue:day.revenue*2},seedEmployees,demoRooms,demoProducts);
+ const reports=applyReportOverrides(base,[{period:'daily',key:day.key,sourceMonth:'2026-10',row:edited}],seedEmployees,seedDepartments,demoRecords);
+ expect(reports.daily.find(row=>row.key===day.key)!.earlyPremium).toBeUndefined();
+ expect(reports.contributions.find(row=>row.id===raw.id)!.earlyPremium).toBeUndefined();
+ const row=summarizeLiveDetails(reports.contributions,seedEmployees,seedDepartments,'2026-10',demoRecords).find(row=>row.employeeId===raw.hostId&&row.roomId===raw.roomId)!;
+ expect(row.earlyPremium).toBeUndefined();expect(row.regularPremium).toBeUndefined();
+});
+
+it('零成交日报改为非零时缺乏成交贡献比例，早班金额不按时长猜分',()=>{
+ const record={...demoRecords[0],start:'05:00',end:'09:00'};
+ const source=demoRoomHours.filter(h=>h.roomId===record.roomId&&h.date===record.date&&h.start>=record.start&&h.end<=record.end).map(h=>({...h,revenue:0}));
+ const base=buildRoomReports([record],source,seedEmployees,seedDepartments,demoRooms,demoProducts,'2026-10',[]),day=base.daily[0];
+ expect(day.earlyPremium).toBe(0);
+ const edited=prepareReportCorrection(day,{revenue:2000},seedEmployees,demoRooms,demoProducts);
+ expect(edited.earlyPremium).toBeUndefined();
+ const report=applyReportOverrides(base,[{period:'daily',key:day.key,sourceMonth:'2026-10',row:edited}],seedEmployees,seedDepartments,[record]);
+ expect(report.daily[0].earlyPremium).toBeUndefined();
+ const row=summarizeLiveDetails(report.contributions,seedEmployees,seedDepartments,'2026-10',[record])[0];
+ expect(row).toMatchObject({premium:2000,earlyPremium:undefined,regularPremium:undefined});
+});
+
+it('日报成交修订保留实际夜班贡献比例，月度正常保费排除夜早班',()=>{
+ const base=build(),day=base.daily.find(row=>row.nightHours>0&&row.earlyHours>0)!;
+ const corrected=prepareReportCorrection(day,{revenue:day.revenue*2},seedEmployees,demoRooms,demoProducts);
+ const reports=applyReportOverrides(base,[{period:'daily',key:day.key,sourceMonth:'2026-10',row:corrected}],seedEmployees,seedDepartments,demoRecords);
+ const effective=reports.daily.find(row=>row.key===day.key)!;
+ expect(effective.nightPremium).toBeCloseTo(day.nightPremium!*2);
+ expect(base.daily.find(row=>row.key===day.key)?.nightPremium).toBe(day.nightPremium);
+});

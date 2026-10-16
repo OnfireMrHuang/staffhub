@@ -104,7 +104,7 @@ describe('月度人工纠正',()=>{
   });
   it('改键撞上现有员工直播间月份时拒绝，原键覆盖允许',()=>{
     expect(()=>apply([],[monthOverride(editMonthly({employeeId:'e1'}))])).toThrow(/粒度|重复|冲突/);
-    expect(apply([],[monthOverride(editMonthly({premium:500}))]).monthly.find(r=>r.employeeId==='e0')).toMatchObject({roi:1,roiRank:3});
+    expect(apply([],[monthOverride(editMonthly({premium:500,nightPremium:300,earlyPremium:200}))]).monthly.find(r=>r.employeeId==='e0')).toMatchObject({roi:1,roiRank:3});
   });
   it('先重建明细再叠加月度值，全部有效行最后统一排名，零分母排除',()=>{
     const result=apply([override(editDetail({spend:1000}))],[monthOverride(editMonthly({spend:0,nightSpend:0,earlySpend:0}))]);
@@ -124,4 +124,66 @@ it('覆盖中的原键不能重复或与行ID不一致',()=>{
   expect(()=>apply([override(detail()),override(detail())])).toThrow(/重复/);
   expect(()=>apply([{...override(detail()),key:'wrong'}])).toThrow(/原键/);
   expect(()=>apply([],[{...monthOverride(monthly()),sourceMonth:'2026-09'}])).toThrow(/原键|原月份/);
+});
+
+
+it('整段成交额修订沿真实早班占比，改时段后早班成交贡献失效',()=>{
+ const source=detail({revenue:1000,earlyPremium:800});
+ expect(editDetail({revenue:1500},source).earlyPremium).toBe(1200);
+ expect(editDetail({start:'04:00',end:'10:00',revenue:1500},source).earlyPremium).toBeUndefined();
+ expect(editDetail({start:'04:00',end:'10:00'},source).earlyPremium).toBeUndefined();
+ expect(editDetail({revenue:1000},detail({revenue:0,earlyPremium:0})).earlyPremium).toBeUndefined();
+ expect(editDetail({},detail({revenue:0,earlyPremium:0})).earlyPremium).toBe(0);
+ expect(editDetail({revenue:1500},detail({earlyPremium:undefined})).earlyPremium).toBeUndefined();
+ expect(()=>editDetail({earlyPremium:100})).toThrow(/只读/);
+});
+it('月度夜早班保费可修正，正常金额和时长自动重算且不能手填',()=>{
+ const row=editMonthly({premium:1500,nightPremium:300,earlyPremium:900,hours:10});
+ expect(row).toMatchObject({nightPremium:300,earlyPremium:900,regularPremium:300,regularHours:4});
+ expect(()=>editMonthly({earlyPremium:1201})).toThrow(/早班保费/);
+ expect(()=>editMonthly({earlyPremium:-1})).toThrow();
+ expect(()=>editMonthly({earlyPremium:NaN})).toThrow();
+ expect(()=>editMonthly({regularPremium:1})).toThrow(/只读/);
+ expect(()=>editMonthly({regularHours:1})).toThrow(/只读/);
+ const result=apply([],[monthOverride(row)]).monthly.find(r=>r.employeeId===row.employeeId)!;
+ expect(result).toMatchObject({nightPremium:300,earlyPremium:900,regularPremium:300,regularHours:4});
+});
+it('旧月度缺失新字段不补零、不重新分配，显式早班基础修订后才生成金额派生值',()=>{
+ const old=monthly({nightPremium:undefined,earlyPremium:undefined,regularPremium:undefined,regularHours:undefined});
+ expect(editMonthly({},old)).toMatchObject({earlyPremium:undefined,regularPremium:undefined,regularHours:undefined});
+ expect(apply([],[monthOverride(old)]).monthly.find(r=>r.employeeId===old.employeeId)).toMatchObject({earlyPremium:undefined,regularPremium:undefined,regularHours:undefined});
+ expect(editMonthly({nightPremium:0,earlyPremium:0,hours:10},old)).toMatchObject({earlyPremium:0,regularPremium:1200,regularHours:4});
+});
+
+it('修改整段时段后月度保费拆分保持未知，可通过月度已核验基础值修复',()=>{
+ const corrected=editDetail({start:'04:00',end:'10:00'});
+ const result=apply([override(corrected)]),row=result.monthly[0];
+ expect(row.earlyPremium).toBeUndefined();expect(row.regularPremium).toBeUndefined();
+ expect(row.regularHours).toBe(2);
+ expect(editMonthly({nightPremium:100,earlyPremium:900},row)).toMatchObject({nightPremium:100,earlyPremium:900,regularPremium:200,regularHours:2});
+});
+
+it('月度班次保费和消耗的派生字段只读，班次总和不得超过总量',()=>{
+ expect(()=>editMonthly({nightPremium:-1})).toThrow(/夜班保费/);
+ expect(()=>editMonthly({nightPremium:1000,earlyPremium:300})).toThrow(/之和/);
+ expect(()=>editMonthly({regularSpend:1})).toThrow(/只读/);
+ expect(()=>editMonthly({spendRank:1})).toThrow(/只读/);
+ expect(()=>editMonthly({employeeJoinedOn:'2026-01-01'})).toThrow(/只读/);
+ expect(editMonthly({nightPremium:300,earlyPremium:200,spend:1000,nightSpend:200,earlySpend:300})).toMatchObject({regularPremium:700,regularSpend:500});
+});
+it('切换月度关联员工和直播间时更新其资料快照',()=>{
+ const staff=employees.map(employee=>({...employee,joined:employee.id==='e3'?'2026-09-01':'2026-01-01',nonCompeteSigned:employee.id==='e3'}));
+ const catalog=rooms.map(room=>({...room,openedOn:room.id==='s'?'2026-08-01':'2026-07-01'}));
+ const next=prepareMonthlyCorrection(monthly(),{employeeId:'e3',roomId:'s',productId:'q'},staff,departments,catalog,products);
+ expect(next).toMatchObject({employeeJoinedOn:'2026-09-01',nonCompeteSigned:true,roomOpenedOn:'2026-08-01'});
+});
+
+it('历史明细改关联直播间后，下游月度和导出使用目标直播间开播日期',async()=>{
+ const catalog=rooms.map(room=>({...room,openedOn:room.id==='r'?'2026-01-01':'2026-06-01'}));
+ const source=detail({roomOpenedOn:'2026-01-01'});
+ const corrected=prepareDetailCorrection(source,{roomId:'s',productId:'q'},employees,catalog,products);
+ const result=applyDatasetCorrections([source],[override(corrected)],[],employees,departments,catalog,products,'2026-10',[record()]);
+ expect(result.monthly.every(row=>row.roomId==='s'&&row.roomOpenedOn==='2026-06-01')).toBe(true);
+ const {monthlyExportRows}=await import('./pages/LiveDatasetFields');
+ expect(monthlyExportRows(result.monthly)[0]['直播间开播时间']).toBe('2026-06-01');
 });

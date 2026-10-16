@@ -9,7 +9,7 @@ export interface CorrectionAudit { id: string; table: DatasetTable; key: string;
 export function monthlyRowKey(row: Pick<LiveMonthly, 'employeeId' | 'roomId' | 'month'>): string { return JSON.stringify([row.employeeId, row.roomId, row.month]); }
 
 const detailFields = ['productId', 'roomId', 'date', 'start', 'end', 'hostId', 'buyerId', 'controlId', 'spend', 'revenue', 'clicks', 'conversions', 'orders', 'viewers'];
-const monthlyFields = ['employeeId', 'departmentId', 'productId', 'roomId', 'month', 'hours', 'nightHours', 'earlyHours', 'spend', 'premium', 'nightSpend', 'earlySpend', 'sessions', 'nightSessions', 'earlySessions', 'hostNames'];
+const monthlyFields = ['employeeId', 'departmentId', 'productId', 'roomId', 'month', 'hours', 'nightHours', 'earlyHours', 'spend', 'premium', 'nightPremium', 'earlyPremium', 'nightSpend', 'earlySpend', 'sessions', 'nightSessions', 'earlySessions', 'hostNames'];
 const detailAssociations = ['productId', 'roomId', 'date', 'start', 'end', 'hostId', 'buyerId', 'controlId'] as const;
 const monthlyAssociations = ['employeeId', 'departmentId', 'productId', 'roomId', 'month'] as const;
 const monthlyAmounts = ['hours', 'nightHours', 'earlyHours', 'spend', 'premium', 'nightSpend', 'earlySpend'] as const;
@@ -33,7 +33,7 @@ function checkJoined(employee: Employee, date: string, monthly = false): void {
 function catalogNames(roomId: string, productId: string, rooms: LiveRoom[], products: AdvertisingProduct[]) {
   const room = rooms.find(item => item.id === roomId), product = products.find(item => item.id === productId);
   if (!room || !product || room.productId !== productId) throw new Error('产品与直播间关联无效或归属不一致');
-  return {roomName: room.name, productName: product.name};
+  return {roomName: room.name, productName: product.name, roomOpenedOn: room.openedOn};
 }
 function shiftHours(row: Pick<LiveDetail, 'start' | 'end'>) {
   const start = Number(row.start.slice(0, 2)), end = Number(row.end.slice(0, 2));
@@ -56,7 +56,11 @@ export function prepareDetailCorrection(row: LiveDetail, patch: Record<string, u
   // Unchanged times keep the actual source amount ratios. Changed times use time overlap.
   const nightSpend = changedTime || row.spend === 0 ? next.spend * (shifts.nightHours / shifts.hours) : next.spend * ((row.nightSpend ?? row.spend * (original.nightHours / original.hours)) / row.spend);
   const earlySpend = changedTime || row.spend === 0 ? next.spend * (shifts.earlyHours / shifts.hours) : next.spend * ((row.earlySpend ?? row.spend * (original.earlyHours / original.hours)) / row.spend);
-  return {...next, ...names, hostName: staff[0].name, buyerName: staff[1].name, controlName: staff[2].name, nightSpend, earlySpend,
+  // Timing changes invalidate the measured revenue split. A zero source revenue
+  // provides no contribution ratio for a later nonzero correction.
+  const earlyPremium = changedTime || row.earlyPremium === undefined ? undefined : next.revenue === row.revenue ? row.earlyPremium : row.revenue > 0 ? next.revenue * (row.earlyPremium / row.revenue) : undefined;
+  const nightPremium = changedTime ? undefined : row.nightPremium === undefined ? undefined : next.revenue === row.revenue ? row.nightPremium : row.revenue > 0 ? next.revenue * (row.nightPremium / row.revenue) : undefined;
+  return {...next, ...names, nightPremium, earlyPremium, hostName: staff[0].name, buyerName: staff[1].name, controlName: staff[2].name, nightSpend, earlySpend,
     roi: ratio(next.revenue, next.spend), clickCost: ratio(next.spend, next.clicks), conversionCost: ratio(next.spend, next.conversions),
     clickRate: ratio(next.clicks, next.clickRateDenominator), conversionRate: ratio(next.conversions, next.conversionRateDenominator)};
 }
@@ -70,11 +74,14 @@ export function prepareMonthlyCorrection(row: LiveMonthly, patch: Record<string,
   const names = catalogNames(next.roomId, next.productId, rooms, products);
   if (monthlyAssociations.some(field => next[field] !== row[field])) checkJoined(employee, next.month, true);
   checkNumbers(next, monthlyAmounts, monthlyCounts);
+  if ((Object.hasOwn(patch, 'earlyPremium') && !nonnegative(next.earlyPremium)) || (next.earlyPremium !== undefined && (!nonnegative(next.earlyPremium) || next.earlyPremium > next.premium))) throw new Error('早班保费必须为有限非负数且不能超过总保费');
+  if ((Object.hasOwn(patch, 'nightPremium') && !nonnegative(next.nightPremium)) || (next.nightPremium !== undefined && (!nonnegative(next.nightPremium) || next.nightPremium > next.premium))) throw new Error('夜班保费必须为有限非负数且不能超过总保费');
+  if (next.nightPremium !== undefined && next.earlyPremium !== undefined && next.nightPremium + next.earlyPremium > next.premium + 1e-9) throw new Error('夜早班保费之和不能超过总保费');
   if (next.nightHours + next.earlyHours > next.hours + 1e-9) throw new Error('夜早班时长之和不能超过总时长');
   if (next.nightSpend + next.earlySpend > next.spend + 1e-9) throw new Error('夜早班消耗之和不能超过总消耗');
   if (next.nightSessions > next.sessions || next.earlySessions > next.sessions) throw new Error('每种班次场次不能超过总场次');
   if (!Array.isArray(next.hostNames) || next.hostNames.some(name => typeof name !== 'string' || !employees.some(employee => employee.name === name)) || new Set(next.hostNames).size !== next.hostNames.length) throw new Error('主播名称必须选择现有且不重复的员工');
-  return {...next, ...names, employeeName: employee.name, departmentName: department.name, year: Number(next.month.slice(0, 4)), hostNames: [...next.hostNames], roles: [...next.roles], roi: ratio(next.premium, next.spend), hourlySpend: ratio(next.spend, next.hours), roiRank: next.spend > 0 ? next.roiRank : null};
+  return {...next, ...names, earlyPremium: next.earlyPremium, regularPremium: next.earlyPremium === undefined || next.nightPremium === undefined ? undefined : next.premium - next.nightPremium - next.earlyPremium, regularSpend: next.spend - next.nightSpend - next.earlySpend, regularHours: next.regularHours !== undefined || (['hours', 'nightHours', 'earlyHours'] as const).some(field => next[field] !== row[field]) ? next.hours - next.nightHours - next.earlyHours : undefined, employeeName: employee.name, employeeJoinedOn: next.employeeId === row.employeeId && row.employeeJoinedOn !== undefined ? row.employeeJoinedOn : employee.joined, nonCompeteSigned: next.employeeId === row.employeeId && row.nonCompeteSigned !== undefined ? row.nonCompeteSigned : employee.nonCompeteSigned ?? false, departmentName: department.name, year: Number(next.month.slice(0, 4)), hostNames: [...next.hostNames], roles: [...next.roles], roi: ratio(next.premium, next.spend), hourlySpend: ratio(next.spend, next.hours), roiRank: next.spend > 0 ? next.roiRank : null};
 }
 
 /** Whole-row overlays remove their original identity even when moved out of the queried month. */

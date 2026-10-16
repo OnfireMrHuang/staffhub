@@ -29,6 +29,10 @@ function derived<T extends LiveDetail>(row:T,native?:LiveDetail):T {
  const rate=(field:'clickRate'|'conversionRate',numerator:'clicks'|'conversions',denominator:'clickRateDenominator'|'conversionRateDenominator')=>row[denominator]===undefined&&native&&row[numerator]===native[numerator]?native[field]:ratio(row[numerator],row[denominator]);
  return {...row,roi:ratio(row.revenue,row.spend),clickCost:ratio(row.spend,row.clicks),conversionCost:ratio(row.spend,row.conversions),clickRate:rate('clickRate','clicks','clickRateDenominator'),conversionRate:rate('conversionRate','conversions','conversionRateDenominator')};
 }
+const sumNightPremium=(rows:LiveDetail[])=>rows.some(row=>row.nightPremium===undefined)?undefined:rows.reduce((sum,row)=>sum+row.nightPremium!,0);
+const allocatedNightPremium=(row:LiveDetail,revenue:number)=>row.nightPremium===undefined?undefined:revenue===row.revenue?row.nightPremium:row.revenue>0?revenue*(row.nightPremium/row.revenue):undefined;
+const sumEarlyPremium=(rows:LiveDetail[])=>rows.some(row=>row.earlyPremium===undefined)?undefined:rows.reduce((sum,row)=>sum+row.earlyPremium!,0);
+const allocatedEarlyPremium=(row:LiveDetail,revenue:number)=>row.earlyPremium===undefined?undefined:revenue===row.revenue?row.earlyPremium:row.revenue>0?revenue*(row.earlyPremium/row.revenue):undefined;
 const duration=(row:Pick<LiveDetail,'start'|'end'>)=>Number(row.end.slice(0,2))-Number(row.start.slice(0,2));
 const shift=(row:Pick<LiveDetail,'start'|'end'>,start:number,end:number)=>Math.max(0,Math.min(Number(row.end.slice(0,2)),end)-Math.max(Number(row.start.slice(0,2)),start));
 export const reportDayKey=(row:Pick<LiveDetail,'roomId'|'date'|'hostId'|'buyerId'|'controlId'>)=>JSON.stringify([row.roomId,row.date,row.hostId,row.buyerId,row.controlId]);
@@ -39,7 +43,7 @@ function dailyRows(contributions:LiveDetail[],legacyIds:Set<string>):ReportRow[]
  return [...groups].map(([key,rows])=>{
   const summed=Object.fromEntries(totals.map(field=>[field,rows.reduce((n,row)=>n+row[field],0)]));
   const denominator=(field:'clickRateDenominator'|'conversionRateDenominator')=>rows.every(row=>row[field]!==undefined)?rows.reduce((n,row)=>n+row[field]!,0):undefined;
-  const row=asReport({...rows[0],...summed,id:key,start:rows.map(r=>r.start).sort()[0],end:rows.map(r=>r.end).sort().at(-1)!,nightSpend:rows.reduce((n,r)=>n+(r.nightSpend??0),0),earlySpend:rows.reduce((n,r)=>n+(r.earlySpend??0),0),clickRateDenominator:denominator('clickRateDenominator'),conversionRateDenominator:denominator('conversionRateDenominator')},'daily',key,[...new Set(rows.map(r=>r.sourceRecordId??r.id))],rows.some(r=>legacyIds.has(r.id)),rows.length===1&&duration(rows[0])===1?rows[0]:undefined);
+  const row=asReport({...rows[0],...summed,id:key,start:rows.map(r=>r.start).sort()[0],end:rows.map(r=>r.end).sort().at(-1)!,nightSpend:rows.reduce((n,r)=>n+(r.nightSpend??0),0),earlySpend:rows.reduce((n,r)=>n+(r.earlySpend??0),0),nightPremium:sumNightPremium(rows),earlyPremium:sumEarlyPremium(rows),clickRateDenominator:denominator('clickRateDenominator'),conversionRateDenominator:denominator('conversionRateDenominator')},'daily',key,[...new Set(rows.map(r=>r.sourceRecordId??r.id))],rows.some(r=>legacyIds.has(r.id)),rows.length===1&&duration(rows[0])===1?rows[0]:undefined);
   return {...row,hours:rows.reduce((n,r)=>n+duration(r),0),nightHours:rows.reduce((n,r)=>n+shift(r,2,6),0),earlyHours:rows.reduce((n,r)=>n+shift(r,6,8),0)};
  });
 }
@@ -50,7 +54,7 @@ export function buildRoomReports(records:LiveRecord[],hours:RoomHourly[],employe
  const legacyIds=new Set(legacy.map(o=>o.key));
  const hourly=baseline.details.flatMap(record=>hours.filter(hour=>hour.roomId===record.roomId&&hour.date===record.date&&hour.start>=record.start&&hour.end<=record.end).map(hour=>{
   const id=JSON.stringify([record.id,hour.start]);
-  return asReport({...record,...hour,id,version:record.version,nightSpend:shift(hour,2,6)?hour.spend:0,earlySpend:shift(hour,6,8)?hour.spend:0},'hourly',id,[record.id],legacyIds.has(record.id));
+  return asReport({...record,...hour,id,version:record.version,nightSpend:shift(hour,2,6)?hour.spend:0,earlySpend:shift(hour,6,8)?hour.spend:0,nightPremium:shift(hour,2,6)?hour.revenue:0,earlyPremium:shift(hour,6,8)?hour.revenue:0},'hourly',id,[record.id],legacyIds.has(record.id));
  }));
  const contributions:LiveDetail[]=[...hourly.filter(row=>!row.legacyOverride),...effective.filter(row=>legacyIds.has(row.id))];
  return {hourly,daily:dailyRows(contributions,legacyIds),contributions};
@@ -74,7 +78,7 @@ function overlayReportRow(current:ReportRow,override:ReportOverride,employees:Em
  if(totals.some(field=>!Number.isFinite(next[field])||next[field]<0)) throw new Error('报表修订含无效基础数值');
  const staff=[next.hostId,next.buyerId,next.controlId].map(id=>employees.find(e=>e.id===id));
  if(staff.some(e=>!e)) throw new Error('报表修订员工关联无效');
- return derived({...next,hostName:staff[0]!.name,buyerName:staff[1]!.name,controlName:staff[2]!.name,dailyKey:reportDayKey(next),nightSpend:current.spend>0?next.spend*((current.nightSpend??0)/current.spend):next.spend*current.nightHours/current.hours,earlySpend:current.spend>0?next.spend*((current.earlySpend??0)/current.spend):next.spend*current.earlyHours/current.hours},current);
+ return derived({...next,hostName:staff[0]!.name,buyerName:staff[1]!.name,controlName:staff[2]!.name,dailyKey:reportDayKey(next),nightPremium:allocatedNightPremium(current,next.revenue),earlyPremium:allocatedEarlyPremium(current,next.revenue),nightSpend:current.spend>0?next.spend*((current.nightSpend??0)/current.spend):next.spend*current.nightHours/current.hours,earlySpend:current.spend>0?next.spend*((current.earlySpend??0)/current.spend):next.spend*current.earlyHours/current.hours},current);
 }
 /** Daily money overrides scale actual measured contributions, preserving time and session identities.
  * This allocation affects monthly shift amounts only and is never exposed as measured hourly data. */
@@ -105,9 +109,10 @@ export function applyReportOverrides(base:RoomReportsResult,overrides:ReportOver
     remaining[field]-=value;return [field,value];
    }));
    const spend=values.spend as number;
-   return derived({...row,...values,hostId:next.hostId,buyerId:next.buyerId,controlId:next.controlId,hostName:employees.find(e=>e.id===next.hostId)!.name,buyerName:employees.find(e=>e.id===next.buyerId)!.name,controlName:employees.find(e=>e.id===next.controlId)!.name,nightSpend:row.spend>0?spend*((row.nightSpend??0)/row.spend):spend*shift(row,2,6)/duration(row),earlySpend:row.spend>0?spend*((row.earlySpend??0)/row.spend):spend*shift(row,6,8)/duration(row)},row);
+   const earlyPremium=allocatedEarlyPremium(row,values.revenue as number),nightPremium=allocatedNightPremium(row,values.revenue as number);
+   return derived({...row,...values,nightPremium,earlyPremium,hostId:next.hostId,buyerId:next.buyerId,controlId:next.controlId,hostName:employees.find(e=>e.id===next.hostId)!.name,buyerName:employees.find(e=>e.id===next.buyerId)!.name,controlName:employees.find(e=>e.id===next.controlId)!.name,nightSpend:row.spend>0?spend*((row.nightSpend??0)/row.spend):spend*shift(row,2,6)/duration(row),earlySpend:row.spend>0?spend*((row.earlySpend??0)/row.spend):spend*shift(row,6,8)/duration(row)},row);
   });
-  daily=daily.map(row=>row.key===current.key?{...next,nightSpend:contributions.filter(r=>members.some(m=>m.id===r.id)).reduce((n,r)=>n+(r.nightSpend??0),0),earlySpend:contributions.filter(r=>members.some(m=>m.id===r.id)).reduce((n,r)=>n+(r.earlySpend??0),0)}:row);
+  daily=daily.map(row=>row.key===current.key?{...next,nightPremium:sumNightPremium(contributions.filter(r=>members.some(m=>m.id===r.id))),earlyPremium:sumEarlyPremium(contributions.filter(r=>members.some(m=>m.id===r.id))),nightSpend:contributions.filter(r=>members.some(m=>m.id===r.id)).reduce((n,r)=>n+(r.nightSpend??0),0),earlySpend:contributions.filter(r=>members.some(m=>m.id===r.id)).reduce((n,r)=>n+(r.earlySpend??0),0)}:row);
  }
  return {hourly,daily,contributions};
 }

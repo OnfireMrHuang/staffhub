@@ -26,7 +26,7 @@ const definitions:[string,string,string[]][]=[
 const groups=definitions.map(([id,name,projects],i)=>({id,name,projectIds:projects.map(p=>projectMap.get(p)!),hourlyRuleId:actualRules[i].id}));
 const covered=new Set(groups.flatMap(g=>g.projectIds));
 export const eligibleEmployeeIds=names.filter(name=>{const work=usable.filter(r=>r.employeeName===name);return work.length>0&&work.every(r=>covered.has(projectMap.get(r.project)!))}).map(name=>employeeMap.get(name)!);
-export const seedEmployees:Employee[]=names.map(name=>({id:employeeMap.get(name)!,name,departmentId:'live',position:'主播',joined:'',status:'在职' as const,phone:'',email:'',identities:['飞书'],role:'员工'})).sort((a,b)=>Number(eligibleEmployeeIds.includes(b.id))-Number(eligibleEmployeeIds.includes(a.id))||a.id.localeCompare(b.id));
+export const seedEmployees:Employee[]=names.map(name=>({id:employeeMap.get(name)!,name,departmentId:'live',position:'主播',joined:'',nonCompeteSigned:false,status:'在职' as const,phone:'',email:'',identities:['飞书'],role:'员工'})).sort((a,b)=>Number(eligibleEmployeeIds.includes(b.id))-Number(eligibleEmployeeIds.includes(a.id))||a.id.localeCompare(b.id));
 export const seedFacts:Fact[]=usable.flatMap(r=>(['ad','live','premium','schedule'] as const).map(model=>({id:`source-${r.sourceRow}-${model}-v1`,key:`source-${r.sourceRow}-${model}`,version:1,model,employeeId:employeeMap.get(r.employeeName)!,projectId:projectMap.get(r.project)!,month:'2026-09',amount:model==='ad'?r.spend!:model==='premium'?r.premium!:model==='live'?r.listedHours!:r.actualHours!,confirmed:true})));
 export const seedScheme:Scheme={name:'主播基础规则试算方案',version:1,fixedSalary:0,departmentIds:['live'],employeeIds:eligibleEmployeeIds,groups};
 export const seedFields=[

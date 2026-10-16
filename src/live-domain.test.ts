@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Department, Employee } from './domain';
-import { buildLiveStatistics, generateLiveTemplate, validateLiveRecord, type LiveRecord, type RoomHourly } from './live-domain';
+import { buildLiveStatistics, deriveLiveMonthly, summarizeLiveDetails, generateLiveTemplate, validateLiveRecord, type LiveRecord, type RoomHourly } from './live-domain';
 const departments:Department[]=[{id:'d',name:'直播部',active:true}];
 const employees:Employee[]=Array.from({length:6},(_,i)=>({id:`e${i}`,name:`员工${i}`,departmentId:'d',position:'主播',joined:'',status:'在职',phone:'',email:'',identities:[],role:'员工'}));
 const products:AdvertisingProduct[]=[{id:'product-p',name:'产品',accountId:'投放账户',platform:'巨量营销',active:true}];
@@ -116,3 +116,53 @@ it('模拟同步按产品和直播间小时补齐，保留既有来源并且幂�
 });
 
 it('保留真实来源班次金额与可验证比率分母供人工纠正重算',()=>{const result=build([record()],rooms().map((r,i)=>({...r,spend:i<4?25:200})));expect(result.details[0]).toMatchObject({nightSpend:100,earlySpend:400,clickRateDenominator:600,conversionRateDenominator:120});});
+
+
+it('夜早班保费来自实际小时成交额，正常保费排除两班次',()=>{
+ const result=build([record({start:'01:00',end:'09:00'})],Array.from({length:8},(_,i)=>room(i+1,'a',{revenue:i+1>=6&&i+1<8?900:50})));
+ expect(result.details[0].earlyPremium).toBe(1800);
+ expect(result.monthly[0]).toMatchObject({premium:2100,nightPremium:200,earlyPremium:1800,regularPremium:100,regularHours:2});
+});
+
+it('历史明细缺少早班成交额时保持未知，不能以时长代替成交贡献',()=>{
+ const historical={...build().details[0],earlyPremium:undefined};
+ const row=summarizeLiveDetails([historical],employees,departments,'2026-10')[0];
+ expect(row.earlyPremium).toBeUndefined();expect(row.regularPremium).toBeUndefined();
+ const old={...build().monthly[0],earlyPremium:undefined,regularPremium:undefined,regularHours:undefined};
+ expect(deriveLiveMonthly([old])[0]).toMatchObject({earlyPremium:undefined,regularPremium:undefined,regularHours:undefined});
+});
+
+
+it('已测量早班零成交与历史未知分开保留，新计算正常时长和金额包含明确零值',()=>{
+ const result=build([record()],rooms().map(r=>({...r,revenue:0})));
+ expect(result.details[0].earlyPremium).toBe(0);
+ expect(result.monthly[0]).toMatchObject({earlyPremium:0,regularPremium:0,regularHours:0});
+});
+
+it('月度行保存入职、竞业协议和直播间开播日期快照，缺失日期不猜值',()=>{
+ const staff=employees.map((employee,i)=>({...employee,joined:i===0?'2026-09-01':'',nonCompeteSigned:i===0}));
+ const catalog=liveRooms.map(liveRoom=>({...liveRoom,openedOn:'2026-08-01'}));
+ const result=buildLiveStatistics([record()],rooms(),staff,departments,catalog,products,'2026-10');
+ expect(result.monthly[0]).toMatchObject({employeeJoinedOn:'2026-09-01',nonCompeteSigned:true,roomOpenedOn:'2026-08-01',departmentId:'d',departmentName:'直播部'});
+ staff[0].joined='2026-09-20';staff[0].nonCompeteSigned=false;catalog[0].openedOn='2026-08-20';
+ expect(result.monthly[0]).toMatchObject({employeeJoinedOn:'2026-09-01',nonCompeteSigned:true,roomOpenedOn:'2026-08-01'});
+ expect(build().monthly[0]).toMatchObject({employeeJoinedOn:'',nonCompeteSigned:false});
+ expect(build().monthly[0].roomOpenedOn).toBeUndefined();
+});
+
+it('按实际小时成交拆分夜班早班和正常保费，正常消耗及时长自动派生',()=>{
+ const source=Array.from({length:8},(_,i)=>room(i+1,'a',{spend:(i+1)*10,revenue:(i+1)*100}));
+ const row=build([record({start:'01:00',end:'09:00'})],source).monthly[0];
+ expect(row).toMatchObject({hours:8,nightHours:4,earlyHours:2,regularHours:2,spend:360,nightSpend:140,earlySpend:130,regularSpend:90,premium:3600,nightPremium:1400,earlyPremium:1300,regularPremium:900,spendRank:1});
+});
+it('消耗排名在同直播间同月按未舍入消耗降序竞争排名，含零消耗',()=>{
+ const first=build().monthly[0];
+ const ranked=deriveLiveMonthly([{...first,employeeId:'a',spend:100},{...first,employeeId:'b',spend:100},{...first,employeeId:'c',spend:0,nightSpend:0,earlySpend:0},{...first,employeeId:'d',roomId:'other',spend:999}]);
+ expect(ranked.map(row=>row.spendRank)).toEqual([1,1,3,1]);
+});
+it('缺失夜班成交的历史明细不能推造夜班和正常保费或成本',()=>{
+ const historical={...build().details[0],nightPremium:undefined};
+ const row=summarizeLiveDetails([historical],employees,departments,'2026-10')[0];
+ expect(row.nightPremium).toBeUndefined();expect(row.regularPremium).toBeUndefined();
+ expect(row.adCost).toBeUndefined();expect(row.policyCost).toBeUndefined();
+});

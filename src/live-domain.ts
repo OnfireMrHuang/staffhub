@@ -4,8 +4,8 @@ import type { Department, Employee, WorkRow } from './domain';
 export interface LiveRecord { id: string; roomId: string; productId: string; date: string; start: string; end: string; hostId: string; buyerId: string; controlId: string; version: number }
 export interface AdHourly { id: string; roomId: string; productId: string; date: string; start: string; end: string; spend: number; payment: number; impressions: number; clicks: number; conversions: number; conversionCost: number; conversionRate: number; orders: number }
 export interface RoomHourly { clickRateDenominator?: number; conversionRateDenominator?: number; id: string; roomId: string; productId: string; accountId: string; date: string; start: string; end: string; spend: number; revenue: number; clicks: number; clickRate: number; clickCost: number; conversions: number; conversionRate: number; conversionCost: number; roi: number; orders: number; viewers: number; fans: number; tips: number }
-export interface LiveDetail extends LiveRecord { sourceRecordId?: string; productName: string; roomName: string; hostName: string; buyerName: string; controlName: string; spend: number; revenue: number; clicks: number; clickRate: number | null; clickCost: number | null; conversions: number; conversionRate: number | null; conversionCost: number | null; roi: number | null; orders: number; viewers: number; fans: number; tips: number; nightSpend?: number; earlySpend?: number; clickRateDenominator?: number; conversionRateDenominator?: number }
-export interface LiveMonthly extends Omit<WorkRow, 'projectId' | 'roi' | 'hourlySpend'> { roomId: string; roomName: string; productId: string; productName: string; roles: string[]; hostNames: string[]; year: number; nightHours: number; earlyHours: number; nightSpend: number; earlySpend: number; roi: number | null; hourlySpend: number | null; roiRank: number | null; sessions: number; nightSessions: number; earlySessions: number }
+export interface LiveDetail extends LiveRecord { sourceRecordId?: string; roomOpenedOn?: string; productName: string; roomName: string; hostName: string; buyerName: string; controlName: string; spend: number; revenue: number; clicks: number; clickRate: number | null; clickCost: number | null; conversions: number; conversionRate: number | null; conversionCost: number | null; roi: number | null; orders: number; viewers: number; fans: number; tips: number; nightSpend?: number; earlySpend?: number; nightPremium?: number; earlyPremium?: number; clickRateDenominator?: number; conversionRateDenominator?: number }
+export interface LiveMonthly extends Omit<WorkRow, 'projectId' | 'roi' | 'hourlySpend'> { employeeJoinedOn?: string; nonCompeteSigned?: boolean; roomOpenedOn?: string; nightPremium?: number; earlyPremium?: number; regularPremium?: number; regularHours?: number; regularSpend?: number; adCost?: number; policyCost?: number; spendRank?: number; roomId: string; roomName: string; productId: string; productName: string; roles: string[]; hostNames: string[]; year: number; nightHours: number; earlyHours: number; nightSpend: number; earlySpend: number; roi: number | null; hourlySpend: number | null; roiRank: number | null; sessions: number; nightSessions: number; earlySessions: number }
 export type LiveTemplateRow = Pick<LiveRecord, 'roomId' | 'date' | 'start' | 'end'>;
 
 const hourText = (minute: number) => `${String(minute / 60).padStart(2, '0')}:00`;
@@ -93,15 +93,15 @@ export function buildLiveStatistics(records: LiveRecord[], roomHours: RoomHourly
     }
     const sums = aggregate(source);
     const denominator = (field: 'clickRateDenominator' | 'conversionRateDenominator') => source.every(hour => hour[field] !== undefined) ? source.reduce((sum, hour) => sum + hour[field]!, 0) : undefined;
-    details.push({...record, productName: product.name, roomName: room.name, hostName: employees.find(e => e.id === record.hostId)!.name, buyerName: employees.find(e => e.id === record.buyerId)!.name, controlName: employees.find(e => e.id === record.controlId)!.name, ...sums, nightSpend: aggregate(night).spend, earlySpend: aggregate(early).spend, clickRateDenominator: denominator('clickRateDenominator'), conversionRateDenominator: denominator('conversionRateDenominator')});
+    details.push({...record, productName: product.name, roomName: room.name, roomOpenedOn: room.openedOn, hostName: employees.find(e => e.id === record.hostId)!.name, buyerName: employees.find(e => e.id === record.buyerId)!.name, controlName: employees.find(e => e.id === record.controlId)!.name, ...sums, nightSpend: aggregate(night).spend, earlySpend: aggregate(early).spend, nightPremium: aggregate(night).revenue, earlyPremium: aggregate(early).revenue, clickRateDenominator: denominator('clickRateDenominator'), conversionRateDenominator: denominator('conversionRateDenominator')});
   }
   return {details, monthly: summarizeLiveDetails(details, employees, departments, month, records)};
 }
 
 /** Derive ratios only from effective base values, ranking valid ROI within one room/month. */
 export function deriveLiveMonthly(rows: LiveMonthly[]): LiveMonthly[] {
-  const monthly = rows.map(row => ({...row, roi: row.spend > 0 ? row.premium / row.spend : null, hourlySpend: row.hours > 0 ? row.spend / row.hours : null}));
-  return monthly.map(row => ({...row, roiRank: row.roi === null ? null : 1 + monthly.filter(other => other.roomId === row.roomId && other.month === row.month && other.roi !== null && other.roi > row.roi!).length}));
+  const monthly = rows.map(row => ({...row, earlyPremium: row.earlyPremium, regularPremium: row.earlyPremium === undefined || row.nightPremium === undefined ? undefined : row.premium - row.nightPremium - row.earlyPremium, regularSpend: row.spend - row.nightSpend - row.earlySpend, regularHours: row.regularHours === undefined ? undefined : row.hours - row.nightHours - row.earlyHours, roi: row.spend > 0 ? row.premium / row.spend : null, hourlySpend: row.hours > 0 ? row.spend / row.hours : null}));
+  return monthly.map(row => ({...row, spendRank: 1 + monthly.filter(other => other.roomId === row.roomId && other.month === row.month && other.spend > row.spend).length, roiRank: row.roi === null ? null : 1 + monthly.filter(other => other.roomId === row.roomId && other.month === row.month && other.roi !== null && other.roi > row.roi!).length}));
 }
 
 /** Rebuild all monthly contributions from corrected details. Context preserves continuous cross-month sessions. */
@@ -135,7 +135,7 @@ export function summarizeLiveDetails(details: LiveDetail[], employees: Employee[
       if (!group) {
         const department = departments.find(d => d.id === employee.departmentId);
         if (!department) throw new Error(`${employee.name} 部门归属无效`);
-        group = {row: {employeeId, employeeName: employee.name, departmentId: department.id, departmentName: department.name, roomId: record.roomId, roomName: record.roomName, productId: record.productId, productName: record.productName, month, year: Number(month.slice(0, 4)), roles: [], hostNames: [], hours: 0, spend: 0, premium: 0, roi: null, hourlySpend: null, nightHours: 0, earlyHours: 0, nightSpend: 0, earlySpend: 0, sessions: 0, nightSessions: 0, earlySessions: 0, roiRank: null}, sessions: new Set(), night: new Set(), early: new Set()};
+        group = {row: {employeeId, employeeName: employee.name, employeeJoinedOn: employee.joined, nonCompeteSigned: employee.nonCompeteSigned ?? false, roomOpenedOn: record.roomOpenedOn, departmentId: department.id, departmentName: department.name, roomId: record.roomId, roomName: record.roomName, productId: record.productId, productName: record.productName, month, year: Number(month.slice(0, 4)), roles: [], hostNames: [], hours: 0, spend: 0, premium: 0, nightPremium: 0, earlyPremium: 0, regularPremium: 0, regularHours: 0, roi: null, hourlySpend: null, nightHours: 0, earlyHours: 0, nightSpend: 0, earlySpend: 0, sessions: 0, nightSessions: 0, earlySessions: 0, roiRank: null}, sessions: new Set(), night: new Set(), early: new Set()};
         groups.set(key, group);
       }
       const row = group.row;
@@ -144,6 +144,9 @@ export function summarizeLiveDetails(details: LiveDetail[], employees: Employee[
       if (!row.hostNames.includes(hostName)) row.hostNames.push(hostName);
       const hours = (range.end - range.start) / 60;
       row.hours += hours; row.spend += record.spend; row.premium += record.revenue;
+      // One unavailable historical contribution makes the monthly split unknown.
+      row.nightPremium = row.nightPremium === undefined || record.nightPremium === undefined ? undefined : row.nightPremium + record.nightPremium;
+      row.earlyPremium = row.earlyPremium === undefined || record.earlyPremium === undefined ? undefined : row.earlyPremium + record.earlyPremium;
       row.nightHours += nightHours; row.earlyHours += earlyHours;
       row.nightSpend += record.nightSpend ?? record.spend * (nightHours / hours);
       row.earlySpend += record.earlySpend ?? record.spend * (earlyHours / hours);
