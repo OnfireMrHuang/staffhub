@@ -20,7 +20,8 @@ it('exposes selectable count metrics and named premium items while keeping emplo
 });
 it('offers band editing with three exclusive hourly calculation modes',()=>{
  const bands=renderToStaticMarkup(<HourlyBandEditor field="roi" bands={[{keyType:'range',min:0,includeMin:true,includeMax:false,rate:20}]} initialExpandedIndex={0} onChange={()=>{}}/>);
- for(const text of ['精确数值','数值范围','关联指标范围','留空不限制','新增档位']) expect(bands).toContain(text);
+ for(const text of ['数值范围','关联指标范围','留空不限制','新增档位']) expect(bands).toContain(text);
+ expect(bands).not.toContain('精确数值');
  const rule=withType(createCompensationRule('global'),'hourly');
  const html=renderToStaticMarkup(<CompensationRuleForm rule={rule} rooms={[]} onChange={()=>{}}/>);
  for(const label of ['正常直播时长','时薪计算类型','统计指标加成','特殊时段加成','条件保薪','新增统计指标']) expect(html).toContain(label);

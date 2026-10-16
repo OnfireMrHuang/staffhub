@@ -4,21 +4,27 @@ import { Button, Modal } from '../components';
 import { allowanceCountOptions, blankConditionGroup, compensationMetricOptions, conditionFieldOptions, durationOptions, premiumFieldOptions, validateCompensationRule, type CalculationType, type CompensationRule, type CountMetric, type HourlyItem, type PremiumField } from '../compensation-rules';
 import ConditionBuilder from './ConditionBuilder';
 import HourlyBandEditor, { blankHourlyBand } from './HourlyBandEditor';
-import { calculationLabels, compensationExpression, compensationMetricLabel, displayNumber, hourlyKindLabels, numberValue, uid, withHourlyItems, withHourlyKind, withType } from './compensation-definition';
+import { calculationLabels, compensationExpression, compensationMetricLabel, displayNumber, editableHourlyBand, hourlyKindLabels, numberValue, uid, withHourlyItems, withHourlyKind, withType } from './compensation-definition';
 
-export default function CompensationRuleDefinition({rule,onChange,readOnly=false}:{rule:CompensationRule;onChange:(rule:CompensationRule)=>void;readOnly?:boolean}) {
+export function withValidatedHourlyItem(rule:CompensationRule,item:HourlyItem):CompensationRule {
+ const hourly=rule.hourly;
+ if(!hourly)throw new Error('请先选择时薪计算类型');
+ validateCompensationRule({...rule,name:rule.name||'指标配置',version:Math.max(1,rule.version),scope:'global',roomIds:[],roomRuleSetId:undefined,employeeCondition:undefined,hourly:{...hourly,kind:'metric',items:[item],formula:{mode:'additions',itemIds:[item.id]}}});
+ return withHourlyItems(rule,hourly.items.some(existing=>existing.id===item.id)?hourly.items.map(existing=>existing.id===item.id?item:existing):[...hourly.items,item]);
+}
+
+export default function CompensationRuleDefinition({rule,onChange,readOnly=false,lockType=false}:{rule:CompensationRule;onChange:(rule:CompensationRule)=>void;readOnly?:boolean;lockType?:boolean}) {
  const [editing,setEditing]=useState<HourlyItem|null>(null),[itemError,setItemError]=useState(''),[expandFirstBand,setExpandFirstBand]=useState(false);
  const hourly=rule.hourly,kind=hourly?.kind||hourly?.items[0]?.kind||'metric';
  const updateSingle=(patch:Partial<HourlyItem>)=>{if(hourly?.items[0])onChange(withHourlyItems(rule,[{...hourly.items[0],...patch}]))};
  const saveItem=()=>{
   if(!editing||!hourly)return;
   try{
-   validateCompensationRule({...rule,name:rule.name||'指标配置',version:Math.max(1,rule.version),scope:'global',roomIds:[],employeeCondition:undefined,hourly:{...hourly,kind:'metric',items:[editing],formula:{mode:'additions',itemIds:[editing.id]}}});
-   onChange(withHourlyItems(rule,hourly.items.some(item=>item.id===editing.id)?hourly.items.map(item=>item.id===editing.id?editing:item):[...hourly.items,editing]));setEditing(null);
+   onChange(withValidatedHourlyItem(rule,editing));setEditing(null);
   }catch(error){setItemError(error instanceof Error?error.message:'请核对统计指标配置')}
  };
  return <section className="compensation-rule-definition" aria-label="规则定义">
-  <div className="compensation-definition-basics"><label>规则名称<input aria-label="规则名称" value={rule.name} onChange={e=>onChange({...rule,name:e.target.value})}/></label><label>计算类型<select aria-label="计算类型" value={rule.type} onChange={e=>onChange(withType(rule,e.target.value as CalculationType))}>{Object.entries(calculationLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
+  <div className="compensation-definition-basics compensation-definition-identity"><label>计算类型{lockType?<input aria-label="计算类型" value={calculationLabels[rule.type]} readOnly/>:<select aria-label="计算类型" value={rule.type} onChange={e=>onChange(withType(rule,e.target.value as CalculationType))}>{Object.entries(calculationLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>}</label><label>规则名称<input aria-label="规则名称" value={rule.name} onChange={e=>onChange({...rule,name:e.target.value})}/></label></div>
   {rule.type==='allowance'&&rule.allowance&&<div className="compensation-definition-basics">
    <label>计数指标<select aria-label="补贴计数指标" value={rule.allowance.field} onChange={e=>onChange({...rule,allowance:{...rule.allowance!,field:e.target.value as CountMetric}})}>{allowanceCountOptions.map(option=><option key={option.field} value={option.field}>{option.label}</option>)}</select></label>
    <label>补贴金额（元 / 次）<input aria-label="补贴金额" type="number" min="0" step="any" value={displayNumber(rule.allowance.amount)} onChange={e=>onChange({...rule,allowance:{...rule.allowance!,amount:numberValue(e.target.value)}})}/></label>
@@ -36,7 +42,7 @@ export default function CompensationRuleDefinition({rule,onChange,readOnly=false
    <div className="compensation-definition-basics"><label>计薪时长<select aria-label="计薪时长" value={hourly.duration} onChange={e=>onChange({...rule,hourly:{...hourly,duration:e.target.value as typeof hourly.duration}})}>{durationOptions.map(option=><option key={option.field} value={option.field}>{option.label}</option>)}</select></label><label>时薪计算类型<select aria-label="时薪计算类型" value={kind} onChange={e=>{setEditing(null);onChange(withHourlyKind(rule,e.target.value as HourlyItem['kind']))}}>{Object.entries(hourlyKindLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
    {(kind==='metric'||(readOnly&&!hourly.kind))&&<section><div className="inline"><h3>统计指标列表</h3><span className="spacer"/>{!readOnly&&<Button onClick={()=>{setItemError('');setExpandFirstBand(true);setEditing({id:uid(),name:'',kind:'metric',field:'roi',bands:[blankHourlyBand()]})}}><Plus size={14}/>新增统计指标</Button>}</div>
     {!hourly.items.length&&<p className="caption">尚未添加统计指标</p>}
-    {hourly.items.map(item=><section key={item.id}><article className="hourly-metric-summary"><div><strong>{item.name}</strong><small>{item.field?compensationMetricLabel(item.field):hourlyKindLabels[item.kind]}{item.bands?` · ${item.bands.length} 个档位`:item.rate!==undefined?` · ${item.rate} 元 / 小时`:''}</small></div>{!readOnly&&<Button onClick={()=>{setItemError('');setExpandFirstBand(false);setEditing(structuredClone(item))}}>编辑</Button>}{!readOnly&&<button type="button" className="icon-button" aria-label={`删除统计指标${item.name}`} onClick={()=>onChange(withHourlyItems(rule,hourly.items.filter(i=>i.id!==item.id)))}><Trash2 size={15}/></button>}</article>{readOnly&&item.bands&&<HourlyBandEditor field={item.field||'roi'} bands={item.bands} readOnly onChange={()=>{}}/>}{readOnly&&item.condition&&<ConditionBuilder label={`${item.name}条件`} value={item.condition} readOnly onChange={()=>{}}/>}</section>)}
+    {hourly.items.map(item=><section key={item.id}><article className="hourly-metric-summary"><div><strong>{item.name}</strong><small>{item.field?compensationMetricLabel(item.field):hourlyKindLabels[item.kind]}{item.bands?` · ${item.bands.length} 个档位`:item.rate!==undefined?` · ${item.rate} 元 / 小时`:''}</small></div>{!readOnly&&<Button onClick={()=>{setItemError('');setExpandFirstBand(false);const next=structuredClone(item);if(next.bands)next.bands=next.bands.map(editableHourlyBand);setEditing(next)}}>编辑</Button>}{!readOnly&&<button type="button" className="icon-button" aria-label={`删除统计指标${item.name}`} onClick={()=>onChange(withHourlyItems(rule,hourly.items.filter(i=>i.id!==item.id)))}><Trash2 size={15}/></button>}</article>{readOnly&&item.bands&&<HourlyBandEditor field={item.field||'roi'} bands={item.bands} readOnly onChange={()=>{}}/>}{readOnly&&item.condition&&<ConditionBuilder label={`${item.name}条件`} value={item.condition} readOnly onChange={()=>{}}/>}</section>)}
    </section>}
    {kind==='special'&&hourly.kind&&<label>加成金额（元 / 小时）<input aria-label="加成金额" type="number" min="0" step="any" value={displayNumber(hourly.items[0]?.rate)} onChange={e=>updateSingle({rate:numberValue(e.target.value)})}/></label>}
    {kind==='guarantee'&&hourly.kind&&<><ConditionBuilder label="保薪条件" value={hourly.items[0]?.condition||blankConditionGroup()} onChange={condition=>updateSingle({condition})} readOnly={readOnly}/><label>保薪值（元 / 小时）<input aria-label="保薪值" type="number" min="0" step="any" value={displayNumber(hourly.items[0]?.rate)} onChange={e=>updateSingle({rate:numberValue(e.target.value)})}/></label></>}

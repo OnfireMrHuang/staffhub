@@ -30,3 +30,12 @@ it('removes legacy addition conditions from the editable template without alteri
  expect(draft.hourly!.items[0].condition).toBeUndefined();expect(source.hourly!.items[0].condition).toBeDefined();
  expect(()=>validateCompensationRule(draft)).not.toThrow();
 });
+
+it('converts exact bands to equal inclusive bounds only in the editable copy, including v2 rules',()=>{
+ let source=withType(createCompensationRule('global'),'hourly');source.name='原档位';source.version=1;
+ source=withHourlyItems(source,[{id:'metric',name:'ROI',kind:'metric',field:'roi',bands:[{keyType:'exact',exact:1.6,includeMin:false,includeMax:false,rate:60}]}]);
+ const draft=editableCompensationRule(source);
+ expect(draft.hourly!.items[0].bands).toEqual([{keyType:'range',min:1.6,max:1.6,includeMin:true,includeMax:true,rate:60}]);
+ expect(source.hourly!.items[0].bands![0].keyType).toBe('exact');
+ expect(()=>validateCompensationRule(draft)).not.toThrow();
+});

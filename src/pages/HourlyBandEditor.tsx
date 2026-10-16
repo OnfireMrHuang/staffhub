@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '../components';
 import { compensationMetricOptions, validateBands, type CompensationMetric, type NewRuleBand } from '../compensation-rules';
+import { editableHourlyBand } from './compensation-definition';
 
 export const blankHourlyBand=():NewRuleBand=>({keyType:'range',min:0,includeMin:true,includeMax:false,rate:0});
 const numeric=(value:string)=>value===''?undefined:Number(value);
@@ -23,7 +24,7 @@ export function hourlyBandSummary(field:string,band:NewRuleBand):string {
 export default function HourlyBandEditor({field,bands,onChange,readOnly=false,initialExpandedIndex=null}:{field:string;bands:NewRuleBand[];onChange:(bands:NewRuleBand[])=>void;readOnly?:boolean;initialExpandedIndex?:number|null}) {
  const [expanded,setExpanded]=useState<number|null>(initialExpandedIndex),[error,setError]=useState('');
  const id=useId();
- const change=(index:number,patch:Partial<NewRuleBand>)=>{setError('');onChange(bands.map((band,i)=>i===index?{...band,...patch}:band))};
+ const change=(index:number,patch:Partial<NewRuleBand>)=>{setError('');onChange(bands.map((band,i)=>i===index?{...editableHourlyBand(band),...patch}:band))};
  const finish=(checkAll=true)=>{
   if(expanded===null)return true;
   try{validateBands({id:'draft',name:'档位',kind:'metric',field,bands:checkAll?bands:[bands[expanded]]});setError('');return true}
@@ -36,7 +37,8 @@ export default function HourlyBandEditor({field,bands,onChange,readOnly=false,in
  };
  return <fieldset className="hourly-band-editor" disabled={readOnly}>
   <strong>时薪档位</strong><p className="caption">范围可开放一侧边界；每个项目须唯一命中档位。</p>
-  {bands.map((band,index)=>{
+  {bands.map((source,index)=>{
+   const band=readOnly?source:editableHourlyBand(source);
    const open=!readOnly&&expanded===index,controlsId=`${id}-band-${index}`;
    return <div className={`definition-band hourly-band ${open?'is-expanded':'is-collapsed'}`} key={index}>
     <div className="hourly-band-heading"><strong>档位 {index+1}</strong><span className="hourly-band-summary" title={hourlyBandSummary(field,band)}>{hourlyBandSummary(field,band)}</span>{!readOnly&&<div className="hourly-band-actions">
@@ -45,10 +47,10 @@ export default function HourlyBandEditor({field,bands,onChange,readOnly=false,in
     </div>}</div>
     {open&&<div id={controlsId} className="hourly-band-details">
      <div className="definition-band-fields">
-      <label>匹配方式<select autoFocus aria-label={`档位${index+1}匹配方式`} value={band.keyType} onChange={e=>change(index,{keyType:e.target.value as NewRuleBand['keyType'],exact:e.target.value==='exact'?0:undefined,min:e.target.value==='exact'?undefined:0,max:undefined,relatedField:e.target.value==='related'?compensationMetricOptions.find(o=>o.field!==field)?.field:undefined})}><option value="exact">精确数值</option><option value="range">数值范围</option><option value="related">关联指标范围</option></select></label>
+      <label>匹配方式<select autoFocus aria-label={`档位${index+1}匹配方式`} value={band.keyType} onChange={e=>change(index,{keyType:e.target.value as NewRuleBand['keyType'],exact:undefined,min:0,max:undefined,relatedField:e.target.value==='related'?compensationMetricOptions.find(o=>o.field!==field)?.field:undefined})}><option value="range">数值范围</option><option value="related">关联指标范围</option></select></label>
       {band.keyType==='related'&&<label>关联指标<select aria-label={`档位${index+1}关联指标`} value={band.relatedField||''} onChange={e=>change(index,{relatedField:e.target.value as CompensationMetric})}>{compensationMetricOptions.filter(o=>o.field!==field).map(o=><option key={o.field} value={o.field}>{o.label}</option>)}</select></label>}
-      <label>{band.keyType==='exact'?'精确数值':'下限（留空不限制）'}<input aria-label={`档位${index+1}${band.keyType==='exact'?'精确数值':'下限'}`} type="number" step="any" value={display(band.keyType==='exact'?band.exact:band.min)} onChange={e=>change(index,band.keyType==='exact'?{exact:numeric(e.target.value)??NaN}:{min:numeric(e.target.value)})}/></label>
-      {band.keyType!=='exact'&&<><label>上限（留空不限制）<input aria-label={`档位${index+1}上限`} type="number" step="any" value={display(band.max)} onChange={e=>change(index,{max:numeric(e.target.value)})}/></label><label>范围边界<select aria-label={`档位${index+1}范围边界`} value={`${band.includeMin?1:0}${band.includeMax?1:0}`} onChange={e=>change(index,{includeMin:e.target.value[0]==='1',includeMax:e.target.value[1]==='1'})}><option value="10">[下限, 上限)</option><option value="11">[下限, 上限]</option><option value="00">(下限, 上限)</option><option value="01">(下限, 上限]</option></select></label></>}
+      <label>下限（留空不限制）<input aria-label={`档位${index+1}下限`} type="number" step="any" value={display(band.min)} onChange={e=>change(index,{min:numeric(e.target.value)})}/></label>
+      <label>上限（留空不限制）<input aria-label={`档位${index+1}上限`} type="number" step="any" value={display(band.max)} onChange={e=>change(index,{max:numeric(e.target.value)})}/></label><label>范围边界<select aria-label={`档位${index+1}范围边界`} value={`${band.includeMin?1:0}${band.includeMax?1:0}`} onChange={e=>change(index,{includeMin:e.target.value[0]==='1',includeMax:e.target.value[1]==='1'})}><option value="10">[下限, 上限)</option><option value="11">[下限, 上限]</option><option value="00">(下限, 上限)</option><option value="01">(下限, 上限]</option></select></label>
       <label>时薪（元 / 小时）<input aria-label={`档位${index+1}时薪`} type="number" min="0" step="any" value={display(band.rate)} onChange={e=>change(index,{rate:numeric(e.target.value)??NaN})}/></label>
      </div>{error&&<p className="rule-error" role="alert">{error}</p>}
     </div>}

@@ -17,7 +17,7 @@ export interface LegacyPremiumConfig {normalField:'regularPremium';earlyField:'e
 export interface PremiumItemConfig {items:PremiumItem[]}
 export interface CompensationRule {
   id:string; name:string; version:number; status:'草稿'|'已发布'; scope:Scope; roomIds:string[]; employeeCondition?:ConditionGroup; type:CalculationType;
-  definitionVersion?:2; deletedAt?:string;
+  definitionVersion?:2; deletedAt?:string; roomRuleSetId?:string;
   allowance?:{field:CountMetric;amount:number};
   premium?:LegacyPremiumConfig|PremiumItemConfig;
   hourly?:{duration:NewDuration; kind?:HourlyItem['kind']; items:HourlyItem[]; formula:{mode:'additions';itemIds:string[]}|{mode:'guarantee';itemId:string}};
@@ -25,13 +25,18 @@ export interface CompensationRule {
 /** Current draft and published room rules reserve their selected rooms. */
 export function compensationRoomOwners(rules:CompensationRule[],excludeRuleId:string):Map<string,CompensationRule> {
   const owners=new Map<string,CompensationRule>();
-  for(const rule of rules) if(rule.scope==='rooms' && !rule.deletedAt && rule.id!==excludeRuleId) {
+  const selected=rules.find(rule=>rule.scope==='rooms' && !rule.deletedAt && rule.id===excludeRuleId);
+  const excludedSetId=selected?.roomRuleSetId ?? (rules.some(rule=>rule.scope==='rooms' && !rule.deletedAt && rule.roomRuleSetId===excludeRuleId)?excludeRuleId:undefined);
+  for(const rule of rules) if(rule.scope==='rooms' && !rule.deletedAt && rule.id!==excludeRuleId && (!excludedSetId || rule.roomRuleSetId!==excludedSetId)) {
     for(const roomId of rule.roomIds) if(!owners.has(roomId)) owners.set(roomId,rule);
   }
   return owners;
 }
 export function validateCompensationRoomOwnership(rule:CompensationRule,rules:CompensationRule[]):void {
   if(rule.scope!=='rooms') return;
+  const previous=rules.find(item=>item.id===rule.id);
+  if(!previous && rules.some(item=>item.roomRuleSetId===rule.id)) throw new Error('子规则 ID 不能占用现有规则集 ID');
+  if(previous && previous.roomRuleSetId!==rule.roomRuleSetId) throw new Error('规则集归属不可通过子规则修改');
   const owners=compensationRoomOwners(rules,rule.id);
   for(const roomId of rule.roomIds) {
     const owner=owners.get(roomId);
@@ -151,6 +156,7 @@ export function validateCompensationRule(rule:CompensationRule):void {
   if(rule.definitionVersion!==undefined&&rule.definitionVersion!==2) throw new Error('规则定义版本无效');
   if (!Number.isSafeInteger(rule.version)||rule.version<1 || !['草稿','已发布'].includes(rule.status)) throw new Error('规则版本或状态无效');
   if (!['global','rooms','employees'].includes(rule.scope) || !Array.isArray(rule.roomIds) || rule.roomIds.some(id=>typeof id!=='string'||!id.trim()) || new Set(rule.roomIds).size!==rule.roomIds.length) throw new Error('规则范围或直播间集合无效');
+  if(rule.roomRuleSetId!==undefined && (typeof rule.roomRuleSetId!=='string' || !rule.roomRuleSetId.trim() || rule.scope!=='rooms')) throw new Error('直播间规则集归属无效');
   if (rule.scope==='rooms' ? !rule.roomIds.length : rule.roomIds.length>0) throw new Error('直播间范围必须选择直播间，其他范围不能限定直播间');
   if (rule.scope==='employees') validateCondition(rule.employeeCondition!,new Set(conditionFieldOptions.filter(option=>option.field.startsWith('employee.')).map(option=>option.field)));
   else if (rule.employeeCondition!==undefined) throw new Error('员工筛选条件仅适用于员工范围');

@@ -1,4 +1,4 @@
-import { blankConditionGroup, compensationMetricOptions, type CalculationType, type CompensationRule, type HourlyItem, type Scope } from '../compensation-rules';
+import { blankConditionGroup, compensationMetricOptions, type CalculationType, type CompensationRule, type HourlyItem, type NewRuleBand, type Scope } from '../compensation-rules';
 export const scopeLabels:Record<Scope,string>={global:'全局规则',rooms:'直播间规则',employees:'员工规则'};
 export const calculationLabels:Record<CalculationType,string>={allowance:'补贴规则',premium:'保费系数规则',hourly:'时薪规则'};
 export const hourlyKindLabels:Record<HourlyItem['kind'],string>={metric:'统计指标加成',special:'特殊时段加成',guarantee:'条件保薪'};
@@ -6,6 +6,10 @@ export const compensationMetricLabel=(field:string)=>compensationMetricOptions.f
 export const numberValue=(v:string)=>v===''?NaN:Number(v);
 export const displayNumber=(v?:number)=>v!==undefined&&Number.isFinite(v)?v:'';
 export const uid=()=>crypto.randomUUID();
+export function editableHourlyBand(band:NewRuleBand):NewRuleBand {
+ if(band.keyType!=='exact')return {...band};
+ return {keyType:'range',min:band.exact,max:band.exact,includeMin:true,includeMax:true,rate:band.rate};
+}
 export function createCompensationRule(scope:Scope):CompensationRule {
  return {id:`compensation-${uid()}`,name:'',version:0,status:'草稿',definitionVersion:2,scope,roomIds:[],...(scope==='employees'?{employeeCondition:blankConditionGroup()}:{}),type:'allowance',allowance:{field:'nightSessions',amount:20}};
 }
@@ -25,6 +29,7 @@ export function withHourlyItems(rule:CompensationRule,items:HourlyItem[]):Compen
 }
 export function editableCompensationRule(source:CompensationRule):CompensationRule {
  const rule=structuredClone(source);
+ if(rule.hourly)rule.hourly.items=rule.hourly.items.map(item=>({...item,...(item.bands?{bands:item.bands.map(editableHourlyBand)}:{})}));
  if(rule.definitionVersion===2)return rule;
  rule.definitionVersion=2;
  if(rule.type==='premium'&&rule.premium&&!('items' in rule.premium))rule.premium={items:[{id:uid(),name:'正常保费',field:'regularPremium',coefficient:1},{id:uid(),name:'早班保费',field:'earlyPremium',coefficient:rule.premium.coefficient}]};

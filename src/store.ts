@@ -11,8 +11,9 @@ import { authenticatePassword, authenticateSso } from './auth';
 import type { DemoSession } from './auth';
 import { calculateDepartmentRules, migrateHourlyRules, validateDepartmentRule } from './payroll-rules';
 import type { DepartmentRule } from './payroll-rules';
-import { calculateCompensation, matchesCompensationRule, referenceDateForMonth, validateCompensationRule, validateCompensationRoomOwnership } from './compensation-rules';
+import { calculateCompensation, compensationRoomOwners, matchesCompensationRule, referenceDateForMonth, validateCompensationRule, validateCompensationRoomOwnership } from './compensation-rules';
 import type { CalculationType, CompensationResult, CompensationRule, Scope } from './compensation-rules';
+import {listRoomRuleSets,roomRuleSetId,validateRoomRuleSet,type RoomRuleSet} from './room-rule-sets';
 import type { AdvertisingProduct, LiveRoom } from './operations-domain';
 import { migrateOperationsState } from './operations-migration';
 import { applyDatasetCorrections, monthlyRowKey, prepareDetailCorrection, prepareMonthlyCorrection } from './dataset-corrections';
@@ -32,6 +33,7 @@ export interface CompensationTask {
  id:string; month:string; ruleId:string; ruleName:string; ruleVersion:number; scope:Scope; type:CalculationType;
  datasetVersion:number; datasetRevision:number; referenceDate:string;
  status:'待核算'|'已核算'|'已撤回'; rule:CompensationRule; employeeIds:string[]; rowKeys:string[]; created:string; withdrawnAt?:string;
+ roomRuleSet?:{id:string;version:number;ruleIds:string[];publicationId:string};
 }
 export interface PayrollSnapshot {
  records:LiveRecord[]; adHours:AdHourly[]; roomHours:RoomHourly[];
@@ -64,6 +66,7 @@ interface Hub {
  saveDepartmentRule:(rule:DepartmentRule)=>void; publishDepartmentRule:(id:string,month:string)=>void;
  withdrawPayrollTask:(id:string)=>void;
  saveCompensationRule:(rule:CompensationRule)=>void; deleteCompensationRule:(id:string)=>void; publishCompensationRule:(id:string,month:string)=>void; withdrawCompensationTask:(id:string)=>void;
+ saveRoomRuleSet:(ruleSet:RoomRuleSet)=>void; publishRoomRuleSet:(id:string,month:string)=>void; deleteRoomRuleSet:(id:string)=>void;
  runPayroll:()=>void; lockBatch:()=>void; publishBatch:()=>void; sync:()=>void; setPerspective:(value:'admin'|'employee')=>void;
 }
 const normalText = (value:string) => value.normalize('NFKC').trim();
@@ -138,6 +141,42 @@ const compensationParticipants = (s:Hub,rule:CompensationRule,rows:LiveMonthly[]
  if(rule.roomIds.some(id=>!validRoom(id,s.rooms,s.products))) throw new Error('规则直播间不存在或已停用');
  const matched=rows.filter(row=>matchesCompensationRule(rule,row,s.employees,s.rooms,s.month));
  return {employeeIds:[...new Set(matched.map(row=>row.employeeId))].sort(),rowKeys:matched.map(monthlyRowKey).sort()};
+};
+const storedRoomRuleSet = (s:Hub,id:string):RoomRuleSet => {
+ const ruleSet=listRoomRuleSets(s.compensationRules).find(item=>item.id===id);
+ if(ruleSet) return ruleSet;
+ if(s.compensationRules.some(rule=>rule.scope==='rooms' && roomRuleSetId(rule)===id && rule.deletedAt)) throw new Error('直播间规则集已删除');
+ throw new Error('直播间规则集不存在');
+};
+const roomRuleSetMembers = (s:Hub,id:string) => s.compensationRules.filter(rule=>rule.scope==='rooms' && roomRuleSetId(rule)===id);
+/** Include historical member IDs so legacy publications remain associated after conversion. */
+const taskBelongsToRoomRuleSet = (task:CompensationTask,id:string,memberIds:Set<string>):boolean => task.roomRuleSet?.id===id || (task.rule.scope==='rooms' && (roomRuleSetId(task.rule)===id || memberIds.has(task.ruleId)));
+const validateRoomRuleSetOwnership = (s:Hub,ruleSet:RoomRuleSet) => {
+ const owners=compensationRoomOwners(s.compensationRules,ruleSet.id);
+ for(const roomId of ruleSet.roomIds) {
+  const owner=owners.get(roomId);
+  if(owner) throw new Error(`直播间 ${roomId} 已被规则「${owner.name}」占用，请调整适用直播间`);
+  if(!validRoom(roomId,s.rooms,s.products)) throw new Error('请选择有效且启用的直播间');
+ }
+};
+/** Check the immutable publication, never the editable current rule set. */
+const validateRoomRuleSetTasks = (tasks:CompensationTask[]) => {
+ const groups=new Map<string,CompensationTask[]>();
+ for(const task of tasks) {
+  const membership=task.roomRuleSet;
+  if(!membership) {
+   if(task.rule.roomRuleSetId!==undefined) throw new Error('直播间规则集任务缺少冻结成员信息，请撤回重新发布');
+   continue;
+  }
+  if(typeof membership.id!=='string' || !membership.id.trim() || typeof membership.publicationId!=='string' || !membership.publicationId.trim() || !Number.isSafeInteger(membership.version) || membership.version<1 || !Array.isArray(membership.ruleIds) || !membership.ruleIds.length || membership.ruleIds.length>3 || membership.ruleIds.some(id=>typeof id!=='string'||!id.trim()) || new Set(membership.ruleIds).size!==membership.ruleIds.length || task.rule.scope!=='rooms' || task.rule.roomRuleSetId!==membership.id || task.ruleVersion!==membership.version) throw new Error('直播间规则集任务的成员或版本信息无效');
+  const group=groups.get(membership.id);
+  if(group) group.push(task); else groups.set(membership.id,[task]);
+ }
+ for(const [id,group] of groups) {
+  const frozen=group[0].roomRuleSet!;
+  if(!sameIdentities(frozen.ruleIds,group.map(task=>task.ruleId)) || group.some(task=>task.roomRuleSet!.version!==frozen.version || task.roomRuleSet!.publicationId!==frozen.publicationId || !sameIdentities(task.roomRuleSet!.ruleIds,frozen.ruleIds))) throw new Error('直播间规则集任务成员缺失或发布版本混用，请整组撤回重新发布');
+  validateRoomRuleSet({id,roomIds:group[0].rule.roomIds,rules:group.map(task=>task.rule)});
+ }
 };
 const freezePayrollSnapshot = (s:Hub,payrollTasks:PayrollTask[],compensationTasks:CompensationTask[]):PayrollSnapshot => structuredClone({
  records:s.liveRecords.filter(r=>r.date.startsWith(s.month+'-')),adHours:s.adHours.filter(r=>r.date.startsWith(s.month+'-')),roomHours:s.roomHours.filter(r=>r.date.startsWith(s.month+'-')),
@@ -384,6 +423,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  saveCompensationRule:rule=>{
   const s=get(),previous=s.compensationRules.find(item=>item.id===rule.id);
   if(previous?.deletedAt || rule.deletedAt) throw new Error('薪酬规则已删除，不能保存');
+  if(rule.roomRuleSetId!==undefined || previous?.roomRuleSetId!==undefined || s.compensationRules.some(item=>item.roomRuleSetId===rule.id)) throw new Error('直播间规则集须通过整组编辑保存');
   if(previous && previous.scope!==rule.scope) throw new Error('规则分类确定后不可修改，请在对应分类中新增规则');
   const saved:CompensationRule=structuredClone({...rule,name:normalText(rule.name),version:previous?previous.version+1:1,status:'草稿'});
   validateCompensationRule(saved);
@@ -395,6 +435,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const s=get(),rule=s.compensationRules.find(item=>item.id===id);
   if(!rule) throw new Error('薪酬规则不存在');
   if(rule.deletedAt) throw new Error('薪酬规则已删除');
+  if(rule.roomRuleSetId!==undefined) throw new Error('直播间规则集须整组删除');
   const pending=s.compensationTasks.filter(task=>task.ruleId===id && task.status==='待核算');
   for(const task of pending) requireOpenMonth(task.month,s.archivedMonths);
   const deletedAt=auditTime();
@@ -412,6 +453,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const rule=s.compensationRules.find(item=>item.id===id);
   if(!rule) throw new Error('薪酬规则不存在');
   if(rule.deletedAt) throw new Error('薪酬规则已删除，不能发布');
+  if(rule.roomRuleSetId!==undefined) throw new Error('直播间规则集须整组发布');
   validateCompensationRoomOwnership(rule,s.compensationRules);
   if(rule.scope==='rooms' && s.compensationTasks.some(task=>task.month===month && task.status==='待核算' && task.ruleId!==id && task.rule.scope==='rooms' && task.rule.roomIds.some(roomId=>rule.roomIds.includes(roomId)))) throw new Error('直播间仍有其他规则的待核算任务，请先撤回该任务再发布');
   if(s.compensationTasks.some(task=>task.ruleId===id && task.month===month && task.status!=='已撤回')) throw new Error('同一规则同月不能重复发布');
@@ -421,14 +463,78 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const task:CompensationTask={id:crypto.randomUUID(),month,ruleId:id,ruleName:published.name,ruleVersion:published.version,scope:published.scope,type:published.type,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,referenceDate,status:'待核算',rule:structuredClone(published),...participants,created:auditTime()};
   set({compensationRules:s.compensationRules.map(item=>item.id===id?published:item),compensationTasks:[...s.compensationTasks,task]});
  },
+ saveRoomRuleSet:ruleSet=>{
+  const s=get();
+  // Unsaved editor children start at version zero; stored versions and status are owned here.
+  validateRoomRuleSet({...ruleSet,rules:ruleSet.rules.map(rule=>({...rule,version:1,status:'草稿'}))});
+  const previous=roomRuleSetMembers(s,ruleSet.id),active=previous.filter(rule=>!rule.deletedAt);
+  if(previous.length && !active.length) throw new Error('直播间规则集已删除，不能保存');
+  if(s.compensationRules.some(rule=>rule.id===ruleSet.id && (rule.scope!=='rooms' || roomRuleSetId(rule)!==ruleSet.id))) throw new Error('规则集 ID 已被其他规则归属占用');
+  for(const rule of ruleSet.rules) {
+   const existing=s.compensationRules.find(item=>item.id===rule.id);
+   if(existing?.deletedAt) throw new Error('子规则已删除，不能重新保存');
+   if(existing && (existing.scope!=='rooms' || roomRuleSetId(existing)!==ruleSet.id)) throw new Error('子规则分类或规则集归属不可修改');
+   if(s.compensationRules.some(item=>item.roomRuleSetId===rule.id && item.roomRuleSetId!==ruleSet.id)) throw new Error('子规则 ID 已被其他规则集占用');
+  }
+  validateRoomRuleSetOwnership(s,ruleSet);
+  const version=Math.max(0,...previous.map(rule=>rule.version))+1;
+  const members=ruleSet.rules.map(rule=>structuredClone({...rule,name:normalText(rule.name),version,status:'草稿' as const,roomRuleSetId:ruleSet.id,roomIds:[...ruleSet.roomIds]}));
+  validateRoomRuleSet({...ruleSet,rules:members});
+  const memberIds=new Set(members.map(rule=>rule.id)),previousIds=new Set(previous.map(rule=>rule.id));
+  const removed=active.some(rule=>!memberIds.has(rule.id));
+  const pending=removed?s.compensationTasks.filter(task=>task.status==='待核算' && taskBelongsToRoomRuleSet(task,ruleSet.id,previousIds)):[];
+  for(const task of pending) requireOpenMonth(task.month,s.archivedMonths);
+  const at=auditTime(),pendingIds=new Set(pending.map(task=>task.id));
+  const updates=new Map(members.map(rule=>[rule.id,rule]));
+  const compensationRules=s.compensationRules.map(rule=>updates.get(rule.id)??(previousIds.has(rule.id) && !rule.deletedAt?{...rule,deletedAt:at}:rule));
+  compensationRules.push(...members.filter(rule=>!s.compensationRules.some(item=>item.id===rule.id)));
+  set({compensationRules,compensationTasks:s.compensationTasks.map(task=>pendingIds.has(task.id)?{...task,status:'已撤回' as const,withdrawnAt:at}:task)});
+ },
+ publishRoomRuleSet:(id,month)=>{
+  const s=get();requireOpenMonth(month,s.archivedMonths);
+  const referenceDate=referenceDateForMonth(month);
+  if(month!==s.month || s.dataset.month!==month) throw new Error('发布月份必须与当前运营数据集月份一致');
+  if(s.dataset.revision!==s.revision) throw new Error('来源或员工资料已变化，请重新统计运营数据集');
+  if(!s.dataset.published) throw new Error('请先刷新运营数据集');
+  const ruleSet=storedRoomRuleSet(s,id);validateRoomRuleSet(ruleSet);validateRoomRuleSetOwnership(s,ruleSet);
+  if(new Set(ruleSet.rules.map(rule=>rule.version)).size!==1) throw new Error('直播间规则集子规则版本不一致，请整组保存');
+  const memberIds=new Set(roomRuleSetMembers(s,id).map(rule=>rule.id));
+  if(s.compensationTasks.some(task=>task.month===month && task.status!=='已撤回' && taskBelongsToRoomRuleSet(task,id,memberIds))) throw new Error('同一直播间规则集同月不能重复发布');
+  if(s.compensationTasks.some(task=>task.month===month && task.status==='待核算' && task.rule.scope==='rooms' && task.rule.roomIds.some(roomId=>ruleSet.roomIds.includes(roomId)))) throw new Error('直播间仍有其他规则集的待核算任务，请先整组撤回该任务再发布');
+  const rows=activeCompensationRows(s),created=auditTime();
+  const roomRuleSet={id,version:ruleSet.rules[0].version,ruleIds:ruleSet.rules.map(rule=>rule.id),publicationId:crypto.randomUUID()};
+  const published=ruleSet.rules.map(rule=>structuredClone({...rule,roomRuleSetId:id,status:'已发布' as const}));
+  const tasks:CompensationTask[]=published.map(rule=>{
+   const participants=compensationParticipants(s,rule,rows);
+   if(!participants.employeeIds.length) throw new Error('规则集范围内没有参与工作员工，不能发布核算任务');
+   return {id:crypto.randomUUID(),month,ruleId:rule.id,ruleName:rule.name,ruleVersion:rule.version,scope:rule.scope,type:rule.type,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,referenceDate,status:'待核算',rule:structuredClone(rule),...participants,created,roomRuleSet:structuredClone(roomRuleSet)};
+  });
+  validateRoomRuleSetTasks(tasks);
+  const updates=new Map(published.map(rule=>[rule.id,rule]));
+  set({compensationRules:s.compensationRules.map(rule=>updates.get(rule.id)??rule),compensationTasks:[...s.compensationTasks,...tasks]});
+ },
+ deleteRoomRuleSet:id=>{
+  const s=get();storedRoomRuleSet(s,id);
+  const memberIds=new Set(roomRuleSetMembers(s,id).map(rule=>rule.id));
+  const pending=s.compensationTasks.filter(task=>task.status==='待核算' && taskBelongsToRoomRuleSet(task,id,memberIds));
+  for(const task of pending) requireOpenMonth(task.month,s.archivedMonths);
+  const deletedAt=auditTime(),pendingIds=new Set(pending.map(task=>task.id));
+  set({
+   compensationRules:s.compensationRules.map(rule=>memberIds.has(rule.id) && !rule.deletedAt?{...rule,deletedAt}:rule),
+   compensationTasks:s.compensationTasks.map(task=>pendingIds.has(task.id)?{...task,status:'已撤回' as const,withdrawnAt:deletedAt}:task),
+  });
+ },
  withdrawCompensationTask:id=>{
   const s=get(),task=s.compensationTasks.find(item=>item.id===id);
   if(!task) throw new Error('核算任务不存在');
   requireOpenMonth(task.month,s.archivedMonths);
   if(task.status!=='待核算') throw new Error('仅待核算任务可撤回');
-  const compensationTasks=s.compensationTasks.map(item=>item.id===id?{...item,status:'已撤回' as const,withdrawnAt:auditTime()}:item);
-  const hasOtherTask=compensationTasks.some(item=>item.ruleId===task.ruleId && item.ruleVersion===task.ruleVersion && item.status!=='已撤回');
-  const compensationRules=s.compensationRules.map(rule=>rule.id===task.ruleId && rule.version===task.ruleVersion && !hasOtherTask?{...rule,status:'草稿' as const}:rule);
+  const setId=task.roomRuleSet?.id??task.rule.roomRuleSetId;
+  const pending=setId?s.compensationTasks.filter(item=>item.month===task.month && item.status==='待核算' && (item.roomRuleSet?.id===setId || item.rule.roomRuleSetId===setId)):[task];
+  for(const item of pending) requireOpenMonth(item.month,s.archivedMonths);
+  const pendingIds=new Set(pending.map(item=>item.id)),withdrawnAt=auditTime();
+  const compensationTasks=s.compensationTasks.map(item=>pendingIds.has(item.id)?{...item,status:'已撤回' as const,withdrawnAt}:item);
+  const compensationRules=s.compensationRules.map(rule=>pending.some(item=>item.ruleId===rule.id && item.ruleVersion===rule.version) && !compensationTasks.some(item=>item.ruleId===rule.id && item.ruleVersion===rule.version && item.status!=='已撤回')?{...rule,status:'草稿' as const}:rule);
   set({compensationTasks,compensationRules});
  },
  runPayroll:()=>{
@@ -441,6 +547,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   if(newTasks.length) {
    const rows=activeCompensationRows(s),referenceDate=referenceDateForMonth(s.month);
    if(new Set(newTasks.map(task=>task.ruleId)).size!==newTasks.length) throw new Error('同月薪酬规则任务重复或版本冲突');
+   validateRoomRuleSetTasks(newTasks);
    for(const task of newTasks) {
     if(task.rule.id!==task.ruleId || task.rule.version!==task.ruleVersion || task.rule.status!=='已发布' || task.scope!==task.rule.scope || task.type!==task.rule.type || task.referenceDate!==referenceDate) throw new Error('核算任务规则版本或参考日期发生变化，请撤回重新发布');
     if(task.datasetVersion!==s.dataset.version || task.datasetRevision!==s.dataset.revision) throw new Error('发布数据集版本或来源修订发生变化，请撤回任务并重新发布');

@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import Rules from './Rules';
+import RoomRuleSets from './RoomRuleSets';
 import Payroll, { CompensationSalaryDetails } from './Payroll';
 import { calculateCompensation, type CompensationRule } from '../compensation-rules';
 import { useHub } from '../store';
@@ -19,6 +20,22 @@ it('provides scope categories with a single add action and no page-level explana
  for(const text of ['COMPENSATION RULES','来源与历史规则','规则核算月份','按适用范围配置补贴','补贴 → 系数 → 时薪']) expect(html).not.toContain(text);
  expect(html.indexOf('role="tablist"')).toBeLessThan(html.indexOf('compensation-category'));
  expect(html).toMatch(/<section class="compensation-category" aria-label="全局规则">[\s\S]*?新增薪酬规则/);
+});
+it('renders one room-set card for all three calculation types with shared actions',()=>{
+ const before=useHub.getState(),room=before.rooms[0];
+ const common={version:1,status:'草稿' as const,scope:'rooms' as const,roomIds:[room.id],roomRuleSetId:'three-types'};
+ const rules:CompensationRule[]=[
+  {...common,id:'a',name:'直播间夜班补贴',type:'allowance',allowance:{field:'nightSessions',amount:30}},
+  {...common,id:'p',name:'直播间保费系数',type:'premium',premium:{items:[{id:'p1',name:'正常保费',field:'regularPremium',coefficient:1}]}},
+  {...common,id:'h',name:'直播间时薪',type:'hourly',hourly:{duration:'hours',items:[{id:'h1',name:'时段加成',kind:'special',rate:60}],formula:{mode:'additions',itemIds:['h1']}}}
+ ];
+ try{
+  useHub.setState({compensationRules:rules});
+  const html=renderToStaticMarkup(<RoomRuleSets/>);
+  for(const text of ['新增直播间规则集','3 类规则','直播间夜班补贴','直播间保费系数','直播间时薪',room.name])expect(html).toContain(text);
+  for(const label of ['查看详情','编辑规则集','>发布<'])expect(html.split(label)).toHaveLength(2);
+  expect(html).not.toContain('新增薪酬规则');
+ }finally{useHub.setState(before,true)}
 });
 it('renders frozen merged row calculations including premium transformation and grouped hourly amounts',()=>{
  const s=useHub.getInitialState(),row={...s.monthlyRows[0],hours:10,nightHours:2,earlyHours:2,premium:1000,nightPremium:0,earlyPremium:200,spend:1000,nightSessions:2,earlySessions:1},scope={version:1,status:'已发布' as const,scope:'global' as const,roomIds:[]};

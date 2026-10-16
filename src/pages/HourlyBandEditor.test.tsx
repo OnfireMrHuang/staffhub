@@ -32,3 +32,13 @@ it('expands only the new row and keeps read-only detail compact without editing 
  const readOnly=renderToStaticMarkup(<HourlyBandEditor {...props} readOnly initialExpandedIndex={1}/>);
  expect(readOnly).toContain('40 元/小时');expect(readOnly).not.toContain('<input');expect(readOnly).not.toContain('<button');
 });
+
+it('offers only range matching and represents old exact values as equivalent closed ranges while editing',()=>{
+ const band:NewRuleBand={keyType:'exact',exact:1.6,includeMin:true,includeMax:true,rate:60};
+ const html=renderToStaticMarkup(<HourlyBandEditor field="roi" bands={[band]} initialExpandedIndex={0} onChange={()=>{}}/>);
+ expect(html).not.toContain('value="exact"');expect(html).not.toContain('精确数值');
+ expect(html).toContain('档位1下限');expect(html).toContain('档位1上限');
+ expect(html.match(/value="1.6"/g)).toHaveLength(2);
+ expect(html).toContain('value="11" selected');
+ expect(band.keyType).toBe('exact');
+});
