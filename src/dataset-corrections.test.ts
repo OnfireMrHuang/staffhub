@@ -166,6 +166,21 @@ it.each([-1,1.5,NaN,Infinity,'2',null,undefined,Number.MAX_SAFE_INTEGER+1])('拒
  expect(()=>editMonthly({waitingSalaryDays})).toThrow(/等待薪资天数/);
 });
 
+it('过去3个月的平均时薪可填写小数及零值，留空未定义，刷新不推算或覆盖人工值',()=>{
+ expect(monthly().past3MonthsAvgHourlyRate).toBeUndefined();
+ expect(editMonthly({}).past3MonthsAvgHourlyRate).toBeUndefined();
+ expect(editMonthly({past3MonthsAvgHourlyRate:0}).past3MonthsAvgHourlyRate).toBe(0);
+ const edited=editMonthly({past3MonthsAvgHourlyRate:62.75});
+ expect(editMonthly({spend:600},edited).past3MonthsAvgHourlyRate).toBe(62.75);
+ expect(apply([],[monthOverride(edited)]).monthly.find(r=>r.employeeId===edited.employeeId)?.past3MonthsAvgHourlyRate).toBe(62.75);
+ const cleared=editMonthly({past3MonthsAvgHourlyRate:undefined},edited);
+ expect(cleared.past3MonthsAvgHourlyRate).toBeUndefined();
+ expect(apply([],[monthOverride(cleared)]).monthly.find(r=>r.employeeId===edited.employeeId)?.past3MonthsAvgHourlyRate).toBeUndefined();
+});
+it.each([-1,NaN,Infinity,'62.75',null])('拒绝无效过去3个月的平均时薪 %s',past3MonthsAvgHourlyRate=>{
+ expect(()=>editMonthly({past3MonthsAvgHourlyRate})).toThrow(/过去3个月的平均时薪/);
+});
+
 it('修改整段时段后月度保费拆分保持未知，可通过月度已核验基础值修复',()=>{
  const corrected=editDetail({start:'04:00',end:'10:00'});
  const result=apply([override(corrected)]),row=result.monthly[0];

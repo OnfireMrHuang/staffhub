@@ -101,28 +101,45 @@ it('月度跨月碰撞及目标已有记录缺小时来源整笔拒绝，不写�
 });
 
 it('刷新、持久化重载保存覆盖和历史，持久化版本保持兼容',async()=>{
- saveDetail({spend:200});saveMonthly({spend:350,premium:700,waitingSalaryDays:12});
- useHub.getState().cleanDataset();expect(hostRow()).toMatchObject({spend:350,roi:2,waitingSalaryDays:12});
+ saveDetail({spend:200});saveMonthly({spend:350,premium:700,waitingSalaryDays:12,past3MonthsAvgHourlyRate:62.75});
+ useHub.getState().cleanDataset();expect(hostRow()).toMatchObject({spend:350,roi:2,waitingSalaryDays:12,past3MonthsAvgHourlyRate:62.75});
  const saved=structuredClone(useHub.persist.getOptions().partialize!(useHub.getState()));
  useHub.persist.setOptions({storage:{getItem:()=>({state:saved,version:1}),setItem:()=>{},removeItem:()=>{}}});
  useHub.getState().reset();await useHub.persist.rehydrate();useHub.getState().cleanDataset();
- expect(hostRow()).toMatchObject({spend:350,roi:2,waitingSalaryDays:12});expect(useHub.getState().detailOverrides).toHaveLength(1);expect(useHub.getState().correctionAudit).toHaveLength(2);
+ expect(hostRow()).toMatchObject({spend:350,roi:2,waitingSalaryDays:12,past3MonthsAvgHourlyRate:62.75});expect(useHub.getState().detailOverrides).toHaveLength(1);expect(useHub.getState().correctionAudit).toHaveLength(2);
+ expect((useHub.getState().correctionAudit[1].before as LiveMonthly).past3MonthsAvgHourlyRate).toBeUndefined();
+ expect(useHub.getState().correctionAudit[1]).toMatchObject({after:{past3MonthsAvgHourlyRate:62.75}});
  expect(useHub.persist.getOptions().name).toBe('meimei-staffhub-department-rules-v1');expect(useHub.persist.getOptions().version).toBe(1);
+});
+
+it('清空平均时薪恢复未定义，经过JSON持久化和刷新后仍不补零且保留修订前值',async()=>{
+ saveMonthly({past3MonthsAvgHourlyRate:62.75});
+ saveMonthly({past3MonthsAvgHourlyRate:undefined},'历史口径待复核');
+ expect(hostRow().past3MonthsAvgHourlyRate).toBeUndefined();
+ const audit=useHub.getState().correctionAudit.at(-1)!;
+ expect(audit.before).toMatchObject({past3MonthsAvgHourlyRate:62.75});
+ expect((audit.after as LiveMonthly).past3MonthsAvgHourlyRate).toBeUndefined();
+ const saved=JSON.parse(JSON.stringify(useHub.persist.getOptions().partialize!(useHub.getState())));
+ useHub.persist.setOptions({storage:{getItem:()=>({state:saved,version:1}),setItem:()=>{},removeItem:()=>{}}});
+ useHub.getState().reset();await useHub.persist.rehydrate();useHub.getState().cleanDataset();
+ expect(hostRow().past3MonthsAvgHourlyRate).toBeUndefined();
+ expect(useHub.getState().correctionAudit.at(-1)?.reason).toBe('历史口径待复核');
 });
 
 it('人工部门归属用于发布和核算，工资快照冻结修订及原因且不改基础档案',()=>{
  const employees=useHub.getState().employees.map(e=>e.id==='host'?{...e,departmentId:'ads'}:e);
- useHub.setState({employees});useHub.getState().cleanDataset();saveMonthly({departmentId:'live',hours:4,spend:400,premium:800,waitingSalaryDays:7});
+ useHub.setState({employees});useHub.getState().cleanDataset();saveMonthly({departmentId:'live',hours:4,spend:400,premium:800,waitingSalaryDays:7,past3MonthsAvgHourlyRate:75.5});
  useHub.getState().publishDepartmentRule('rule','2026-10');
  expect(useHub.getState().payrollTasks[0].employeeIds).toContain('host');
  useHub.getState().runPayroll();archiveCurrentMonth();
  const batch=useHub.getState().batch!;
  expect(batch.salaries.find(s=>s.employeeId==='host')).toMatchObject({total:200,departmentName:'直播部'});
- expect(batch.snapshot.monthly.find(r=>r.employeeId==='host')).toMatchObject({hours:4,waitingSalaryDays:7});
+ expect(batch.snapshot.monthly.find(r=>r.employeeId==='host')).toMatchObject({hours:4,waitingSalaryDays:7,past3MonthsAvgHourlyRate:75.5});
  expect(batch.snapshot.monthlyOverrides).toHaveLength(1);expect(batch.snapshot.correctionAudit?.[0].reason).toBe('核对月度');
  expect(useHub.getState().employees.find(e=>e.id==='host')?.departmentId).toBe('ads');
  expect(()=>saveMonthly({hours:5})).toThrow('归档');
  expect(()=>saveMonthly({waitingSalaryDays:8})).toThrow('归档');
+ expect(()=>saveMonthly({past3MonthsAvgHourlyRate:80})).toThrow('归档');
  expect(useHub.getState().batch!.snapshot).toEqual(batch.snapshot);
 });
 

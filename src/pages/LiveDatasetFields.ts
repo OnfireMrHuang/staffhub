@@ -20,6 +20,7 @@ export const monthlyFields: {key:keyof LiveMonthly;label:string}[]=[
  {key:'adCost',label:'AD成本'},{key:'policyCost',label:'保单成本'},
  {key:'roiRank',label:'ROI排名'},{key:'spendRank',label:'消耗排名'},
  {key:'waitingSalaryDays',label:'等待薪资天数'},
+ {key:'past3MonthsAvgHourlyRate',label:'过去3个月的平均时薪'},
 ];
 export const monthlyColumns=[...monthlyDimensions,...monthlyFields];
 export const pendingMonthlyFields=new Set<keyof LiveMonthly>(['adCost','policyCost']);

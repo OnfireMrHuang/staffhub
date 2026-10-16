@@ -1,4 +1,4 @@
-import { blankConditionGroup, compensationMetricOptions, type CalculationType, type CompensationRule, type HourlyItem, type NewRuleBand, type Scope } from '../compensation-rules';
+import { blankConditionGroup, compensationMetricOptions, guaranteeRateFieldOptions, type CalculationType, type CompensationRule, type HourlyItem, type NewRuleBand, type Scope } from '../compensation-rules';
 import { normalizeCurrentCompensationRule } from '../compensation-rule-migration';
 export const scopeLabels:Record<Scope,string>={global:'全局规则',rooms:'直播间规则',employees:'员工规则（历史）'};
 export const calculationLabels:Record<CalculationType,string>={allowance:'补贴规则',premium:'保费系数规则',hourly:'时薪规则'};
@@ -6,7 +6,13 @@ export const hourlyKindLabels:Record<HourlyItem['kind'],string>={metric:'统计�
 export const compensationMetricLabel=(field:string)=>compensationMetricOptions.find(o=>o.field===field)?.label||field;
 export const numberValue=(v:string)=>v===''?NaN:Number(v);
 export const displayNumber=(v?:number)=>v!==undefined&&Number.isFinite(v)?v:'';
+export const guaranteeRateFieldLabel=(field:string)=>guaranteeRateFieldOptions.find(option=>option.field===field)?.label||field;
+export const hourlyItemRateLabel=(item?:HourlyItem)=>item?.rateField!==undefined?`${guaranteeRateFieldLabel(item.rateField)}（元 / 小时）`:`${displayNumber(item?.rate)} 元 / 小时`;
 export const uid=()=>crypto.randomUUID();
+export function withGuaranteeRateSource(item:HourlyItem,source:'fixed'|'field'):HourlyItem {
+ const {rate,rateField,...base}=item;
+ return source==='field'?{...base,rateField:rateField??'past3MonthsAvgHourlyRate'}:{...base,rate:rate??0};
+}
 export function editableHourlyBand(band:NewRuleBand):NewRuleBand {
  return {...band};
 }
@@ -54,7 +60,7 @@ export function compensationExpression(rule:CompensationRule):string {
  if(rule.type==='allowance')return `${compensationMetricLabel(rule.allowance?.field||'nightSessions')} × ${rule.allowance?.amount??0} 元`;
  if(rule.type==='premium')return rule.premium&&'items' in rule.premium?rule.premium.items.map(item=>item.name||'未命名系数项').join(' + ')||'尚未添加系数项':`正常保费 + 早班保费 × ${(rule.premium as {coefficient:number}|undefined)?.coefficient??1}`;
  const hourly=rule.hourly;if(!hourly)return '尚未配置时薪';
- if(rule.definitionVersion===2&&hourly.kind&&hourly.kind!=='metric')return `${displayNumber(hourly.items[0]?.rate)} 元 / 小时 × ${compensationMetricLabel(hourly.duration)}`;
+ if(rule.definitionVersion===2&&hourly.kind&&hourly.kind!=='metric')return `${hourlyItemRateLabel(hourly.items[0])} × ${compensationMetricLabel(hourly.duration)}`;
  const ids=hourly.formula.mode==='guarantee'?[hourly.formula.itemId]:hourly.formula.itemIds;
  const selected=ids.map(id=>hourly.items.find(item=>item.id===id)?.name||'未选项目').join(' + ')||'未选项目';
  return `${ids.length>1?`(${selected})`:selected} × ${compensationMetricLabel(hourly.duration)}`;

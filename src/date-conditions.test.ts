@@ -97,3 +97,85 @@ describe('typed date conditions',()=>{
   expect(calculate(condition,{joined:'2026-07-30'}).rows[0].total).toBe(0);
  });
 });
+
+describe('recent natural months including the calculation month',()=>{
+ const recent=(field='employee.joined',months=3):Condition=>({kind:'condition',field,operator:'withinCalendarMonths',value:months});
+ it.each(['employee.joined','room.openedOn'])('checks %s against complete calendar months instead of rolling dates',field=>{
+  for(const [date,matched] of [['2026-07-31',false],['2026-08-01',true],['2026-08-31',true],['2026-10-31',true],['2026-11-01',false]] as const){
+   const result=calculate(group(recent(field)),field==='employee.joined'?{joined:date}:{openedOn:date});
+   expect(result.rows[0].total,`${field}: ${date}`).toBe(matched?600:0);
+   expect(result.rows[0].conditions[0].values).toMatchObject({[field]:date,'calendarWindowStart(3)':'2026-08-01','context.referenceDate':'2026-10-31'});
+  }
+ });
+ it.each([
+  ['2026-01',3,'2025-11-01',true],['2026-01',3,'2025-10-31',false],
+  ['2026-01',1,'2025-12-31',false],['2026-01',1,'2026-01-01',true],
+  ['2026-10',4,'2026-07-01',true],['2026-10',4,'2026-06-30',false],
+  ['2024-02',3,'2023-12-01',true],['2024-02',1,'2024-02-29',true],
+  ['2024-02',1,'2024-03-01',false],
+ ] as const)('uses month %s, N=%s, and date %s correctly',(month,n,joined,matched)=>{
+  expect(calculate(group(recent('employee.joined',n)),{joined,month,row:{month,year:Number(month.slice(0,4))}}).rows[0].total).toBe(matched?600:0);
+ });
+ it.each([0,-1,1.5,NaN,Infinity,undefined,'3',Number.MAX_SAFE_INTEGER+1])('rejects invalid calendar-month count %j',value=>{
+  expect(()=>validateCompensationRule(rule(group({...recent(),value:value as number})))).toThrow(/正整数/);
+ });
+ it.each([
+  {field:'monthly.month'},{field:'employee.nonCompeteSigned'},
+  {transform:'month'},{compareField:'context.referenceDate'},
+  {adjustment:{operator:'add',value:3}},{compareAdjustment:{operator:'subtract',value:3}},
+ ])('rejects combining calendar predicates with incompatible operands: %j',patch=>{
+  expect(()=>validateCompensationRule(rule(group({...recent(),...patch} as Condition)))).toThrow(/月份条件/);
+ });
+ it('keeps a readable frozen condition and can combine newcomer predicates with OR',()=>{
+  const condition:ConditionGroup={kind:'group',operator:'or',children:[recent(),recent('room.openedOn',2)]};
+  const definition=rule(condition),before=structuredClone(definition);
+  const result=calculateCompensation([monthly()],[{...employee,joined:'2026-01-01'}],[{id:'live',name:'直播部',active:true}],[{...room,openedOn:'2026-09-01'}],[definition],'2026-10');
+  expect(result.rows[0].total).toBe(600);
+  expect(result.rows[0].conditions[0].condition).toEqual(condition);
+  expect(result.rows[0].conditions[0].values).toMatchObject({'calendarWindowStart(3)':'2026-08-01','calendarWindowStart(2)':'2026-09-01'});
+  expect(definition).toEqual(before);
+ });
+ it('still rejects a missing or invalid source date and unreasonable date-window overflow',()=>{
+  expect(()=>calculate(group(recent('room.openedOn')),{openedOn:undefined})).toThrow(/日期/);
+  expect(()=>calculate(group(recent()),{joined:'2026-02-29'})).toThrow(/日期/);
+  expect(()=>calculate(group(recent('employee.joined',Number.MAX_SAFE_INTEGER)))).toThrow(/日期范围/);
+ });
+});
+
+describe('dates before the past N month window',()=>{
+ const before=(field='employee.joined',months=3):Condition=>({kind:'condition',field,operator:'beforeCalendarMonths',value:months});
+ it.each(['employee.joined','room.openedOn'])('uses an exclusive cutoff for %s and never matches future dates',field=>{
+  for(const [date,matched] of [['2026-07-31',true],['2026-08-01',false],['2026-10-31',false],['2026-11-01',false]] as const) {
+   const result=calculate(group(before(field)),field==='employee.joined'?{joined:date}:{openedOn:date});
+   expect(result.rows[0].total,`${field}: ${date}`).toBe(matched?600:0);
+   expect(result.rows[0].conditions[0]).toMatchObject({matched,condition:group(before(field)),values:{[field]:date,'calendarWindowStart(3)':'2026-08-01','context.referenceDate':'2026-10-31'}});
+  }
+ });
+ it.each([
+  ['2026-01',3,'2025-10-31',true],['2026-01',3,'2025-11-01',false],
+  ['2026-01',1,'2025-12-31',true],['2026-01',1,'2026-01-01',false],
+  ['2026-10',4,'2026-06-30',true],['2026-10',4,'2026-07-01',false],
+  ['2024-03',1,'2024-02-29',true],['2024-03',1,'2024-03-01',false],
+ ] as const)('uses %s N=%s cutoff for %s',(month,n,joined,matched)=>{
+  expect(calculate(group(before('employee.joined',n)),{joined,month,row:{month,year:Number(month.slice(0,4))}}).rows[0].total).toBe(matched?600:0);
+ });
+ it('validates month counts and rejects incompatible operands',()=>{
+  for(const value of [0,-1,1.5,NaN,Infinity,undefined,'3']) expect(()=>validateCompensationRule(rule(group({...before(),value:value as number})))).toThrow(/正整数/);
+  for(const patch of [{field:'monthly.month'},{transform:'month'},{compareField:'context.referenceDate'},{adjustment:{operator:'add',value:3}},{compareAdjustment:{operator:'subtract',value:1}}]) {
+   expect(()=>validateCompensationRule(rule(group({...before(),...patch} as Condition)))).toThrow(/月份条件/);
+  }
+ });
+ it('rejects missing dates and windows outside the supported calendar',()=>{
+  expect(()=>calculate(group(before('room.openedOn')),{openedOn:undefined})).toThrow(/日期/);
+  expect(()=>calculate(group(before()),{joined:'2026-02-29'})).toThrow(/日期/);
+  expect(()=>calculate(group(before('employee.joined',Number.MAX_SAFE_INTEGER)))).toThrow(/日期范围/);
+ });
+ it('combines inside and before predicates without rewriting frozen definitions',()=>{
+  const condition=group(before(),{kind:'condition',field:'room.openedOn',operator:'withinCalendarMonths',value:3});
+  const definition=rule(condition),snapshot=structuredClone(definition);
+  const result=calculateCompensation([monthly()],[{...employee,joined:'2026-07-31'}],[{id:'live',name:'直播部',active:true}],[{...room,openedOn:'2026-08-01'}],[definition],'2026-10');
+  expect(result.rows[0].total).toBe(600);
+  expect(result.rows[0].conditions[0].condition).toEqual(condition);
+  expect(definition).toEqual(snapshot);
+ });
+});

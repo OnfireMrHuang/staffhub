@@ -6,13 +6,14 @@ import type { LiveRoom } from './operations-domain';
 export type Scope = 'global' | 'rooms' | 'employees';
 export type CalculationType = 'allowance' | 'premium' | 'hourly';
 export type NewDuration = 'hours' | 'nightHours' | 'earlyHours' | 'regularHours';
-export type CompensationMetric = NewDuration | 'spend' | 'premium' | 'regularPremium' | 'nightPremium' | 'earlyPremium' | 'regularSpend' | 'adCost' | 'policyCost' | 'spendRank' | 'roi' | 'hourlySpend' | 'nightSpend' | 'earlySpend' | 'roiRank' | 'sessions' | 'nightSessions' | 'earlySessions' | 'waitingSalaryDays';
+export type CompensationMetric = NewDuration | 'spend' | 'premium' | 'regularPremium' | 'nightPremium' | 'earlyPremium' | 'regularSpend' | 'adCost' | 'policyCost' | 'spendRank' | 'roi' | 'hourlySpend' | 'nightSpend' | 'earlySpend' | 'roiRank' | 'sessions' | 'nightSessions' | 'earlySessions' | 'waitingSalaryDays' | 'past3MonthsAvgHourlyRate';
 export type DateTransform = 'year'|'month';
-/** Literal values/withinMonths remain readable for frozen historical conditions. New date conditions compare typed fields. */
-export type Condition = {kind:'condition'; field:string; operator:'eq'|'ne'|'gt'|'gte'|'lt'|'lte'|'withinMonths'; transform?:DateTransform; compareField?:string; value?:string|number|boolean};
+export type NumericAdjustment = {operator:'add'|'subtract';value:number};
+/** withinMonths retains historical rolling dates; calendar predicates use N months including the calculation month. */
+export type Condition = {kind:'condition'; field:string; operator:'eq'|'ne'|'gt'|'gte'|'lt'|'lte'|'withinMonths'|'withinCalendarMonths'|'beforeCalendarMonths'; transform?:DateTransform; adjustment?:NumericAdjustment; compareField?:string; compareAdjustment?:NumericAdjustment; value?:string|number|boolean};
 export type ConditionGroup = {kind:'group'; operator:'and'|'or'; children:(Condition|ConditionGroup)[]};
 export interface NewRuleBand extends Band {keyType:'exact'|'range'|'related'; relatedField?:CompensationMetric}
-export interface HourlyItem {id:string; name:string; kind:'metric'|'special'|'guarantee'; field?:string; bands?:NewRuleBand[]; rate?:number; condition?:ConditionGroup}
+export interface HourlyItem {id:string; name:string; kind:'metric'|'special'|'guarantee'; field?:string; bands?:NewRuleBand[]; rate?:number; rateField?:string; condition?:ConditionGroup}
 export type CountMetric = 'nightSessions'|'earlySessions'|'waitingSalaryDays';
 export type PremiumField = 'premium'|'nightPremium'|'earlyPremium'|'regularPremium';
 export interface PremiumItem {id:string;name:string;field:PremiumField;coefficient:number}
@@ -53,7 +54,12 @@ export const durationOptions: (FieldOption & {field:NewDuration})[] = [
 ];
 export const compensationMetricOptions: (FieldOption & {field:CompensationMetric})[] = [
   ...durationOptions,
-  ...([['spend','总消耗'],['premium','有效总保费'],['regularPremium','正常保费'],['nightPremium','夜班保费'],['regularSpend','正常消耗'],['adCost','AD成本（待定义）'],['policyCost','保单成本（待定义）'],['spendRank','消耗排名'],['earlyPremium','早班保费'],['roi','有效 ROI'],['hourlySpend','时耗'],['nightSpend','夜班消耗'],['earlySpend','早班消耗'],['roiRank','有效 ROI 排名'],['sessions','直播场次'],['nightSessions','夜班场次'],['earlySessions','早班场次'],['waitingSalaryDays','等待薪资天数']] as [CompensationMetric,string][]).map(([field,label]) => ({field,label,type:'number' as const})),
+  ...([['spend','总消耗'],['premium','有效总保费'],['regularPremium','正常保费'],['nightPremium','夜班保费'],['regularSpend','正常消耗'],['adCost','AD成本（待定义）'],['policyCost','保单成本（待定义）'],['spendRank','消耗排名'],['earlyPremium','早班保费'],['roi','有效 ROI'],['hourlySpend','时耗'],['nightSpend','夜班消耗'],['earlySpend','早班消耗'],['roiRank','有效 ROI 排名'],['sessions','直播场次'],['nightSessions','夜班场次'],['earlySessions','早班场次'],['waitingSalaryDays','等待薪资天数'],['past3MonthsAvgHourlyRate','过去3个月的平均时薪']] as [CompensationMetric,string][]).map(([field,label]) => ({field,label,type:'number' as const})),
+];
+/** Guarantee variables read the original monthly table, before premium coefficients and ROI reranking. */
+export const guaranteeRateFieldOptions:FieldOption[]=[
+  {field:'year',label:'年份',type:'number'},{field:'month',label:'月份',type:'number'},
+  ...compensationMetricOptions.filter(option=>option.field!=='sessions').map(option=>({...option,label:option.field==='premium'?'总保费':option.field==='roi'?'ROI':option.field==='roiRank'?'ROI排名':option.label})),
 ];
 export const allowanceCountOptions=compensationMetricOptions.filter(option=>['nightSessions','earlySessions','waitingSalaryDays'].includes(option.field));
 export const premiumFieldOptions:FieldOption[]=[{field:'premium',label:'总保费',type:'number'},{field:'nightPremium',label:'夜班保费',type:'number'},{field:'earlyPremium',label:'早班保费',type:'number'},{field:'regularPremium',label:'正常保费',type:'number'}];
@@ -123,6 +129,13 @@ export function referenceDateForMonth(month:string):string {
   first.setUTCMonth(m); first.setUTCDate(0);
   return first.toISOString().slice(0,10);
 }
+function validateNumericAdjustment(adjustment:unknown,resultType:FieldOption['type']):void {
+  if(adjustment===undefined) return;
+  if(resultType!=='number') throw new Error('加减运算仅支持数值字段或时间函数处理后的数值');
+  if(!adjustment || typeof adjustment!=='object' || Array.isArray(adjustment)) throw new Error('数值运算配置无效');
+  const config=adjustment as Record<string,unknown>;
+  if(Object.keys(config).some(key=>!['operator','value'].includes(key)) || !['add','subtract'].includes(config.operator as string) || !nonnegative(config.value)) throw new Error('数值运算须选择加或减，并填写有限非负数值');
+}
 function validateCondition(group:ConditionGroup,allowedFields?:Set<string>,seen=new Set<unknown>(),depth=0):void {
   if (!group || group.kind!=='group' || !['and','or'].includes(group.operator) || !Array.isArray(group.children) || !group.children.length || depth>30 || seen.has(group)) throw new Error('条件必须为非空有效 AND/OR 条件组');
   seen.add(group);
@@ -131,9 +144,16 @@ function validateCondition(group:ConditionGroup,allowedFields?:Set<string>,seen=
     if (!child || child.kind!=='condition') throw new Error('条件类型无效');
     const option=conditionFieldOptions.find(option=>option.field===child.field);
     if (!option || (allowedFields && !allowedFields.has(child.field))) throw new Error('条件字段无效或不适用于此规则');
-    if (!['eq','ne','gt','gte','lt','lte','withinMonths'].includes(child.operator)) throw new Error('条件运算符无效');
+    if (!['eq','ne','gt','gte','lt','lte','withinMonths','withinCalendarMonths','beforeCalendarMonths'].includes(child.operator)) throw new Error('条件运算符无效');
+    if(child.operator==='withinCalendarMonths' || child.operator==='beforeCalendarMonths') {
+      if(option.type!=='date' || child.transform!==undefined || child.adjustment!==undefined || child.compareField!==undefined || child.compareAdjustment!==undefined) throw new Error('月份条件仅支持原始日期字段，不组合时间函数、加减或比较字段');
+      if(!Number.isSafeInteger(child.value) || typeof child.value!=='number' || child.value<1) throw new Error('过去月数必须为正整数，且包含核算月');
+      continue;
+    }
     const resultType=conditionResultType(child);
     if(!resultType) throw new Error('时间函数无效或不适用于此字段');
+    validateNumericAdjustment(child.adjustment,resultType);
+    validateNumericAdjustment(child.compareAdjustment,resultType);
     if(child.compareField!==undefined) {
       const comparison=conditionFieldOptions.find(option=>option.field===child.compareField);
       if(!comparison || (allowedFields && !allowedFields.has(comparison.field))) throw new Error('比较字段无效或不适用于此规则');
@@ -206,10 +226,11 @@ export function validateCompensationRule(rule:CompensationRule):void {
     for (const item of config.items) {
       if (!item || typeof item.id!=='string'||!item.id.trim() || typeof item.name!=='string'||!item.name.trim() || !['metric','special','guarantee'].includes(item.kind)) throw new Error('时薪项目类型或名称无效');
       if (item.condition) validateCondition(item.condition);
+      if(item.rateField!==undefined && (item.kind!=='guarantee' || !guaranteeRateFieldOptions.some(option=>option.field===item.rateField) || Object.hasOwn(item,'rate'))) throw new Error('保薪变量须选择月度汇总数值字段，且与固定保薪值互斥');
       if (item.kind==='metric') {
         if (!isMetric(item.field) || item.rate!==undefined) throw new Error('指标项目必须选择有效指标');
         validateBands(item);
-      } else if (!nonnegative(item.rate) || item.field!==undefined || (item.bands!==undefined && item.bands.length)) throw new Error('特殊加成和保薪项目必须填写有限非负时薪');
+      } else if ((item.rateField===undefined && !nonnegative(item.rate)) || item.field!==undefined || (item.bands!==undefined && item.bands.length)) throw new Error('特殊加成和保薪项目必须填写有限非负时薪或选择保薪变量');
     }
     if(rule.definitionVersion===2) {
       if(!config.kind || !['metric','special','guarantee'].includes(config.kind) || config.items.some(item=>item.kind!==config.kind)) throw new Error('时薪项目须使用所选计算类型');
@@ -244,6 +265,12 @@ function metricValue(row:LiveMonthly,field:CompensationMetric):number {
   if(field==='waitingSalaryDays' && !Number.isSafeInteger(valid)) throw new Error('等待薪资天数必须为非负安全整数');
   return valid;
 }
+function guaranteeRateValue(row:LiveMonthly,field:string):number {
+  const option=guaranteeRateFieldOptions.find(option=>option.field===field)!;
+  if(field==='month') referenceDateForMonth(row.month);
+  const value=field==='month'?Number(row.month.slice(5,7)):(row as unknown as Record<string,unknown>)[field];
+  return validNumber(value,`保薪变量「${option.label}」`);
+}
 function contextFor(row:LiveMonthly,employees:Employee[],rooms:LiveRoom[],month:string):Context {
   const employee=employees.find(employee=>employee.id===row.employeeId),room=rooms.find(room=>room.id===row.roomId);
   if (!employee || !room) throw new Error('月度数据员工或直播间归属缺失');
@@ -264,14 +291,35 @@ function conditionValue(field:string,context:Context):string|number|boolean {
   if (typeof value!==option.type || (option.type==='number'&&!nonnegative(value))) throw new Error(`${option.label} 数据缺失或类型无效`);
   return value as string|number|boolean;
 }
+function adjustedConditionValue(value:string|number|boolean,key:string,adjustment:NumericAdjustment|undefined,values:Record<string,string|number|boolean>):string|number|boolean {
+  if(adjustment===undefined) return value;
+  if(typeof value!=='number' || !Number.isFinite(value)) throw new Error('数值运算来源缺失或类型无效');
+  const result=adjustment.operator==='add'?value+adjustment.value:value-adjustment.value;
+  if(!Number.isFinite(result)) throw new Error('条件数值运算溢出或非有限数值');
+  values[`${adjustment.operator}(${key},${adjustment.value})`]=result;
+  return result;
+}
 function evaluateCondition(group:ConditionGroup,context:Context,values:Record<string,string|number|boolean>):boolean {
   const results=group.children.map(child=>{
     if (child.kind==='group') return evaluateCondition(child,context,values);
     let value=conditionValue(child.field,context);values[child.field]=value;
+    let valueKey=child.field;
     if(child.transform!==undefined) {
       const date=new Date(dateNumber(value,child.field));
       value=child.transform==='year'?date.getUTCFullYear():date.getUTCMonth()+1;
-      values[`${child.transform}(${child.field})`]=value;
+      valueKey=`${child.transform}(${child.field})`;
+      values[valueKey]=value;
+    }
+    value=adjustedConditionValue(value,valueKey,child.adjustment,values);
+    if(child.operator==='withinCalendarMonths' || child.operator==='beforeCalendarMonths') {
+      const reference=new Date(`${context.referenceDate}T00:00:00Z`);
+      reference.setUTCDate(1);
+      reference.setUTCMonth(reference.getUTCMonth()-(child.value as number)+1);
+      if(!Number.isFinite(reference.getTime()) || reference.getUTCFullYear()<1) throw new Error('过去月数超出有效日期范围');
+      values[`calendarWindowStart(${child.value})`]=reference.toISOString().slice(0,10);
+      values['context.referenceDate']=context.referenceDate;
+      const date=dateNumber(value,child.field);
+      return child.operator==='beforeCalendarMonths' ? date<reference.getTime() : date>=reference.getTime() && date<=dateNumber(context.referenceDate,'核算基准');
     }
     if (child.operator==='withinMonths') {
       values['context.referenceDate']=context.referenceDate;
@@ -283,8 +331,11 @@ function evaluateCondition(group:ConditionGroup,context:Context,values:Record<st
       const date=dateNumber(value,child.field);
       return date>=reference.getTime() && date<=dateNumber(context.referenceDate,'核算基准');
     }
-    const comparison=child.compareField!==undefined?conditionValue(child.compareField,context):child.value!;
+    let comparison=child.compareField!==undefined?conditionValue(child.compareField,context):child.value!;
     if(child.compareField!==undefined) values[child.compareField]=comparison;
+    const comparisonKey=child.compareField??`literal(${child.value})`;
+    if(child.compareField===undefined && child.compareAdjustment!==undefined) values[comparisonKey]=comparison;
+    comparison=adjustedConditionValue(comparison,comparisonKey,child.compareAdjustment,values);
     // Every condition is evaluated, including alternatives, so required missing inputs never hide behind short circuiting.
     if (child.operator==='eq') return value===comparison;
     if (child.operator==='ne') return value!==comparison;
@@ -333,7 +384,7 @@ export function calculateCompensation(rows:LiveMonthly[],employees:Employee[],de
     if (context.room.productId!==row.productId) throw new Error('月度数据产品与直播间归属不一致');
     for (const field of ['hours','spend','premium'] as const) validNumber(row[field],field);
     for (const option of compensationMetricOptions) {
-      if (['roi','hourlySpend','roiRank'].includes(option.field)) continue;
+      if (['roi','hourlySpend','roiRank','past3MonthsAvgHourlyRate'].includes(option.field)) continue;
       const value=(row as EnrichedMonthly)[option.field];
       if (value!==undefined) {
         validNumber(value,option.label);
@@ -433,6 +484,8 @@ export function calculateCompensation(rows:LiveMonthly[],employees:Employee[],de
           if (!matching.length) throw new Error(`${context.employee.name} ${item.name} 未命中时薪区间`);
           if (matching.length>1) throw new Error(`${context.employee.name} ${item.name} 时薪区间多次命中，无法唯一匹配`);
           calculation.field=bandField(item,matching[0]);calculation.value=metricValue(context.row,calculation.field as CompensationMetric);calculation.rate=matching[0].rate;
+        } else if (matched && item.kind==='guarantee' && item.rateField!==undefined) {
+          calculation.field=item.rateField;calculation.value=guaranteeRateValue(trace.statistics!,item.rateField);calculation.rate=calculation.value;
         } else if (matched) calculation.rate=item.rate!;
         items.push(calculation);group.items.push(calculation);
       }

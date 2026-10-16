@@ -35,56 +35,56 @@ const result = (rows = [row()]): CompensationResult => ({
   salaries: [{ employeeId: 'e1', employeeName: '冻结姓名', departmentName: '直播部', fixed: 0, commission: 1520, total: 1520, details: [] }],
 });
 
-const statisticLabels = ['员工ID', '员工名称', '部门ID', '部门名称', '入职日期', '是否签约竞业协议', '产品ID', '产品名称', '直播间ID', '直播间名称', '直播间开播时间', '年份', '月份', '总直播时长', '夜班直播时长', '早班直播时长', '正常直播时长', '夜班场次', '早班场次', '总消耗', '夜班消耗', '早班消耗', '正常消耗', '总保费', '夜班保费', '早班保费', '正常保费', 'ROI', '时耗', 'AD成本', '保单成本', 'ROI排名', '消耗排名', '等待薪资天数'];
+const statisticLabels = ['员工ID', '员工名称', '部门ID', '部门名称', '入职日期', '是否签约竞业协议', '产品ID', '产品名称', '直播间ID', '直播间名称', '直播间开播时间', '年份', '月份', '总直播时长', '夜班直播时长', '早班直播时长', '正常直播时长', '夜班场次', '早班场次', '总消耗', '夜班消耗', '早班消耗', '正常消耗', '总保费', '夜班保费', '早班保费', '正常保费', 'ROI', '时耗', 'AD成本', '保单成本', 'ROI排名', '消耗排名', '等待薪资天数', '过去3个月的平均时薪'];
 const scopeLabels = ['补贴金额', '保底金额', '加成金额', '系数加成后保费'];
 
 describe('layered payroll workbook', () => {
-  it('shows current results with 45 columns and only global and room rule groups', () => {
+  it('shows current results with 46 columns and only global and room rule groups', () => {
     const current = result();
     current.rows[0].scopes!.employees = { allowance: 0, guarantee: 0, additions: 0, premium: 0, matchedRuleIds: [] };
     const layout = payrollSettlementLayout(current);
-    expect(layout.columns).toHaveLength(45);
+    expect(layout.columns).toHaveLength(46);
     expect(layout.groups.map(group => group.key)).toEqual(['statistics', 'global', 'rooms', 'result']);
     expect(payrollSettlementColumns).toEqual(layout.columns);
     expect(payrollSettlementGroups).toEqual(layout.groups);
-    expect(payrollSettlementCells(current.rows[0], layout)).toHaveLength(45);
+    expect(payrollSettlementCells(current.rows[0], layout)).toHaveLength(46);
     const sheet = buildPayrollSettlementWorkbook(current).Sheets['主播月度薪酬核算表'];
-    expect(sheet['!ref']).toBe('A1:AS3');
+    expect(sheet['!ref']).toBe('A1:AT3');
     expect(XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 })[1]).toEqual([...statisticLabels, ...scopeLabels, ...scopeLabels, '总计补贴', '系数加成后总计保费', '总计月薪']);
   });
 
-  it('includes all 49 computed columns under five groups for historical employee-scope evidence', () => {
+  it('includes all 50 computed columns under five groups for historical employee-scope evidence', () => {
     const workbook = buildPayrollSettlementWorkbook(result());
     expect(workbook.SheetNames).toEqual(['主播月度薪酬核算表', '员工工资汇总']);
     const sheet = workbook.Sheets['主播月度薪酬核算表'];
     const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 });
-    expect(sheet['!ref']).toBe('A1:AW3');
+    expect(sheet['!ref']).toBe('A1:AX3');
     expect(sheet['!merges']).toEqual([
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 33 } },
-      { s: { r: 0, c: 34 }, e: { r: 0, c: 37 } },
-      { s: { r: 0, c: 38 }, e: { r: 0, c: 41 } },
-      { s: { r: 0, c: 42 }, e: { r: 0, c: 45 } },
-      { s: { r: 0, c: 46 }, e: { r: 0, c: 48 } },
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 34 } },
+      { s: { r: 0, c: 35 }, e: { r: 0, c: 38 } },
+      { s: { r: 0, c: 39 }, e: { r: 0, c: 42 } },
+      { s: { r: 0, c: 43 }, e: { r: 0, c: 46 } },
+      { s: { r: 0, c: 47 }, e: { r: 0, c: 49 } },
     ]);
-    expect([rows[0][0], rows[0][34], rows[0][38], rows[0][42], rows[0][46]])
+    expect([rows[0][0], rows[0][35], rows[0][39], rows[0][43], rows[0][47]])
       .toEqual(['直播数据统计', '全局核算指标', '直播间核算指标', '员工核算指标（历史）', '结果指标']);
     expect(rows[1]).toEqual([...statisticLabels, ...scopeLabels, ...scopeLabels, ...scopeLabels, '总计补贴', '系数加成后总计保费', '总计月薪']);
     const layout = payrollSettlementLayout(result());
-    expect(layout.groups.map(group => group.count)).toEqual([34, 4, 4, 4, 3]);
+    expect(layout.groups.map(group => group.count)).toEqual([35, 4, 4, 4, 3]);
     expect(layout.columns.map(column => column.label)).toEqual(rows[1]);
-    expect(new Set(layout.columns.map(column => column.key)).size).toBe(49);
+    expect(new Set(layout.columns.map(column => column.key)).size).toBe(50);
   });
 
   it('keeps zero-amount historical employee matches and rule traces visible', () => {
     const input = result();
     input.rows[0].scopes!.employees = { allowance: 0, guarantee: 0, additions: 0, premium: 0, matchedRuleIds: ['old-rule'] };
-    expect(payrollSettlementLayout(input).columns).toHaveLength(49);
+    expect(payrollSettlementLayout(input).columns).toHaveLength(50);
     input.rows[0].scopes = undefined;
     input.rows[0].ruleCalculations = [{ ruleId: 'old-rule', scope: 'employees', type: 'allowance', amount: 0 }];
-    expect(payrollSettlementLayout(input).columns).toHaveLength(49);
+    expect(payrollSettlementLayout(input).columns).toHaveLength(50);
     input.rows[0].ruleCalculations = [];
     input.rows[0].durationGroups = [{ scope: 'employees', duration: 'hours', hours: 0, guarantee: 0, additions: 0, rate: 0, amount: 0, items: [] }];
-    expect(payrollSettlementLayout(input).columns).toHaveLength(49);
+    expect(payrollSettlementLayout(input).columns).toHaveLength(50);
   });
 
   it('keeps frozen source values distinct from effective settlement values and exports numeric cells', () => {
@@ -97,12 +97,13 @@ describe('layered payroll workbook', () => {
     expect(values.slice(0, 14)).toEqual(['e1', '冻结姓名', 'live', '直播部', '2025-01-02', '否', 'p1', '产品', 'r1', '一号直播间', '2025-02-03', 2026, '10', 10]);
     expect(values.slice(23, 33)).toEqual([1000, 100, 900, 0, 10, 10, '待定义', '待定义', 2, 1]);
     expect(values[33]).toBe('未定义');
-    expect(values.slice(34)).toEqual([20, 1000, 200, 1000, 40, 1200, 400, 1500, 60, 1400, 600, 1800, 120, 1800, 1520]);
-    for (const column of [11, 13, 23, 26, 27, 31, 34, 47, 48]) {
+    expect(values[34]).toBe('未定义');
+    expect(values.slice(35)).toEqual([20, 1000, 200, 1000, 40, 1200, 400, 1500, 60, 1400, 600, 1800, 120, 1800, 1520]);
+    for (const column of [11, 13, 23, 26, 27, 31, 35, 48, 49]) {
       expect(sheet[XLSX.utils.encode_cell({ r: 2, c: column })].t).toBe('n');
     }
     expect(sheet.AB3.z).toBe('0.0000');
-    expect(sheet.AW3.z).toBe('0.00');
+    expect(sheet.AX3.z).toBe('0.00');
     expect(values).toEqual(payrollSettlementCells(input.rows[0], payrollSettlementLayout(input)));
     expect(input).toEqual(before);
   });
@@ -114,8 +115,9 @@ describe('layered payroll workbook', () => {
     expect(values[26]).toBe(0);
     expect(values[27]).toBe('未定义');
     expect(values[33]).toBe('未定义');
-    expect(values.slice(34, 42)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
-    expect(values.slice(42)).toEqual([120, 1800, 1520]);
+    expect(values[34]).toBe('未定义');
+    expect(values.slice(35, 43)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(values.slice(43)).toEqual([120, 1800, 1520]);
   });
 
   it('exports manually entered waiting salary days as integer numbers while leaving missing values undefined', () => {
@@ -140,6 +142,24 @@ describe('layered payroll workbook', () => {
     expect(values.slice(0, 14)).toEqual(['e1', '冻结姓名', '未定义', '未定义', '未定义', '未定义', '未定义', '未定义', 'r1', '一号直播间', '未定义', '未定义', '10', '未定义']);
     expect(values.slice(23, 33)).toEqual(['未定义', '未定义', '未定义', '未定义', '未定义', '未定义', '待定义', '待定义', '未定义', '未定义']);
     expect(values[33]).toBe('未定义');
+    expect(values[34]).toBe('未定义');
+  });
+
+  it('exports frozen past-three-month hourly rates as numbers, never percentages or inferred values', () => {
+    const input = result([
+      row(),
+      row({ roomId: 'r2', statistics: { ...statistics, past3MonthsAvgHourlyRate: 0 } }),
+      row({ roomId: 'r3', statistics: { ...statistics, past3MonthsAvgHourlyRate: 65.25 } }),
+    ]);
+    const before = structuredClone(input);
+    const workbook = buildPayrollSettlementWorkbook(input);
+    const exported = XLSX.read(XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }), { type: 'array', cellNF: true });
+    const sheet = exported.Sheets['主播月度薪酬核算表'];
+    expect(sheet.AI2.v).toBe('过去3个月的平均时薪');
+    expect(sheet.AI3).toMatchObject({ t: 's', v: '未定义' });
+    expect(sheet.AI4).toMatchObject({ t: 'n', v: 0, z: '0.00' });
+    expect(sheet.AI5).toMatchObject({ t: 'n', v: 65.25, z: '0.00' });
+    expect(input).toEqual(before);
   });
 
   it('uses employee salary totals once per employee and derives each month from frozen rows', () => {
@@ -158,7 +178,7 @@ describe('layered payroll workbook', () => {
 
   it('retains both worksheet structures when no settlement rows exist', () => {
     const workbook = buildPayrollSettlementWorkbook({ settlementVersion: 2, rows: [], salaries: [], referenceDate: '2026-10-31' });
-    expect(workbook.Sheets['主播月度薪酬核算表']['!ref']).toBe('A1:AS2');
+    expect(workbook.Sheets['主播月度薪酬核算表']['!ref']).toBe('A1:AT2');
     expect(workbook.Sheets['员工工资汇总']['!ref']).toBe('A1:E1');
   });
 });

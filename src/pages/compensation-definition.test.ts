@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {compensationExpression,createCompensationRule,editableCompensationRule,withHourlyItems,withHourlyKind,withType,withHourlyBandKeyType} from './compensation-definition';
+import {compensationExpression,createCompensationRule,editableCompensationRule,withHourlyItems,withHourlyKind,withType,withHourlyBandKeyType,withGuaranteeRateSource} from './compensation-definition';
 import {validateCompensationRule,validateBands,type HourlyItem,type NewRuleBand} from '../compensation-rules';
 it('keeps the automatic formula in sync when metric items are renamed, added, reordered or deleted',()=>{
  let rule=withType(createCompensationRule('global'),'hourly');
@@ -51,4 +51,30 @@ it('removes incompatible band values when switching exact, range and related mod
  const nextRelated=withHourlyBandKeyType(exact,'related','roiRank');
  expect(nextRelated.exact).toBeUndefined();expect(nextRelated.relatedField).toBeDefined();expect(nextRelated.relatedField).not.toBe('roiRank');
  for(const band of [exact,range,nextRelated])expect(()=>validateBands({id:'rank',name:'排名',kind:'metric',field:'roiRank',bands:[band]})).not.toThrow();
+});
+
+it('switches guarantee rate sources without retaining hidden fixed rates or fields',()=>{
+ const fixed:HourlyItem={id:'guarantee',name:'新人保薪',kind:'guarantee',rate:60,condition:{kind:'group',operator:'and',children:[]}};
+ const field=withGuaranteeRateSource(fixed,'field');
+ expect(field.rateField).toBe('past3MonthsAvgHourlyRate');
+ expect(field).not.toHaveProperty('rate');
+ expect(fixed.rate).toBe(60);
+ const nextFixed=withGuaranteeRateSource(field,'fixed');
+ expect(nextFixed.rate).toBe(0);
+ expect(nextFixed).not.toHaveProperty('rateField');
+ expect(field.condition).toEqual(fixed.condition);
+});
+
+it('preserves a selected guarantee field in editable copies and includes it in formula summaries',()=>{
+ let rule=withHourlyKind(withType(createCompensationRule('global'),'hourly'),'guarantee');
+ rule.hourly!.items=[withGuaranteeRateSource(rule.hourly!.items[0],'field')];
+ const expression=compensationExpression(rule);
+ expect(expression).toContain('平均时薪');
+ expect(expression).toContain('总直播时长');
+ expect(expression).not.toContain('undefined');
+ const draft=editableCompensationRule(rule);
+ expect(draft.hourly!.items[0].rateField).toBe('past3MonthsAvgHourlyRate');
+ expect(draft.hourly!.items[0]).not.toHaveProperty('rate');
+ draft.hourly!.items[0].rateField='roi';
+ expect(rule.hourly!.items[0].rateField).toBe('past3MonthsAvgHourlyRate');
 });
