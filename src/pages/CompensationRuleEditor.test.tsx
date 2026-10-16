@@ -19,7 +19,7 @@ it('exposes selectable count metrics and named premium items while keeping emplo
  expect(p).not.toContain('早班场次条件');
 });
 it('offers band editing with three exclusive hourly calculation modes',()=>{
- const bands=renderToStaticMarkup(<HourlyBandEditor field="roi" bands={[{keyType:'range',min:0,includeMin:true,includeMax:false,rate:20}]} onChange={()=>{}}/>);
+ const bands=renderToStaticMarkup(<HourlyBandEditor field="roi" bands={[{keyType:'range',min:0,includeMin:true,includeMax:false,rate:20}]} initialExpandedIndex={0} onChange={()=>{}}/>);
  for(const text of ['精确数值','数值范围','关联指标范围','留空不限制','新增档位']) expect(bands).toContain(text);
  const rule=withType(createCompensationRule('global'),'hourly');
  const html=renderToStaticMarkup(<CompensationRuleForm rule={rule} rooms={[]} onChange={()=>{}}/>);

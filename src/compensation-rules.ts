@@ -127,7 +127,7 @@ function contains(value:number,band:NewRuleBand):boolean {
   return band.keyType==='exact' ? value===band.exact : (band.min===undefined || (band.includeMin?value>=band.min:value>band.min)) && (band.max===undefined || (band.includeMax?value<=band.max:value<band.max));
 }
 const bandField = (item:HourlyItem,band:NewRuleBand):CompensationMetric => band.keyType==='related'?band.relatedField!:item.field as CompensationMetric;
-function validateBands(item:HourlyItem):void {
+export function validateBands(item:HourlyItem):void {
   if (!Array.isArray(item.bands) || !item.bands.length) throw new Error('指标时薪枚举不能为空');
   for (const band of item.bands) {
     if (!band || !['exact','range','related'].includes(band.keyType) || !nonnegative(band.rate) || [band.min,band.max,band.exact].some(v=>v!==undefined&&!nonnegative(v)) || typeof band.includeMin!=='boolean' || typeof band.includeMax!=='boolean') throw new Error('档位类型、数值或边界无效');
