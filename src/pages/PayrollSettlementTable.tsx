@@ -12,7 +12,7 @@ export default function PayrollSettlementTable({ result, search = '' }: { result
   <div className="table-scroll settlement-scroll" role="region" aria-label="主播核算明细，可横向滚动" tabIndex={0}>
    <table className="settlement-table" aria-label="主播月度薪酬核算表">
     <thead>
-     <tr>{payrollSettlementGroups.map(group => <th key={group.key} scope="colgroup" colSpan={group.count} className={`settlement-${group.key}`}>{group.label}</th>)}</tr>
+     <tr>{payrollSettlementGroups.map(group => <th key={group.key} scope="colgroup" colSpan={group.count} className={`settlement-${group.key}`}><span className="settlement-group-label">{group.label}</span></th>)}</tr>
      <tr>{payrollSettlementColumns.map(column => <th key={column.key} scope="col" className={`settlement-${column.group}`} data-column={column.key}>{column.label}</th>)}</tr>
     </thead>
     <tbody>{rows.map(row => <tr key={`${row.employeeId}-${row.roomId}-${row.month}`}>

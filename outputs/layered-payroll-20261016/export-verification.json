@@ -1,0 +1,40 @@
+{
+  "sheet1": {
+    "pane": null,
+    "merges": [],
+    "errors": []
+  },
+  "sheet2": {
+    "pane": {
+      "xSplit": "2",
+      "ySplit": "6",
+      "topLeftCell": "C7",
+      "activePane": "bottomRight",
+      "state": "frozen"
+    },
+    "merges": [
+      "A5:AG5",
+      "AH5:AK5",
+      "AL5:AO5",
+      "AP5:AS5",
+      "AT5:AV5"
+    ],
+    "errors": []
+  },
+  "sheet3": {
+    "pane": {
+      "xSplit": "2",
+      "ySplit": "6",
+      "topLeftCell": "C7",
+      "activePane": "bottomRight",
+      "state": "frozen"
+    },
+    "merges": [],
+    "errors": []
+  },
+  "totalCell": {
+    "formula": "SUM(F7:F9)",
+    "cachedValue": "18215"
+  },
+  "fileBytes": 18265
+}

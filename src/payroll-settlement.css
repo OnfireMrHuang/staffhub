@@ -2,7 +2,8 @@
 .settlement-table{min-width:5600px;width:max-content;border-collapse:separate;border-spacing:0;font-size:12px}
 .settlement-table th,.settlement-table td{min-width:112px;padding:12px 15px;white-space:nowrap;border-right:1px solid #dce5e155}
 .settlement-table thead th{position:sticky;z-index:3;text-align:center;font-weight:600}
-.settlement-table thead tr:first-child th{top:0;height:43px;font-size:13px;letter-spacing:.02em;border-bottom:1px solid #c7d7ce}
+.settlement-table thead tr:first-child th{top:0;height:43px;text-align:left;font-size:13px;letter-spacing:.02em;border-bottom:1px solid #c7d7ce}
+.settlement-table .settlement-group-label{position:sticky;left:16px;display:inline-block;font:inherit;color:inherit;margin-left:0}
 .settlement-table thead tr:nth-child(2) th{top:43px;height:43px;font-size:11px}
 .settlement-table .settlement-statistics{--settlement-fill:#f7f9fa;--settlement-heading:#e8eef1;--settlement-ink:#48606c}
 .settlement-table .settlement-global,.settlement-scope-global{--settlement-fill:#f0f8f3;--settlement-heading:#dceee2;--settlement-ink:#2e6546}

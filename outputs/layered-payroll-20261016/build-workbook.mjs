@@ -154,8 +154,6 @@ note(summary, 'A15', '先按员工和直播间核算，再把该员工各房间�
 summary.getRange('A16:I16').values = [['员工名称', '直播间', '三类保底最大值', '三类加成合计', '总补贴', '总计月薪', '有效总保费', '有效ROI', '同房主播排名']];
 header(summary, 'A16:I16');
 summary.getRange('A16:I16').format.rowHeight = 40;
-summary.getRange('A16:I16').format.horizontalAlignment = 'center';
-summary.getRange('A11:I13').format.rowHeight = 12;
 for (const row of result.rows) {
   const sr = sourceIndex.get(rowKey(row)), r = summaryIndex.get(rowKey(row));
   summary.getRange(`A${r}:B${r}`).values = [[row.employeeName, row.roomName]];
@@ -179,6 +177,8 @@ for (const [col, width] of Object.entries({ A: 13, B: 23, C: 17, D: 16, E: 18, F
 summary.getRange('C7:I20').format.horizontalAlignment = 'right';
 summary.getRange('A7:I20').format.rowHeight = 28;
 summary.getRange('A16:I16').format.rowHeight = 40;
+summary.getRange('A16:I16').format.horizontalAlignment = 'center';
+summary.getRange('A11:I13').format.rowHeight = 12;
 
 // This fixture uses legacy normal + early × coefficient premium rules.
 // Scope matching is the immutable exported run; scalar arithmetic and the metric
@@ -295,7 +295,7 @@ for (const [sheetName, range, name] of [
   ['逐规则计算', 'A5:L20', 'rules-first.png'],
   ['逐规则计算', 'A43:L57', 'rules-last.png'],
   ['逐规则计算', 'L5:P20', 'rules-settings.png'],
-]) {
+].filter(([, , name]) => !process.env.RENDER_ONLY || name === process.env.RENDER_ONLY)) {
   const image = await wb.render({ sheetName, range, scale: 1.5, format: 'png' });
   await fs.writeFile(path.join(outputDir, name), new Uint8Array(await image.arrayBuffer()));
 }

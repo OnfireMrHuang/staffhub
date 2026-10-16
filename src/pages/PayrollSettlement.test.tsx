@@ -96,6 +96,7 @@ it('explains v2 settlement by scoped amounts, rule amounts, adjusted ROI, and th
  expect(html).toContain('系数后 ROI');
  expect(html).toContain('1.2500');
  expect(html).toContain('逐规则金额');
+ expect(html).toContain('采用最高保底');
  expect(html).toContain('基础保底');
  expect(html).toContain('¥900.00');
  expect(html).toContain('¥500.00');
@@ -141,6 +142,7 @@ it('renders item-based premium expressions and each allowance count field from t
  const html = renderToStaticMarkup(<CompensationSalaryDetails salary={salary} result={expanded} />);
  expect(html).toContain('总保费权重：总保费 ¥1,000.00 × 1.0000 = ¥1,000.00');
  expect(html).toContain('早班加权项：早班保费 ¥200.00 × 2.0000 = ¥400.00');
+ expect(html).toContain('采用最高保费');
  expect(html).toContain('早班场次 1 次 × ¥40.00 / 次');
  expect(html).toContain('夜班场次 2 次 × ¥30.00 / 次');
 });

@@ -27,8 +27,8 @@
 
 ## Tasks
 
-- [ ] 引擎：先新增 src/compensation-settlement.test.ts 并确认失败；扩展 src/compensation-rules.ts 结果字段和分层计算，运行新旧规则测试。
-- [ ] 页面和导出：新增独立分组表格/明细组件、两行表头 XLSX 构建，接入 src/pages/Payroll.tsx，验证表头、金额和历史回退。
-- [ ] Store：发布参与人仅主播，整月导入所有有效主播行，冻结新结果，验证参与人和快照。
-- [ ] 示例和说明：提供固定示例、可重算月薪表、规格和交互流程，验证示例金额与引擎一致。
-- [ ] 整体验证：npm test、npm run build、页面实测与独立审查；修复发现的问题并记录证据。
+- [x] 引擎：先新增 src/compensation-settlement.test.ts 并确认失败；扩展 src/compensation-rules.ts 结果字段和分层计算，运行新旧规则测试。
+- [x] 页面和导出：新增独立分组表格/明细组件、两行表头 XLSX 构建，接入 src/pages/Payroll.tsx，验证表头、金额和历史回退。
+- [x] Store：发布参与人仅主播，整月导入所有有效主播行，冻结新结果，验证参与人和快照。
+- [x] 示例和说明：提供固定示例、可重算月薪表、规格和交互流程，验证示例金额与引擎一致。
+- [x] 整体验证：npm test、npm run build、页面实测与独立审查；修复发现的问题并记录证据。
