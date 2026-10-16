@@ -31,6 +31,18 @@ describe('merged compensation',()=>{
   expect(result.rows.map(r=>[r.premium.after,r.premium.rank,r.total])).toEqual([[1400,1,800],[1200,2,200]]);
   const roi=hourly('roi',[{id:'roi',name:'ROI',kind:'metric',field:'roi',bands:[band({min:11,rate:99})]}]);expect(calculate([boost,roi]).rows[0].total).toBe(990);
  });
+ it('matches exact ROI ranks including ties and rejects duplicate or overlapping exact bands',()=>{
+  const exact=(rank:number,rate:number):NewRuleBand=>({keyType:'exact',exact:rank,includeMin:true,includeMax:true,rate});
+  const rankRule=hourly('ranks',[{id:'rank',name:'排名时薪',kind:'metric',field:'roiRank',bands:[exact(1,80),exact(2,60),exact(3,40)]}]);
+  rankRule.definitionVersion=2;rankRule.hourly!.kind='metric';
+  const inputs=[row(),row({employeeId:'e2'}),row({employeeId:'e3',premium:800})];
+  const result=calculate([rankRule],inputs,[employee,{...employee,id:'e2',name:'乙'},{...employee,id:'e3',name:'丙'}]);
+  expect(result.rows.map(trace=>[trace.premium.rank,trace.durationGroups[0].items[0].rate,trace.total])).toEqual([[1,80,800],[1,80,800],[3,40,400]]);
+  for(const bands of [[exact(1,80),exact(1,60)],[exact(1,80),band({min:1,max:3,rate:60})]]){
+   const invalid=structuredClone(rankRule);invalid.hourly!.items[0].bands=bands;
+   expect(()=>validateCompensationRule(invalid)).toThrow(/重叠/);
+  }
+ });
  it('uses calendar month inclusive dates with clamped days and excludes future dates',()=>{
   const scoped=rule({scope:'employees',employeeCondition:{kind:'group',operator:'or',children:[condition('employee.nonCompeteSigned',false),condition('employee.joined',3,'withinMonths')]}});
   expect(matchesCompensationRule(scoped,row(),[employee],[room],'2026-10')).toBe(true);

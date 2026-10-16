@@ -8,8 +8,12 @@ export const numberValue=(v:string)=>v===''?NaN:Number(v);
 export const displayNumber=(v?:number)=>v!==undefined&&Number.isFinite(v)?v:'';
 export const uid=()=>crypto.randomUUID();
 export function editableHourlyBand(band:NewRuleBand):NewRuleBand {
- if(band.keyType!=='exact')return {...band};
- return {keyType:'range',min:band.exact,max:band.exact,includeMin:true,includeMax:true,rate:band.rate};
+ return {...band};
+}
+export function withHourlyBandKeyType(band:NewRuleBand,keyType:NewRuleBand['keyType'],field:string):NewRuleBand {
+ const base={keyType,includeMin:true,includeMax:false,rate:band.rate};
+ if(keyType==='exact')return base;
+ return {...base,min:0,...(keyType==='related'?{relatedField:compensationMetricOptions.find(option=>option.field!==field)?.field}:{})};
 }
 export function createCompensationRule(scope:Scope):CompensationRule {
  return {id:`compensation-${uid()}`,name:'',version:0,status:'草稿',definitionVersion:2,scope:scope==='employees'?'global':scope,roomIds:[],type:'allowance',allowance:{field:'nightSessions',amount:20}};

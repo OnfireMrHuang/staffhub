@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
-import {compensationExpression,createCompensationRule,editableCompensationRule,withHourlyItems,withHourlyKind,withType} from './compensation-definition';
-import {validateCompensationRule,type HourlyItem} from '../compensation-rules';
+import {compensationExpression,createCompensationRule,editableCompensationRule,withHourlyItems,withHourlyKind,withType,withHourlyBandKeyType} from './compensation-definition';
+import {validateCompensationRule,validateBands,type HourlyItem,type NewRuleBand} from '../compensation-rules';
 it('keeps the automatic formula in sync when metric items are renamed, added, reordered or deleted',()=>{
  let rule=withType(createCompensationRule('global'),'hourly');
  const a:HourlyItem={id:'a',name:'ROI',kind:'metric',field:'roi',bands:[{keyType:'range',min:0,includeMin:true,includeMax:false,rate:20}]},b={...a,id:'b',name:'时耗',field:'hourlySpend'};
@@ -31,11 +31,24 @@ it('removes legacy addition conditions from the editable template without alteri
  expect(()=>validateCompensationRule(draft)).not.toThrow();
 });
 
-it('converts exact bands to equal inclusive bounds only in the editable copy, including v2 rules',()=>{
- let source=withType(createCompensationRule('global'),'hourly');source.name='原档位';source.version=1;
- source=withHourlyItems(source,[{id:'metric',name:'ROI',kind:'metric',field:'roi',bands:[{keyType:'exact',exact:1.6,includeMin:false,includeMax:false,rate:60}]}]);
+it('preserves exact rank matching and existing closed ranges in an editable copy',()=>{
+ let source=withType(createCompensationRule('global'),'hourly');source.name='排名时薪';source.version=1;
+ source=withHourlyItems(source,[{id:'metric',name:'ROI 排名',kind:'metric',field:'roiRank',bands:[{keyType:'exact',exact:1,includeMin:false,includeMax:false,rate:80},{keyType:'range',min:3,max:3,includeMin:true,includeMax:true,rate:40}]}]);
  const draft=editableCompensationRule(source);
- expect(draft.hourly!.items[0].bands).toEqual([{keyType:'range',min:1.6,max:1.6,includeMin:true,includeMax:true,rate:60}]);
- expect(source.hourly!.items[0].bands![0].keyType).toBe('exact');
+ expect(draft.hourly!.items[0].bands).toEqual([{keyType:'exact',exact:1,includeMin:false,includeMax:false,rate:80},{keyType:'range',min:3,max:3,includeMin:true,includeMax:true,rate:40}]);
+ draft.hourly!.items[0].bands![0].exact=2;
+ expect(source.hourly!.items[0].bands![0].exact).toBe(1);
  expect(()=>validateCompensationRule(draft)).not.toThrow();
+});
+
+it('removes incompatible band values when switching exact, range and related modes',()=>{
+ const related:NewRuleBand={keyType:'related',relatedField:'spend',min:100,max:500,includeMin:false,includeMax:true,rate:80};
+ const exact=withHourlyBandKeyType(related,'exact','roiRank');
+ expect(exact.keyType).toBe('exact');expect(exact.min).toBeUndefined();expect(exact.max).toBeUndefined();expect(exact.relatedField).toBeUndefined();expect(exact.rate).toBe(80);
+ exact.exact=1;
+ const range=withHourlyBandKeyType(exact,'range','roiRank');
+ expect(range.exact).toBeUndefined();expect(range.relatedField).toBeUndefined();expect(range.min).toBe(0);
+ const nextRelated=withHourlyBandKeyType(exact,'related','roiRank');
+ expect(nextRelated.exact).toBeUndefined();expect(nextRelated.relatedField).toBeDefined();expect(nextRelated.relatedField).not.toBe('roiRank');
+ for(const band of [exact,range,nextRelated])expect(()=>validateBands({id:'rank',name:'排名',kind:'metric',field:'roiRank',bands:[band]})).not.toThrow();
 });

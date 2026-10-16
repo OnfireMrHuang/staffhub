@@ -33,12 +33,11 @@ it('expands only the new row and keeps read-only detail compact without editing 
  expect(readOnly).toContain('40 元/小时');expect(readOnly).not.toContain('<input');expect(readOnly).not.toContain('<button');
 });
 
-it('offers only range matching and represents old exact values as equivalent closed ranges while editing',()=>{
- const band:NewRuleBand={keyType:'exact',exact:1.6,includeMin:true,includeMax:true,rate:60};
- const html=renderToStaticMarkup(<HourlyBandEditor field="roi" bands={[band]} initialExpandedIndex={0} onChange={()=>{}}/>);
- expect(html).not.toContain('value="exact"');expect(html).not.toContain('精确数值');
- expect(html).toContain('档位1下限');expect(html).toContain('档位1上限');
- expect(html.match(/value="1.6"/g)).toHaveLength(2);
- expect(html).toContain('value="11" selected');
+it('offers exact matching and edits a saved rank as one numeric value without range controls',()=>{
+ const band:NewRuleBand={keyType:'exact',exact:1,includeMin:true,includeMax:true,rate:80};
+ const html=renderToStaticMarkup(<HourlyBandEditor field="roiRank" bands={[band]} initialExpandedIndex={0} onChange={()=>{}}/>);
+ expect(html).toContain('value="exact" selected');expect(html).toContain('精确数值');
+ expect(html).toContain('档位1精确数值');expect(html).not.toContain('档位1下限');expect(html).not.toContain('档位1上限');expect(html).not.toContain('档位1范围边界');
+ expect(html).toContain('有效 ROI 排名 = 1 → 80 元/小时');
  expect(band.keyType).toBe('exact');
 });
