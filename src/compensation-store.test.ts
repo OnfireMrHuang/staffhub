@@ -1,3 +1,4 @@
+import { scheduleTestMonth, loadLegacyPendingInputs } from './payroll-test-fixtures';
 import {beforeEach,expect,it} from 'vitest';
 import {useHub} from './store';
 import type {CompensationRule,ConditionGroup} from './compensation-rules';
@@ -13,6 +14,7 @@ beforeEach(()=>{
  const row={...s.dataset.rows.find(r=>r.roomId===room.id)!,employeeId:employee.id,employeeName:employee.name,departmentId:employee.departmentId,roomId:room.id,productId:product.id,month:'2026-10',hours:10,nightHours:2,earlyHours:3,regularHours:5,premium:1000,nightPremium:0,earlyPremium:200,regularPremium:800,spend:100,roi:10,hourlySpend:10,sessions:4,nightSessions:2,earlySessions:2,roiRank:1};
  useHub.setState({employees:[employee],liveRecords:[],roomHours:[],adHours:[],rooms:[{...room,openedOn:'2026-01-01'}],products:[product],dataset:{rows:[row],month:'2026-10',revision:1,version:1,published:true},monthlyRows:[row],revision:1,compensationRules:[],compensationTasks:[],payrollTasks:[]});
 });
+beforeEach(scheduleTestMonth);
 it('merges every published rule once per row and freezes the full new task/result context',()=>{
  publish(allowance());publish(allowance('global-extra',10));
  for(const coefficient of [1.2,1.5]) publish({id:`premium-${coefficient}`,name:'系数',version:1,status:'草稿',scope:'global',roomIds:[],type:'premium',premium:{normalField:'regularPremium',earlyField:'earlyPremium',coefficient,condition:condition('monthly.earlySessions',2)}});
@@ -25,39 +27,41 @@ it('merges every published rule once per row and freezes the full new task/resul
  expect(s.batch?.snapshot.compensationRules).toHaveLength(7);expect(s.batch?.snapshot.compensationTasks).toHaveLength(7);
  expect(s.batch?.snapshot.compensationTasks?.[0]).toMatchObject({referenceDate:'2026-10-31',employeeIds:[s.employees[0].id],rowKeys:[monthlyRowKey(s.dataset.rows[0])],datasetRevision:1,datasetVersion:1});
 });
-it('published rule snapshots survive editing and withdrawal permits a distinct new publication',()=>{
- publish(allowance());const task=structuredClone(useHub.getState().compensationTasks[0]);
+it('published definitions survive draft edits until a new version is explicitly published',()=>{
+ publish(allowance());const rule=structuredClone(useHub.getState().publishedCompensationRules[0]);
  useHub.getState().saveCompensationRule(allowance('allow',30));
  expect(useHub.getState().compensationRules[0]).toMatchObject({version:2,status:'草稿'});
- expect(useHub.getState().compensationTasks[0]).toEqual(task);
- expect(()=>useHub.getState().publishCompensationRule('allow','2026-10')).toThrow('重复');
- useHub.getState().withdrawCompensationTask(task.id);publish(allowance('allow',30));
- expect(useHub.getState().compensationTasks).toHaveLength(2);
- expect(useHub.getState().compensationTasks[0]).toMatchObject({status:'已撤回',rule:{allowance:{amount:20}}});
+ expect(useHub.getState().publishedCompensationRules[0]).toEqual(rule);
+ expect(useHub.getState().compensationTasks).toEqual([]);
+ useHub.getState().publishCompensationRule('allow');
+ expect(useHub.getState().publishedCompensationRules).toHaveLength(1);
+ expect(useHub.getState().publishedCompensationRules[0]).toMatchObject({version:2,allowance:{amount:30}});
+ expect(()=>useHub.getState().publishCompensationRule('allow')).toThrow(/重复/);
  useHub.getState().runPayroll();expect(useHub.getState().batch?.salaries[0].total).toBe(60);
 });
-it('blocks changed published roster and row grains even when counts match',()=>{
+
+it('legacy input snapshots still reject changed roster and row grains',()=>{
  for(const change of ['employee','room'] as const){
-  const original=structuredClone(useHub.getState().dataset.rows[0]);publish(allowance());const s=useHub.getState();
+  const original=structuredClone(useHub.getState().dataset.rows[0]);publish(allowance());loadLegacyPendingInputs();const s=useHub.getState();
   const changed=change==='employee'?{...original,employeeId:'replacement'}:{...original,roomId:'replacement'};
   useHub.setState({employees:change==='employee'?[{...s.employees[0],id:'replacement'}]:s.employees,rooms:change==='room'?[{...s.rooms[0],id:'replacement'}]:s.rooms,dataset:{...s.dataset,rows:[changed]}});
   expect(()=>useHub.getState().runPayroll()).toThrow(/名单|粒度|数据行/);expect(useHub.getState().batch).toBeNull();expect(useHub.getState().archivedMonths).toEqual([]);
   useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const reset=useHub.getState();const row=reset.dataset.rows[0];useHub.setState({dataset:{...reset.dataset,rows:[row]},compensationRules:[],compensationTasks:[],payrollTasks:[]});
  }
 });
-it('blocks duplicate grain, stale source, dataset version drift and inactive participants atomically',()=>{
+it('blocks duplicate grain, stale source and inactive participants atomically',()=>{
  publish(allowance());const baseline=useHub.getState(),dataset=structuredClone(baseline.dataset),employee=baseline.employees[0],room=baseline.rooms[0];
- const mutations=[{dataset:{...dataset,rows:[...dataset.rows,...dataset.rows]}},{revision:2},{dataset:{...dataset,version:2}},{employees:[{...employee,status:'已离职' as const}]},{rooms:[{...room,active:false}]}];
- for(const mutation of mutations){useHub.setState({revision:1,dataset,employees:[employee],liveRecords:[],roomHours:[],adHours:[],rooms:[room],...mutation});expect(()=>useHub.getState().runPayroll()).toThrow();expect(useHub.getState().batch).toBeNull();expect(useHub.getState().batches).toEqual({});expect(useHub.getState().archivedMonths).toEqual([]);expect(useHub.getState().compensationTasks[0].status).toBe('待核算');}
+ const mutations=[{dataset:{...dataset,rows:[...dataset.rows,...dataset.rows]}},{revision:2},{employees:[{...employee,status:'已离职' as const}]},{rooms:[{...room,active:false}]}];
+ for(const mutation of mutations){useHub.setState({revision:1,dataset,employees:[employee],liveRecords:[],roomHours:[],adHours:[],rooms:[room],...mutation});expect(()=>useHub.getState().runPayroll()).toThrow();expect(useHub.getState().batch).toBeNull();expect(useHub.getState().batches).toEqual({});expect(useHub.getState().archivedMonths).toEqual([]);expect(useHub.getState().compensationTasks).toEqual([]);}
 });
 it('a bad second rule cannot leave a partially calculated batch or task transition',()=>{
  publish(allowance());publish(hourly('bad',20));const s=useHub.getState();
- useHub.setState({compensationTasks:s.compensationTasks.map(t=>t.ruleId==='bad'?{...t,rule:{...t.rule,hourly:{...t.rule.hourly!,items:[{id:'item',name:'错误',kind:'special',rate:Infinity}]}}}:t)});
+ useHub.setState({publishedCompensationRules:s.publishedCompensationRules.map(rule=>rule.id==='bad'?{...rule,hourly:{...rule.hourly!,items:[{id:'item',name:'错误',kind:'special',rate:Infinity}]}}:rule)});
  expect(()=>useHub.getState().runPayroll()).toThrow();expect(useHub.getState().batch).toBeNull();expect(useHub.getState().compensationTasks.every(t=>t.status==='待核算')).toBe(true);
 });
 it('legacy tasks still calculate, and mixed models require withdrawing old tasks',()=>{
  const s=useHub.getState(),legacy=s.departmentRules.find(r=>r.departmentId===s.employees[0].departmentId && r.roomIds.includes(s.rooms[0].id))!;
- s.publishDepartmentRule(legacy.id,'2026-10');publish(allowance());
+ publish(allowance());loadLegacyPendingInputs();s.publishDepartmentRule(legacy.id,'2026-10');
  expect(()=>useHub.getState().runPayroll()).toThrow(/旧|历史/);expect(useHub.getState().batch).toBeNull();
  useHub.getState().withdrawPayrollTask(useHub.getState().payrollTasks[0].id);useHub.getState().runPayroll();expect(useHub.getState().batch?.salaries[0].total).toBe(40);
 });
@@ -80,12 +84,17 @@ it('room openedOn preserves valid dates, rejects invalid calendars, and remains 
  expect(useHub.getState().revision).toBe(revision);s.saveRoom({...room,openedOn:'2024-02-29'});expect(useHub.getState().rooms[0].openedOn).toBe('2024-02-29');s.saveRoom({...room,openedOn:undefined});expect(useHub.getState().rooms[0].openedOn).toBeUndefined();
 });
 
-it('refuses malformed dataset versions before publication and keeps rules as drafts',()=>{
- const s=useHub.getState();s.saveCompensationRule(allowance());const dataset=s.dataset;
- for(const version of [0,-1,NaN,Infinity,1.5]) {useHub.setState({dataset:{...dataset,version}});expect(()=>useHub.getState().publishCompensationRule('allow','2026-10')).toThrow(/版本/);expect(useHub.getState().compensationTasks).toEqual([]);expect(useHub.getState().compensationRules[0].status).toBe('草稿');}
+it('checks dataset versions at calculation, while publication is independent of data readiness',()=>{
+ publish(allowance());const dataset=useHub.getState().dataset;
+ for(const version of [0,-1,NaN,Infinity,1.5]) {
+  useHub.setState({dataset:{...dataset,version}});
+  expect(()=>useHub.getState().runPayroll()).toThrow(/版本/);
+  expect(useHub.getState().compensationTasks).toEqual([]);expect(useHub.getState().batch).toBeNull();
+ }
 });
-it('rejects task metadata drift without archiving or transitioning any task',()=>{
- publish(allowance());const task=structuredClone(useHub.getState().compensationTasks[0]);
+
+it('rejects legacy task metadata drift without archiving or transitioning any task',()=>{
+ publish(allowance());loadLegacyPendingInputs();const task=structuredClone(useHub.getState().compensationTasks[0]);
  for(const mutation of [{ruleVersion:2},{referenceDate:'2026-10-30'},{rowKeys:[...task.rowKeys,...task.rowKeys]},{employeeIds:[...task.employeeIds,...task.employeeIds]}]){useHub.setState({compensationTasks:[{...task,...mutation}]});expect(()=>useHub.getState().runPayroll()).toThrow();expect(useHub.getState().batch).toBeNull();expect(useHub.getState().archivedMonths).toEqual([]);}
 });
 it('persisted archived new payroll remains frozen when restored with newer current fields',()=>{
@@ -101,7 +110,7 @@ it('新月度资料与班次字段随统计归档，之后改档案不覆盖冻�
  s=useHub.getState();const row=s.monthlyRows.find(row=>row.employeeId===employee.id&&row.roomId===room.id)!;
  expect(row).toMatchObject({employeeJoinedOn:'2026-09-01',nonCompeteSigned:true,roomOpenedOn:'2026-08-01'});
  expect(row.regularPremium).toBeCloseTo(row.premium-row.nightPremium!-row.earlyPremium!);expect(row.spendRank).toBeGreaterThan(0);
- publish(allowance());useHub.getState().runPayroll();archiveCurrentMonth();const frozen=structuredClone(useHub.getState().batch!.snapshot.monthly);
+ scheduleTestMonth();publish(allowance());useHub.getState().runPayroll();archiveCurrentMonth();const frozen=structuredClone(useHub.getState().batch!.snapshot.monthly);
  useHub.getState().saveEmployee({...employee,joined:'2026-01-01',nonCompeteSigned:false});useHub.getState().saveRoom({...room,openedOn:'2026-01-01'});
  expect(useHub.getState().batch!.snapshot.monthly).toEqual(frozen);
 });
@@ -144,17 +153,18 @@ it('rejects publishing pre-existing conflicting room rules without creating a ta
  expect(useHub.getState().compensationTasks).toEqual([]);
  expect(useHub.getState().compensationRules.every(r=>r.status==='草稿')).toBe(true);
 });
-it('does not publish a reassigned room while another rule has a pending snapshot for it in the same month',()=>{
+it('does not publish a reassigned room until the previous published owner releases it',()=>{
  const s=useHub.getState(),roomId=s.rooms[0].id,newRoom={...s.rooms[0],id:'second-room'};
  useHub.setState({rooms:[...s.rooms,newRoom]});
  publish({...allowance('owner'),scope:'rooms',roomIds:[roomId]});
  useHub.getState().saveCompensationRule({...useHub.getState().compensationRules[0],roomIds:[newRoom.id]});
  useHub.getState().saveCompensationRule({...hourly('replacement',50),scope:'rooms',roomIds:[roomId]});
- expect(()=>useHub.getState().publishCompensationRule('replacement','2026-10')).toThrow(/待核算.*直播间|直播间.*待核算/);
- expect(useHub.getState().compensationTasks).toHaveLength(1);
- useHub.getState().withdrawCompensationTask(useHub.getState().compensationTasks[0].id);
+ expect(()=>useHub.getState().publishCompensationRule('replacement','2026-10')).toThrow(/直播间.*占用/);
+ expect(useHub.getState().publishedCompensationRules).toHaveLength(1);
+ useHub.getState().publishCompensationRule('owner');
  useHub.getState().publishCompensationRule('replacement','2026-10');
- expect(useHub.getState().compensationTasks.filter(t=>t.status==='待核算')).toHaveLength(1);
+ expect(useHub.getState().publishedCompensationRules).toHaveLength(2);
+ expect(useHub.getState().compensationTasks).toEqual([]);
 });
 
 it('logically deletes a draft while releasing its room for a replacement rule',()=>{
@@ -169,7 +179,7 @@ it('logically deletes a draft while releasing its room for a replacement rule',(
  expect(useHub.getState().compensationRules.filter(rule=>!rule.deletedAt).map(rule=>rule.id)).toEqual(['replacement']);
 });
 it('deleting a rule atomically withdraws its pending tasks across open months and keeps task snapshots',()=>{
- publish(allowance('remove'));publish(allowance('keep'));
+ publish(allowance('remove'));publish(allowance('keep'));loadLegacyPendingInputs();
  const s=useHub.getState(),task=structuredClone(s.compensationTasks[0]);
  const nextMonth={...task,id:'next-month',month:'2026-11',referenceDate:'2026-11-30'};
  const withdrawn={...task,id:'withdrawn',status:'已撤回' as const,withdrawnAt:'2026-10-01 12:00:00'};
@@ -196,14 +206,14 @@ it('deleting a rule preserves completed archived tasks and frozen payroll while 
  expect(after.batch).toEqual(frozen);expect(after.batches['2026-10']).toEqual(frozen);expect(after.archivedMonths).toEqual(['2026-10']);
 });
 it('rejects deletion with an anomalous archived pending task before changing any business state',()=>{
- publish(allowance());const task=structuredClone(useHub.getState().compensationTasks[0]);
+ publish(allowance());loadLegacyPendingInputs();const task=structuredClone(useHub.getState().compensationTasks[0]);
  useHub.setState({archivedMonths:['2026-09'],compensationTasks:[task,{...task,id:'archived-pending',month:'2026-09'}]});
  const before=structuredClone(useHub.persist.getOptions().partialize!(useHub.getState()));
  expect(()=>useHub.getState().deleteCompensationRule('allow')).toThrow('归档');
  expect(useHub.persist.getOptions().partialize!(useHub.getState())).toEqual(before);
 });
 it('rejects missing and repeated deletion and stale save or publish without resurrecting a deleted rule',()=>{
- publish(allowance());const stale=structuredClone(useHub.getState().compensationRules[0]);
+ publish(allowance());loadLegacyPendingInputs();const stale=structuredClone(useHub.getState().compensationRules[0]);
  useHub.getState().deleteCompensationRule('allow');
  const before=structuredClone(useHub.persist.getOptions().partialize!(useHub.getState()));
  expect(()=>useHub.getState().deleteCompensationRule('missing')).toThrow('不存在');
@@ -213,7 +223,7 @@ it('rejects missing and repeated deletion and stale save or publish without resu
  expect(useHub.persist.getOptions().partialize!(useHub.getState())).toEqual(before);
 });
 it('rehydrates logically deleted rules and withdrawn tasks without adding starter rules or allowing stale save',()=>{
- publish(allowance());const stale=structuredClone(useHub.getState().compensationRules[0]);
+ publish(allowance());loadLegacyPendingInputs();const stale=structuredClone(useHub.getState().compensationRules[0]);
  useHub.getState().deleteCompensationRule('allow');
  const options=useHub.persist.getOptions(),saved=JSON.parse(JSON.stringify(options.partialize!(useHub.getState())));
  useHub.getState().reset();useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});

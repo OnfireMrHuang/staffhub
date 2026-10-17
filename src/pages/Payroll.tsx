@@ -25,7 +25,7 @@ export default function Payroll() {
  if (selected) return <PayrollTaskDetail task={selected} onBack={() => setSelectedMonth(null)} />;
  const query = search.trim().toLocaleLowerCase();
  const rows = tasks.filter(task => (!month || task.month === month) && (!status || task.status === status)
-  && `${task.month} ${task.tasks.map(rule => rule.ruleName).join(' ')}`.toLocaleLowerCase().includes(query));
+  && `${task.month} ${[...task.tasks.map(rule=>rule.ruleName),...(task.rules??[]).map(rule=>rule.name)].join(' ')}`.toLocaleLowerCase().includes(query));
  return <Panel className="payroll-task-list">
   <div className="toolbar payroll-task-filters" aria-label="核算任务筛选栏">
    <SearchBox value={search} onChange={setSearch} placeholder="搜索核算月份 / 规则名称" />
@@ -35,8 +35,8 @@ export default function Payroll() {
   </div>
   {rows.length ? <div className="table-scroll"><table aria-label="核算任务列表"><thead><tr><th>核算任务</th><th>发布规则</th><th>员工人数</th><th>状态</th><th>更新时间</th><th /></tr></thead><tbody>{rows.map(task => <tr key={task.month} className="payroll-task-row" onClick={() => openTask(task.month)}>
    <td><button className="payroll-task-open" onClick={event => { event.stopPropagation(); openTask(task.month); }}>{task.month} 月度薪酬核算</button></td>
-   <td>{task.tasks.filter(rule => rule.status !== '已撤回').length} 条</td><td>{task.employees} 人</td><td><Badge tone={task.status === '已归档' ? 'green' : task.status === '已撤回' ? 'gray' : 'amber'}>{task.status}</Badge></td><td>{task.updatedAt || '—'}</td><td><ChevronRight size={16} aria-hidden="true" /></td>
-  </tr>)}</tbody></table></div> : <Empty title="暂无核算任务" description={tasks.length ? '请调整筛选条件。' : '发布薪酬规则后，系统按月份生成核算任务。'} />}
+   <td>{task.rules?.length ?? task.tasks.filter(rule => rule.status !== '已撤回').length} 条</td><td>{task.employees} 人</td><td><Badge tone={task.status === '已归档' ? 'green' : task.status === '已撤回' ? 'gray' : 'amber'}>{task.status}</Badge></td><td>{task.updatedAt || '—'}</td><td><ChevronRight size={16} aria-hidden="true" /></td>
+  </tr>)}</tbody></table></div> : <Empty title="暂无核算任务" description={tasks.length ? '请调整筛选条件。' : '系统每月 1 日生成上个月的待核算任务，由 HR 手动核算与确认。'} />}
  </Panel>;
 }
 

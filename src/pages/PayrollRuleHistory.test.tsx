@@ -1,3 +1,4 @@
+import { scheduleTestMonth } from '../payroll-test-fixtures';
 import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -16,7 +17,7 @@ vi.mock('../components', async importOriginal => ({
  Modal: ({ open, children }: { open: boolean; children: ReactNode }) => open ? <section>{children}</section> : null,
 }));
 
-it.each([2, undefined] as const)('uses the calculated frozen rule name and version after a withdrawal and republication (settlement %s)', settlementVersion => {
+it.each([2, undefined] as const)('uses the calculated frozen rule name and version after republication and draft edits (settlement %s)', settlementVersion => {
  const before = useHub.getState();
  try {
   const initial = useHub.getInitialState();
@@ -28,15 +29,15 @@ it.each([2, undefined] as const)('uses the calculated frozen rule name and versi
    dataset: { rows: [row], month: row.month, revision: 1, version: 1, published: true }, monthlyRows: [row], revision: 1,
    compensationRules: [], compensationTasks: [], payrollTasks: [], archivedMonths: [], batch: null, batches: {},
   }, true);
+  scheduleTestMonth();
   const oldRule: CompensationRule = { id: 'history-allowance', name: '撤回的旧补贴A', version: 1, status: '草稿', scope: 'global', roomIds: [], type: 'allowance', allowance: { field: 'nightSessions', amount: 10 } };
   useHub.getState().saveCompensationRule(oldRule);
   useHub.getState().publishCompensationRule(oldRule.id, row.month);
-  useHub.getState().withdrawCompensationTask(useHub.getState().compensationTasks[0].id);
   useHub.getState().saveCompensationRule({ ...oldRule, name: '实际核算补贴B', allowance: { field: 'nightSessions', amount: 30 } });
   useHub.getState().publishCompensationRule(oldRule.id, row.month);
   useHub.getState().runPayroll();
   const batch = structuredClone(useHub.getState().batch!);
-  expect(batch.snapshot.compensationTasks?.map(task => [task.status, task.ruleVersion])).toEqual([['已撤回', 1], ['已核算', 2]]);
+  expect(batch.snapshot.compensationTasks?.map(task => [task.status, task.ruleVersion])).toEqual([['已核算', 2]]);
   expect(batch.salaries[0].total).toBe(60);
   batch.compensationResult!.settlementVersion = settlementVersion;
   useHub.setState({ batch, batches: { [row.month]: batch } });

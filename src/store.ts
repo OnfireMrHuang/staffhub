@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { duePayrollJobs, previousPayrollMonth, type MonthlyPayrollJob } from './payroll-schedule';
 import { withEmployeeDefaults } from './employee-fields';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Department, Employee, Salary } from './domain';
@@ -48,7 +49,7 @@ export interface PayrollSnapshot {
  roomReports?:FrozenRoomReports;
  detailOverrides?:DetailOverride[]; monthlyOverrides?:MonthlyOverride[]; correctionAudit?:CorrectionAudit[];
 }
-export interface Batch { month:string; status:'已核算'|'已锁定'|'已发布'; salaries:Salary[]; datasetVersion:number; ruleVersion:number; created:string; logs:string[]; snapshot:PayrollSnapshot; compensationResult?:CompensationResult; review?:PayrollReview; archivedAt?:string; archivedBy?:string }
+export interface Batch { ruleSource?:'published-rules'; month:string; status:'已核算'|'已锁定'|'已发布'; salaries:Salary[]; datasetVersion:number; ruleVersion:number; created:string; logs:string[]; snapshot:PayrollSnapshot; compensationResult?:CompensationResult; review?:PayrollReview; archivedAt?:string; archivedBy?:string }
 export interface Role { id:string; name:string; description:string; permissions:string[] }
 interface Hub {
  session:DemoSession|null;
@@ -56,6 +57,8 @@ interface Hub {
  page:Page; opsTab:string; month:string; employees:Employee[]; departments:Department[]; products:AdvertisingProduct[]; rooms:LiveRoom[];
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
  compensationInitialized:boolean; compensationRules:CompensationRule[]; compensationTasks:CompensationTask[];
+ publishedCompensationRules:CompensationRule[]; monthlyPayrollJobs:MonthlyPayrollJob[]; payrollScheduleStartMonth:string|null;
+ ensureMonthlyPayrollJobs:(now?:Date)=>void;
  liveRecords:LiveRecord[]; adHours:AdHourly[]; roomHours:RoomHourly[]; archivedMonths:string[]; liveDetails:LiveDetail[]; monthlyRows:LiveMonthly[];
  reportHours:ReportRow[]; reportDays:ReportRow[]; reportOverrides:ReportOverride[]; reportAudit:ReportAudit[];
  detailOverrides:DetailOverride[]; monthlyOverrides:MonthlyOverride[]; correctionAudit:CorrectionAudit[];
@@ -69,8 +72,8 @@ interface Hub {
  restoreReportCorrection:(period:ReportPeriod,key:string,reason:string,expectedVersion:number)=>void;
  saveDepartmentRule:(rule:DepartmentRule)=>void; publishDepartmentRule:(id:string,month:string)=>void;
  withdrawPayrollTask:(id:string)=>void;
- saveCompensationRule:(rule:CompensationRule)=>void; deleteCompensationRule:(id:string)=>void; publishCompensationRule:(id:string,month:string)=>void; withdrawCompensationTask:(id:string)=>void;
- saveRoomRuleSet:(ruleSet:RoomRuleSet)=>void; publishRoomRuleSet:(id:string,month:string)=>void; deleteRoomRuleSet:(id:string)=>void;
+ saveCompensationRule:(rule:CompensationRule)=>void; deleteCompensationRule:(id:string)=>void; publishCompensationRule:(id:string,month?:string)=>void; withdrawCompensationTask:(id:string)=>void;
+ saveRoomRuleSet:(ruleSet:RoomRuleSet)=>void; publishRoomRuleSet:(id:string,month?:string)=>void; deleteRoomRuleSet:(id:string)=>void;
  savePayrollDetail:(month:string,key:string,patch:Record<string,PayrollCellValue>,reason:string,expectedVersion:number)=>void;
  addPayrollColumn:(month:string,column:PayrollCustomColumn,expectedVersion:number)=>void;
  applyPayrollEdits:(month:string,expectedVersion:number)=>void; archivePayroll:(month:string,expectedVersion:number)=>void;
@@ -191,6 +194,38 @@ const validateRoomRuleSetTasks = (tasks:CompensationTask[]) => {
   validateRoomRuleSet({id,roomIds:group[0].rule.roomIds,rules:group.map(task=>task.rule)});
  }
 };
+/** Construct calculation evidence in memory. No state changes until all calculation checks pass. */
+const currentCompensationInputs = (s:Hub):CompensationTask[] => {
+ const rules=s.publishedCompensationRules;
+ if(!rules.length) throw new Error('尚无已发布薪酬规则，请先发布规则');
+ const rows=activeCompensationRows(s);
+ if(!rows.length) throw new Error('当前月份没有可核算的主播数据，请核对月度汇总');
+ const created=auditTime(),referenceDate=referenceDateForMonth(s.month);
+ const groups=new Map(listRoomRuleSets(rules).map(group=>[group.id,{id:group.id,version:group.rules[0].version,ruleIds:group.rules.map(rule=>rule.id),publicationId:crypto.randomUUID()}]));
+ return rules.map(rule=>{
+  validateCompensationRule(rule);validateCompensationRoomOwnership(rule,rules);
+  const participants=compensationParticipants(s,rule,rows);
+  return {id:crypto.randomUUID(),month:s.month,ruleId:rule.id,ruleName:rule.name,ruleVersion:rule.version,scope:rule.scope,type:rule.type,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,referenceDate,status:'待核算',rule:structuredClone(rule),...participants,created,...(rule.roomRuleSetId?{roomRuleSet:groups.get(rule.roomRuleSetId)}:{})};
+ });
+};
+const migratePublishedRules = (rules:CompensationRule[],tasks:CompensationTask[]):CompensationRule[] => {
+ const published=rules.filter(rule=>rule.scope!=='rooms' && !rule.deletedAt).flatMap(rule=>{
+  if(rule.status==='已发布') return [structuredClone(rule)];
+  const old=tasks.filter(task=>task.ruleId===rule.id && task.status!=='已撤回' && task.scope===rule.scope).sort((a,b)=>b.ruleVersion-a.ruleVersion)[0];
+  return old?[structuredClone(old.rule)]:[];
+ });
+ for(const group of listRoomRuleSets(rules)) {
+  if(group.rules.every(rule=>rule.status==='已发布')) {published.push(...structuredClone(group.rules));continue;}
+  const memberIds=new Set(rules.filter(rule=>rule.scope==='rooms'&&roomRuleSetId(rule)===group.id).map(rule=>rule.id));
+  const candidates=tasks.filter(task=>task.status!=='已撤回' && task.scope==='rooms' && taskBelongsToRoomRuleSet(task,group.id,memberIds)).sort((a,b)=>b.ruleVersion-a.ruleVersion);
+  const latest=candidates[0];if(!latest) continue;
+  // Recover a whole publication, including children removed only in the newer draft.
+  const inputs=latest.roomRuleSet?candidates.filter(task=>task.month===latest.month&&task.roomRuleSet?.publicationId===latest.roomRuleSet!.publicationId):[latest];
+  try {validateRoomRuleSetTasks(inputs);} catch {continue;} // Incomplete legacy evidence must be republished, never partially activated.
+  published.push(...structuredClone(inputs.map(task=>task.rule)));
+ }
+ return published;
+};
 const freezePayrollSnapshot = (s:Hub,payrollTasks:PayrollTask[],compensationTasks:CompensationTask[]):PayrollSnapshot => structuredClone({
  records:s.liveRecords.filter(r=>r.date.startsWith(s.month+'-')),adHours:s.adHours.filter(r=>r.date.startsWith(s.month+'-')),roomHours:s.roomHours.filter(r=>r.date.startsWith(s.month+'-')),
  employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,details:s.liveDetails,monthly:s.monthlyRows,dataset:s.dataset,
@@ -201,13 +236,18 @@ const freezePayrollSnapshot = (s:Hub,payrollTasks:PayrollTask[],compensationTask
  correctionAudit:s.correctionAudit.filter(item=>item.sourceMonth===s.month || item.targetMonth===s.month),
 });
 const stableValue = (value:unknown):string => JSON.stringify(value,(_key,item)=>item && typeof item==='object' && !Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+const publishedRuleSignature = (rules:CompensationRule[]) => stableValue([...rules].sort((a,b)=>a.id.localeCompare(b.id)));
 const publicationSignature = (tasks:(PayrollTask|CompensationTask)[],month:string) => stableValue(tasks.filter(task=>task.month===month && task.status!=='已撤回').map(({status:_,withdrawnAt:__,...task})=>task).sort((a,b)=>a.id.localeCompare(b.id)));
 /** Shared by the detail page and archival boundary. Browsing months never changes evidence. */
-export function payrollBatchInputIssue(s:Pick<Hub,'archivedMonths'|'revision'|'month'|'dataset'|'datasetsByMonth'|'payrollTasks'|'compensationTasks'>,batch:Batch):string {
+export function payrollBatchInputIssue(s:Pick<Hub,'archivedMonths'|'revision'|'month'|'dataset'|'datasetsByMonth'|'payrollTasks'|'compensationTasks'|'publishedCompensationRules'>,batch:Batch):string {
  if(s.archivedMonths.includes(batch.month)) return '';
  if(!batch.snapshot?.dataset || batch.snapshot.dataset.revision!==s.revision) return '来源或员工资料已变化，请重新核算';
  const dataset=s.dataset.month===batch.month?s.dataset:s.datasetsByMonth[batch.month];
  if(!dataset || !dataset.published || dataset.revision!==batch.snapshot.dataset.revision || dataset.version!==batch.datasetVersion || stableValue(dataset.rows)!==stableValue(batch.snapshot.dataset.rows)) return '月度汇总数据已变化，请重新核算';
+ if(batch.ruleSource==='published-rules') {
+  const frozen=(batch.snapshot.compensationTasks??[]).filter(task=>task.month===batch.month && task.status!=='已撤回').map(task=>task.rule);
+  return publishedRuleSignature(s.publishedCompensationRules)!==publishedRuleSignature(frozen)?'已发布规则已变化，请重新核算':'';
+ }
  const active=[...s.payrollTasks,...s.compensationTasks],frozen=[...batch.snapshot.payrollTasks,...(batch.snapshot.compensationTasks??[])];
  if(publicationSignature(active,batch.month)!==publicationSignature(frozen,batch.month) || active.some(task=>task.month===batch.month && task.status==='待核算')) return '已发布规则任务已变化，请重新核算';
  return '';
@@ -239,6 +279,7 @@ const initial = () => {
   reportHours:reports.hourly,reportDays:reports.daily,reportOverrides:[] as ReportOverride[],reportAudit:[] as ReportAudit[],
   detailOverrides:[] as DetailOverride[],monthlyOverrides:[] as MonthlyOverride[],correctionAudit:[] as CorrectionAudit[],
   departmentRules:migrateHourlyRules(seedRules,rooms,products),payrollTasks:[] as PayrollTask[],
+  publishedCompensationRules:[] as CompensationRule[],monthlyPayrollJobs:[] as MonthlyPayrollJob[],payrollScheduleStartMonth:null as string|null,
   compensationInitialized:true,compensationRules:initialCompensationRules(rooms).map(normalizeCurrentCompensationRule),compensationTasks:[] as CompensationTask[],
   dataset:{rows:monthly,month:demoMonth,version:1,revision:1,published:true},datasetsByMonth:{} as Record<string,Dataset>,
   roles:[
@@ -255,6 +296,12 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  loginSso:(platform,employeeId)=>{const session=authenticateSso(platform,employeeId,get().employees);set({session,perspective:'employee',page:'profile',toast:''});},
  logout:()=>set({session:null,perspective:'admin',page:'operations',toast:''}),
  ...initial(),
+ ensureMonthlyPayrollJobs:(now=new Date())=>{
+  const s=get(),start=s.payrollScheduleStartMonth??previousPayrollMonth(now);
+  const existing=new Set([...s.monthlyPayrollJobs.map(job=>job.month),...s.archivedMonths,...Object.keys(s.batches),...s.payrollTasks.map(task=>task.month),...s.compensationTasks.map(task=>task.month)]);
+  const additions=duePayrollJobs(start,now,existing);
+  if(additions.length || s.payrollScheduleStartMonth===null) set({payrollScheduleStartMonth:start,monthlyPayrollJobs:[...s.monthlyPayrollJobs,...additions]});
+ },
  navigate:(page,tab)=>set({page,...(tab?{opsTab:tab}:{})}),
  setMonth:month=>{
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('月份格式无效');
@@ -461,6 +508,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const s=get(),task=s.payrollTasks.find(t=>t.id===id);
   if(!task) throw new Error('核算任务不存在');
   requireOpenMonth(task.month,s.archivedMonths);
+  if(s.monthlyPayrollJobs.some(job=>job.month===task.month)) throw new Error('月度自动任务的规则依据不可单独撤回，请修改规则后重新核算');
   if(task.status==='已撤回') throw new Error('仅待核算或未归档的已核算任务可撤回');
   const payrollTasks=s.payrollTasks.map(t=>t.id===id?{...t,status:'已撤回' as const,withdrawnAt:new Date().toLocaleString('sv-SE').slice(0,19)}:t);
   const hasOtherTask=payrollTasks.some(t=>t.ruleId===task.ruleId && t.ruleVersion===task.ruleVersion && t.status!=='已撤回');
@@ -489,27 +537,21 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const deletedAt=auditTime();
   set({
    compensationRules:s.compensationRules.map(item=>item.id===id?{...item,deletedAt}:item),
+   publishedCompensationRules:s.publishedCompensationRules.filter(item=>item.id!==id),
    compensationTasks:s.compensationTasks.map(task=>task.ruleId===id && task.status==='待核算'?{...task,status:'已撤回' as const,withdrawnAt:deletedAt}:task),
   });
  },
- publishCompensationRule:(id,month)=>{
-  const s=get();requireOpenMonth(month,s.archivedMonths);
-  const referenceDate=referenceDateForMonth(month);
-  if(month!==s.month || s.dataset.month!==month) throw new Error('发布月份必须与当前运营数据集月份一致');
-  if(s.dataset.revision!==s.revision) throw new Error('来源或员工资料已变化，请重新统计运营数据集');
-  if(!s.dataset.published) throw new Error('请先刷新运营数据集');
-  const rule=s.compensationRules.find(item=>item.id===id);
+ publishCompensationRule:id=>{
+  const s=get(),rule=s.compensationRules.find(item=>item.id===id);
   if(!rule) throw new Error('薪酬规则不存在');
   if(rule.deletedAt) throw new Error('薪酬规则已删除，不能发布');
   if(rule.roomRuleSetId!==undefined) throw new Error('直播间规则集须整组发布');
-  validateCompensationRoomOwnership(rule,s.compensationRules);
-  if(rule.scope==='rooms' && s.compensationTasks.some(task=>task.month===month && task.status!=='已撤回' && task.ruleId!==id && task.rule.scope==='rooms' && task.rule.roomIds.some(roomId=>rule.roomIds.includes(roomId)))) throw new Error('直播间仍有其他规则的待核算或已核算任务，请先撤回该任务再发布');
-  if(s.compensationTasks.some(task=>task.ruleId===id && task.month===month && task.status!=='已撤回')) throw new Error('同一规则同月不能重复发布');
-  const participants=compensationParticipants(s,rule,activeCompensationRows(s));
-  if(!participants.employeeIds.length) throw new Error('规则范围内没有参与工作员工，不能发布核算任务');
+  validateCompensationRule(rule);validateCompensationRoomOwnership(rule,s.compensationRules);
+  validateCompensationRoomOwnership(rule,s.publishedCompensationRules);
+  if(rule.roomIds.some(id=>!validRoom(id,s.rooms,s.products))) throw new Error('规则直播间不存在或已停用');
+  if(s.publishedCompensationRules.some(item=>item.id===id&&item.version===rule.version)) throw new Error('该版本已发布，不能重复发布');
   const published:CompensationRule=structuredClone({...rule,status:'已发布'});
-  const task:CompensationTask={id:crypto.randomUUID(),month,ruleId:id,ruleName:published.name,ruleVersion:published.version,scope:published.scope,type:published.type,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,referenceDate,status:'待核算',rule:structuredClone(published),...participants,created:auditTime()};
-  set({compensationRules:s.compensationRules.map(item=>item.id===id?published:item),compensationTasks:[...s.compensationTasks,task]});
+  set({compensationRules:s.compensationRules.map(item=>item.id===id?published:item),publishedCompensationRules:[...s.publishedCompensationRules.filter(item=>item.id!==id),published]});
  },
  saveRoomRuleSet:ruleSet=>{
   const s=get();
@@ -538,28 +580,15 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   compensationRules.push(...members.filter(rule=>!s.compensationRules.some(item=>item.id===rule.id)));
   set({compensationRules,compensationTasks:s.compensationTasks.map(task=>pendingIds.has(task.id)?{...task,status:'已撤回' as const,withdrawnAt:at}:task)});
  },
- publishRoomRuleSet:(id,month)=>{
-  const s=get();requireOpenMonth(month,s.archivedMonths);
-  const referenceDate=referenceDateForMonth(month);
-  if(month!==s.month || s.dataset.month!==month) throw new Error('发布月份必须与当前运营数据集月份一致');
-  if(s.dataset.revision!==s.revision) throw new Error('来源或员工资料已变化，请重新统计运营数据集');
-  if(!s.dataset.published) throw new Error('请先刷新运营数据集');
-  const ruleSet=storedRoomRuleSet(s,id);validateRoomRuleSet(ruleSet);validateRoomRuleSetOwnership(s,ruleSet);
+ publishRoomRuleSet:id=>{
+  const s=get(),ruleSet=storedRoomRuleSet(s,id);validateRoomRuleSet(ruleSet);validateRoomRuleSetOwnership(s,ruleSet);
   if(new Set(ruleSet.rules.map(rule=>rule.version)).size!==1) throw new Error('直播间规则集子规则版本不一致，请整组保存');
-  const memberIds=new Set(roomRuleSetMembers(s,id).map(rule=>rule.id));
-  if(s.compensationTasks.some(task=>task.month===month && task.status!=='已撤回' && taskBelongsToRoomRuleSet(task,id,memberIds))) throw new Error('同一直播间规则集同月不能重复发布');
-  if(s.compensationTasks.some(task=>task.month===month && task.status!=='已撤回' && task.rule.scope==='rooms' && task.rule.roomIds.some(roomId=>ruleSet.roomIds.includes(roomId)))) throw new Error('直播间仍有其他规则集的待核算或已核算任务，请先整组撤回该任务再发布');
-  const rows=activeCompensationRows(s),created=auditTime();
-  const roomRuleSet={id,version:ruleSet.rules[0].version,ruleIds:ruleSet.rules.map(rule=>rule.id),publicationId:crypto.randomUUID()};
+  for(const rule of ruleSet.rules) validateCompensationRoomOwnership(rule,s.publishedCompensationRules.filter(item=>roomRuleSetId(item)!==id));
+  const old=s.publishedCompensationRules.filter(rule=>rule.scope==='rooms' && roomRuleSetId(rule)===id);
+  if(old.length===ruleSet.rules.length && old.every(rule=>ruleSet.rules.some(item=>item.id===rule.id&&item.version===rule.version))) throw new Error('该规则集版本已发布，不能重复发布');
   const published=ruleSet.rules.map(rule=>structuredClone({...rule,roomRuleSetId:id,status:'已发布' as const}));
-  const tasks:CompensationTask[]=published.map(rule=>{
-   const participants=compensationParticipants(s,rule,rows);
-   if(!participants.employeeIds.length) throw new Error('规则集范围内没有参与工作员工，不能发布核算任务');
-   return {id:crypto.randomUUID(),month,ruleId:rule.id,ruleName:rule.name,ruleVersion:rule.version,scope:rule.scope,type:rule.type,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,referenceDate,status:'待核算',rule:structuredClone(rule),...participants,created,roomRuleSet:structuredClone(roomRuleSet)};
-  });
-  validateRoomRuleSetTasks(tasks);
   const updates=new Map(published.map(rule=>[rule.id,rule]));
-  set({compensationRules:s.compensationRules.map(rule=>updates.get(rule.id)??rule),compensationTasks:[...s.compensationTasks,...tasks]});
+  set({compensationRules:s.compensationRules.map(rule=>updates.get(rule.id)??rule),publishedCompensationRules:[...s.publishedCompensationRules.filter(rule=>rule.scope!=='rooms'||roomRuleSetId(rule)!==id),...published]});
  },
  deleteRoomRuleSet:id=>{
   const s=get();storedRoomRuleSet(s,id);
@@ -569,6 +598,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const deletedAt=auditTime(),pendingIds=new Set(pending.map(task=>task.id));
   set({
    compensationRules:s.compensationRules.map(rule=>memberIds.has(rule.id) && !rule.deletedAt?{...rule,deletedAt}:rule),
+   publishedCompensationRules:s.publishedCompensationRules.filter(rule=>rule.scope!=='rooms'||roomRuleSetId(rule)!==id),
    compensationTasks:s.compensationTasks.map(task=>pendingIds.has(task.id)?{...task,status:'已撤回' as const,withdrawnAt:deletedAt}:task),
   });
  },
@@ -576,6 +606,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const s=get(),task=s.compensationTasks.find(item=>item.id===id);
   if(!task) throw new Error('核算任务不存在');
   requireOpenMonth(task.month,s.archivedMonths);
+  if(s.monthlyPayrollJobs.some(job=>job.month===task.month)) throw new Error('月度自动任务的规则依据不可单独撤回，请修改规则后重新核算');
   if(task.status==='已撤回') throw new Error('仅待核算或未归档的已核算任务可撤回');
   const setId=task.roomRuleSet?.id??task.rule.roomRuleSetId;
   const pending=setId?s.compensationTasks.filter(item=>item.month===task.month && item.status!=='已撤回' && (item.roomRuleSet?.id===setId || item.rule.roomRuleSetId===setId)):[task];
@@ -595,7 +626,8 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   if(s.dataset.revision!==s.revision || s.dataset.month!==s.month) throw new Error('来源或员工资料已变化，请重新统计运营数据集');
   if(!s.dataset.published) throw new Error('请先刷新运营数据集');
   const tasks=s.payrollTasks.filter(t=>t.month===s.month && t.status!=='已撤回');
-  const newTasks=s.compensationTasks.filter(task=>task.month===s.month && task.status!=='已撤回');
+  const scheduled=s.monthlyPayrollJobs.some(job=>job.month===s.month);
+  const newTasks=scheduled?currentCompensationInputs(s):s.compensationTasks.filter(task=>task.month===s.month && task.status!=='已撤回');
   if(newTasks.length && tasks.length) throw new Error('当前月份同时存在新版与旧部门规则任务，请先撤回旧任务，再核算新版薪酬');
   if(newTasks.length) {
    const rows=activeCompensationRows(s),referenceDate=referenceDateForMonth(s.month);
@@ -614,11 +646,12 @@ export const useHub = create<Hub>()(persist((set,get)=>({
    const expectedEmployees=[...new Set(rows.map(row=>row.employeeId))],expectedRows=rows.map(monthlyRowKey);
    if(!sameIdentities(expectedEmployees,compensationResult.salaries.map(salary=>salary.employeeId)) || !sameIdentities(expectedRows,compensationResult.rows.map(monthlyRowKey))) throw new Error('薪酬核算未覆盖全部已确认员工与数据行');
    if(compensationResult.salaries.some(salary=>[salary.fixed,salary.commission,salary.total].some(value=>!Number.isFinite(value) || value<0))) throw new Error('薪酬核算金额无效');
-   const compensationTasks=s.compensationTasks.map(task=>task.month===s.month && task.status!=='已撤回'?{...task,status:'已核算' as const}:task);
+   const inputs=scheduled?[...s.compensationTasks.filter(task=>task.month!==s.month||task.status==='已撤回'),...newTasks]:s.compensationTasks;
+   const compensationTasks=inputs.map(task=>task.month===s.month && task.status!=='已撤回'?{...task,status:'已核算' as const}:task);
    const snapshot=freezePayrollSnapshot(s,s.payrollTasks,compensationTasks);
-   const batch:Batch={month:s.month,status:'已核算',salaries:structuredClone(compensationResult.salaries),compensationResult:structuredClone(compensationResult),review,datasetVersion:s.dataset.version,ruleVersion:Math.max(...newTasks.map(task=>task.ruleVersion)),created:auditTime(),snapshot,logs:[
+   const batch:Batch={...(scheduled?{ruleSource:'published-rules' as const}:{}),month:s.month,status:'已核算',salaries:structuredClone(compensationResult.salaries),compensationResult:structuredClone(compensationResult),review,datasetVersion:s.dataset.version,ruleVersion:Math.max(...newTasks.map(task=>task.ruleVersion)),created:auditTime(),snapshot,logs:[
     `读取固定运营数据集 v${s.dataset.version}，来源修订 ${s.dataset.revision}`,
-    `${newTasks.length} 个新版薪酬规则任务，导入 ${expectedEmployees.length} 位主播、${expectedRows.length} 条月度数据行（含未命中规则行）`,
+    `${newTasks.length} 条已发布薪酬规则，导入 ${expectedEmployees.length} 位主播、${expectedRows.length} 条月度数据行（含未命中规则行）`,
     `参考日期 ${referenceDate}：按已发布规则范围核算；系数保费取大后更新 ROI 与排名，再计算时薪金额`,
     '总计月薪 = max（各范围保底金额最大值，各范围加成金额合计）+ 各范围补贴合计',
     ...newTasks.map(task=>`${task.ruleName} v${task.ruleVersion}：数据集 v${task.datasetVersion}（来源修订 ${task.datasetRevision}）`),
@@ -718,8 +751,8 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  merge:(persisted,current)=>{
   const saved=(persisted??{}) as Partial<Hub>;
   const compensationRules=(saved.compensationRules??(saved.compensationInitialized?[]:initialCompensationRules(saved.rooms??current.rooms))).map(normalizeCurrentCompensationRule);
-  return {...current,...saved,employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]};
+  return {...current,...saved,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]};
  },
  storage:createJSONStorage(()=>typeof localStorage!=='undefined'?localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),
- partialize:s=>({month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
+ partialize:s=>({publishedCompensationRules:s.publishedCompensationRules,monthlyPayrollJobs:s.monthlyPayrollJobs,payrollScheduleStartMonth:s.payrollScheduleStartMonth,month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
 }));

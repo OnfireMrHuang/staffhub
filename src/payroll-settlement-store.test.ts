@@ -1,3 +1,4 @@
+import { scheduleTestMonth } from './payroll-test-fixtures';
 import { beforeEach, expect, it } from 'vitest';
 import { useHub } from './store';
 import { monthlyRowKey } from './dataset-corrections';
@@ -23,6 +24,7 @@ beforeEach(() => {
     monthlyRows: rows, liveRecords: [], roomHours: [], adHours: [], revision: 1, compensationRules: [], compensationTasks: [], payrollTasks: [],
   });
 });
+beforeEach(scheduleTestMonth);
 
 function publish(scope: 'global' | 'rooms' = 'global') {
   const s = useHub.getState();
@@ -31,8 +33,9 @@ function publish(scope: 'global' | 'rooms' = 'global') {
   useHub.getState().publishCompensationRule(rule.id, s.month);
 }
 
-it('publishes only host participants from the monthly source', () => {
+it('captures only host participants when HR calculates', () => {
   publish();
+  useHub.getState().runPayroll();
   const s = useHub.getState();
   expect(s.compensationTasks[0].employeeIds).toEqual([s.employees[0].id, 'second-host'].sort());
   expect(s.compensationTasks[0].rowKeys).toEqual(s.dataset.rows.filter(row => row.roles.includes('主播')).map(monthlyRowKey).sort());
@@ -62,11 +65,11 @@ it('freezes source statistics and scope amounts alongside the settlement version
   expect(options.merge!(saved, useHub.getInitialState()).batch!.compensationResult).toEqual(result);
 });
 
-it('requires republication when a confirmed host changes to a non-host role', () => {
+it('reads the current host roster at calculation without requiring republication', () => {
   publish();
   const s = useHub.getState();
   useHub.setState({ dataset: { ...s.dataset, rows: s.dataset.rows.map(row => row.employeeId === 'second-host' ? { ...row, roles: ['投手'] } : row) } });
-  expect(() => useHub.getState().runPayroll()).toThrow(/名单|粒度/);
-  expect(useHub.getState().batch).toBeNull();
-  expect(useHub.getState().compensationTasks[0].status).toBe('待核算');
+  useHub.getState().runPayroll();
+  expect(useHub.getState().compensationTasks[0].employeeIds).toEqual([s.employees[0].id]);
+  expect(useHub.getState().batch!.salaries.map(row=>row.employeeId)).toEqual([s.employees[0].id]);
 });

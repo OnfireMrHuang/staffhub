@@ -78,7 +78,7 @@ export function RoomRuleSetForm({initial,rooms,rules,readOnly=false,onSave,onClo
        </div>
       </div>
       {expanded&&<div className="room-rule-set-child-definition" id={`room-rule-definition-${rule.id}`}>
-       {!readOnly&&changedTemplate&&<p className="rule-template-note">保存后使用新模板：保费系数按系数项求和；时薪仅保留所选计算类型。原系数条件和加成触发条件不再使用，请核对配置。已发布任务仍使用原版本。</p>}
+       {!readOnly&&changedTemplate&&<p className="rule-template-note">保存后使用新模板：保费系数按系数项求和；时薪仅保留所选计算类型。原系数条件和加成触发条件不再使用，请核对配置。保存草稿不改变已发布版本，重新发布后供 HR 核算使用。</p>}
        <fieldset className="department-rule-form compensation-form" disabled={readOnly}><CompensationRuleDefinition rule={rule} onChange={updateRule} readOnly={readOnly} lockType/></fieldset>
       </div>}
      </article>;

@@ -1,3 +1,4 @@
+import { scheduleTestMonth } from './payroll-test-fixtures';
 import { expect, it } from 'vitest';
 import { calculateCompensation, validateCompensationRoomOwnership } from './compensation-rules';
 import { payrollSettlementExample as example } from './payroll-settlement-example';
@@ -37,6 +38,7 @@ it('publishes the example under current room ownership and settles through the r
       dataset: { rows: structuredClone(example.rows), month: example.month, revision: 1, version: 1, published: true },
       monthlyRows: structuredClone(example.rows), revision: 1, liveRecords: [], roomHours: [], adHours: [], compensationRules: [], compensationTasks: [], payrollTasks: [],
     });
+    scheduleTestMonth();
     for (const rule of example.rules) {
       useHub.getState().saveCompensationRule({ ...structuredClone(rule), status: '草稿' });
       useHub.getState().publishCompensationRule(rule.id, example.month);

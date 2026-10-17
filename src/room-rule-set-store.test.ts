@@ -1,3 +1,4 @@
+import { scheduleTestMonth, loadLegacyPendingInputs } from './payroll-test-fixtures';
 import {beforeEach,expect,it} from 'vitest';
 import {useHub,type CompensationTask} from './store';
 import type {CompensationRule} from './compensation-rules';
@@ -18,6 +19,7 @@ beforeEach(()=>{
  const row={...s.dataset.rows.find(item=>item.roomId===room.id)!,employeeId:employee.id,employeeName:employee.name,departmentId:employee.departmentId,roomId:room.id,productId:product.id,month:'2026-10',hours:10,nightHours:2,earlyHours:3,regularHours:5,premium:1000,nightPremium:0,earlyPremium:200,regularPremium:800,spend:100,roi:10,hourlySpend:10,sessions:4,nightSessions:2,earlySessions:2,roiRank:1};
  useHub.setState({employees:[employee],rooms:[room],products:[product],liveRecords:[],roomHours:[],adHours:[],dataset:{rows:[row],month:'2026-10',revision:1,version:1,published:true},monthlyRows:[row],revision:1,compensationRules:[],compensationTasks:[],payrollTasks:[]});
 });
+beforeEach(scheduleTestMonth);
 
 it('saves three different rule types in one atomic draft with common version and room scope',()=>{
  const events:number[]=[];const unsubscribe=useHub.subscribe(s=>events.push(s.compensationRules.length));
@@ -68,32 +70,32 @@ it('blocks direct child mutations while preserving the legacy singleton save and
 });
 
 it('publishes all three members atomically and applies coefficient, hourly rate and allowance in payroll',()=>{
- useHub.getState().saveRoomRuleSet(draft());const observed:number[]=[];const unsubscribe=useHub.subscribe(s=>observed.push(s.compensationTasks.length));
+ useHub.getState().saveRoomRuleSet(draft());const observed:number[]=[];const unsubscribe=useHub.subscribe(s=>observed.push(s.publishedCompensationRules.length));
  try{useHub.getState().publishRoomRuleSet('set','2026-10');}finally{unsubscribe();}
- expect(observed).toEqual([3]);const tasks=useHub.getState().compensationTasks;
- expect(tasks.every(task=>task.status==='待核算'&&task.roomRuleSet?.id==='set'&&task.roomRuleSet.version===1)).toBe(true);
+ expect(observed).toEqual([3]);expect(useHub.getState().compensationTasks).toEqual([]);
+ useHub.getState().runPayroll();const tasks=useHub.getState().compensationTasks;
+ expect(tasks.every(task=>task.status==='已核算'&&task.roomRuleSet?.id==='set'&&task.roomRuleSet.version===1)).toBe(true);
  expect(tasks[0].roomRuleSet?.ruleIds).toEqual(['set-allowance','set-hourly','set-premium']);
  expect(tasks.every(task=>JSON.stringify(task.roomRuleSet)===JSON.stringify(tasks[0].roomRuleSet))).toBe(true);
  expect(()=>useHub.getState().publishRoomRuleSet('set','2026-10')).toThrow(/重复/);
- useHub.getState().runPayroll();
  expect(useHub.getState().batch?.salaries[0].total).toBe(540);
  expect(useHub.getState().batch?.compensationResult?.rows[0].premium.after).toBe(1200);
  expect(useHub.getState().compensationTasks.every(task=>task.status==='已核算')).toBe(true);
 });
 
 it('keeps frozen group publication when editing definitions and calculates from those snapshots',()=>{
- publish();const tasks=structuredClone(useHub.getState().compensationTasks),edit=saved();
+ publish();const definitions=structuredClone(useHub.getState().publishedCompensationRules),edit=saved();
  edit.rules=edit.rules.map(rule=>rule.type==='allowance'?{...rule,allowance:{field:'nightSessions',amount:999}}:rule);useHub.getState().saveRoomRuleSet(edit);
- expect(useHub.getState().compensationTasks).toEqual(tasks);expect(saved().rules.every(rule=>rule.version===2)).toBe(true);
+ expect(useHub.getState().publishedCompensationRules).toEqual(definitions);expect(saved().rules.every(rule=>rule.version===2)).toBe(true);
  useHub.getState().runPayroll();expect(useHub.getState().batch?.salaries[0].total).toBe(540);
 });
 
 it('new draft members do not change the frozen membership of an existing publication',()=>{
  useHub.getState().saveRoomRuleSet(draft(['allowance','premium']));useHub.getState().publishRoomRuleSet('set','2026-10');
- const tasks=structuredClone(useHub.getState().compensationTasks),edit=saved();edit.rules.push(member('set-hourly','hourly'));
- useHub.getState().saveRoomRuleSet(edit);expect(useHub.getState().compensationTasks).toEqual(tasks);
- expect(()=>useHub.getState().publishRoomRuleSet('set','2026-10')).toThrow(/重复/);
+ const definitions=structuredClone(useHub.getState().publishedCompensationRules),edit=saved();edit.rules.push(member('set-hourly','hourly'));
+ useHub.getState().saveRoomRuleSet(edit);expect(useHub.getState().publishedCompensationRules).toEqual(definitions);
  useHub.getState().runPayroll();expect(useHub.getState().batch?.salaries[0].total).toBe(40);expect(useHub.getState().batch?.snapshot.compensationTasks).toHaveLength(2);
+ useHub.getState().publishRoomRuleSet('set');useHub.getState().runPayroll(0);expect(useHub.getState().batch?.salaries[0].total).toBe(540);
 });
 
 it('new groups cannot adopt existing members from a different group even in unoccupied rooms',()=>{
@@ -110,32 +112,33 @@ it('rejects an invalid second child or broken current group before creating any 
  }
 });
 
-it('rejects missing members, mixed publication metadata and versions before any payroll transition',()=>{
- publish();const tasks=structuredClone(useHub.getState().compensationTasks);
+it('rejects legacy missing members, mixed publication metadata and versions before any payroll transition',()=>{
+ publish();loadLegacyPendingInputs();const tasks=structuredClone(useHub.getState().compensationTasks);
  const variants:CompensationTask[][]=[tasks.slice(1),tasks.map((task,index)=>index===1?{...task,roomRuleSet:{...task.roomRuleSet!,version:2}}:task),tasks.map((task,index)=>index===1?{...task,roomRuleSet:undefined}:task),tasks.map((task,index)=>index===1?{...task,roomRuleSet:{...task.roomRuleSet!,ruleIds:[task.ruleId]}}:task),tasks.map((task,index)=>index===1?{...task,roomRuleSet:{...task.roomRuleSet!,publicationId:'different'}}:task)];
  for(const compensationTasks of variants){useHub.setState({compensationTasks});const before=business();expect(()=>useHub.getState().runPayroll()).toThrow(/规则集|成员|版本/);expect(business()).toEqual(before);}
 });
 
 it('withdraws every pending member in the selected group/month with one observable state change',()=>{
- publish();const tasks=structuredClone(useHub.getState().compensationTasks);const future=tasks.map(task=>({...task,id:`future-${task.id}`,month:'2026-11'}));useHub.setState({compensationTasks:[...tasks,...future]});
+ publish();loadLegacyPendingInputs();const tasks=structuredClone(useHub.getState().compensationTasks);const future=tasks.map(task=>({...task,id:`future-${task.id}`,month:'2026-11'}));useHub.setState({compensationTasks:[...tasks,...future]});
  const events:string[][]=[];const unsubscribe=useHub.subscribe(s=>events.push(s.compensationTasks.map(task=>task.status)));
  try{useHub.getState().withdrawCompensationTask(tasks[1].id);}finally{unsubscribe();}
  expect(events).toEqual([['已撤回','已撤回','已撤回','待核算','待核算','待核算']]);
  expect(useHub.getState().compensationTasks.slice(0,3).every(task=>task.withdrawnAt===useHub.getState().compensationTasks[0].withdrawnAt)).toBe(true);
- useHub.getState().publishRoomRuleSet('set','2026-10');expect(useHub.getState().compensationTasks.filter(task=>task.month==='2026-10'&&task.status==='待核算')).toHaveLength(3);
+ expect(useHub.getState().compensationTasks.filter(task=>task.month==='2026-10'&&task.status==='待核算')).toHaveLength(0);
 });
 
-it('removing a member logically deletes it and withdraws pending snapshots for the whole group',()=>{
- publish();const tasks=structuredClone(useHub.getState().compensationTasks),edit=saved();edit.rules=edit.rules.filter(rule=>rule.type!=='premium');
+it('removing a draft member preserves the complete published set until republication',()=>{
+ publish();const definitions=structuredClone(useHub.getState().publishedCompensationRules),edit=saved();edit.rules=edit.rules.filter(rule=>rule.type!=='premium');
  useHub.getState().saveRoomRuleSet(edit);
  expect(saved().rules.map(rule=>[rule.type,rule.version])).toEqual([['allowance',2],['hourly',2]]);
  expect(useHub.getState().compensationRules.find(rule=>rule.type==='premium')?.deletedAt).toEqual(expect.any(String));
- expect(useHub.getState().compensationTasks.every(task=>task.status==='已撤回')).toBe(true);
- expect(useHub.getState().compensationTasks.map(task=>task.rule)).toEqual(tasks.map(task=>task.rule));
+ expect(useHub.getState().publishedCompensationRules).toEqual(definitions);
+ useHub.getState().publishRoomRuleSet('set');
+ expect(useHub.getState().publishedCompensationRules.map(rule=>rule.type)).toEqual(['allowance','hourly']);
 });
 
 it('blocks member removal and group deletion atomically if any pending related month is archived',()=>{
- publish();const task=useHub.getState().compensationTasks[0];useHub.setState({compensationTasks:[...useHub.getState().compensationTasks,{...task,id:'archived-pending',month:'2026-09'}],archivedMonths:['2026-09']});const before=business();
+ publish();loadLegacyPendingInputs();const task=useHub.getState().compensationTasks[0];useHub.setState({compensationTasks:[...useHub.getState().compensationTasks,{...task,id:'archived-pending',month:'2026-09'}],archivedMonths:['2026-09']});const before=business();
  expect(()=>useHub.getState().saveRoomRuleSet({...saved(),rules:saved().rules.slice(0,1)})).toThrow(/归档/);expect(business()).toEqual(before);
  expect(()=>useHub.getState().deleteRoomRuleSet('set')).toThrow(/归档/);expect(business()).toEqual(before);
 });
@@ -150,10 +153,11 @@ it('deletes all group members, withdraws pending across months and releases room
  expect(()=>useHub.getState().saveRoomRuleSet(draft())).toThrow(/已删除/);expect(()=>useHub.getState().publishRoomRuleSet('set','2026-10')).toThrow();
 });
 
-it('reassigned rooms are available to drafts but conflicting pending snapshots still block same-month publication',()=>{
+it('reassigned rooms are available to drafts but their previous published owner must release them',()=>{
  publish();const s=useHub.getState(),room=s.rooms[0],next={...room,id:'next-room'};useHub.setState({rooms:[room,next]});
  const edit=saved();edit.roomIds=[next.id];edit.rules=edit.rules.map(rule=>({...rule,roomIds:[next.id]}));useHub.getState().saveRoomRuleSet(edit);
- useHub.getState().saveRoomRuleSet(draft(['allowance'],'replacement'));const before=business();expect(()=>useHub.getState().publishRoomRuleSet('replacement','2026-10')).toThrow(/待核算/);expect(business()).toEqual(before);
- useHub.getState().withdrawCompensationTask(useHub.getState().compensationTasks[0].id);useHub.getState().publishRoomRuleSet('replacement','2026-10');
- expect(useHub.getState().compensationTasks.filter(task=>task.status==='待核算')).toHaveLength(1);
+ useHub.getState().saveRoomRuleSet(draft(['allowance'],'replacement'));const before=business();expect(()=>useHub.getState().publishRoomRuleSet('replacement','2026-10')).toThrow(/直播间.*占用/);expect(business()).toEqual(before);
+ useHub.getState().publishRoomRuleSet('set');useHub.getState().publishRoomRuleSet('replacement');
+ expect(useHub.getState().publishedCompensationRules).toHaveLength(4);
+ expect(useHub.getState().compensationTasks).toEqual([]);
 });

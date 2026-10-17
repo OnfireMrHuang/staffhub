@@ -1,3 +1,4 @@
+import { scheduleTestMonth } from './payroll-test-fixtures';
 import { expect, it } from 'vitest';
 import { monthlyPayrollTasks, payrollCalculationConfirmation } from './payroll-task-view';
 import { useHub, type Batch, type CompensationTask } from './store';
@@ -29,14 +30,16 @@ it('previews all eligible monthly hosts for a room-only rule, matching the calcu
  try{
   const base=useHub.getInitialState(),room=base.rooms[0];
   useHub.setState({...base,session:{kind:'admin',username:'admin',method:'password'},compensationRules:[],compensationTasks:[],payrollTasks:[],batch:null,batches:{},archivedMonths:[]},true);
+  scheduleTestMonth();
   useHub.getState().cleanDataset();
   useHub.getState().saveCompensationRule({id:'preview-room-allowance',name:'直播间补贴预览',version:1,status:'草稿',scope:'rooms',roomIds:[room.id],type:'allowance',allowance:{field:'nightSessions',amount:30}});
   useHub.getState().publishCompensationRule('preview-room-allowance',base.month);
   const state=useHub.getState(), preview=monthlyPayrollTasks(state)[0];
-  expect(state.compensationTasks[0].employeeIds.length).toBeLessThan(6);
+  expect(state.compensationTasks).toEqual([]);
   expect(preview.employees).toBe(6);
   const initialConfirmation=payrollCalculationConfirmation(preview.batch);
   state.runPayroll(initialConfirmation.version);
+  expect(useHub.getState().compensationTasks[0].employeeIds.length).toBeLessThan(6);
   expect(useHub.getState().batch!.salaries).toHaveLength(preview.employees);
   expect(()=>useHub.getState().runPayroll(initialConfirmation.version)).toThrow('重新确认核算');
   const recalculateConfirmation=payrollCalculationConfirmation(useHub.getState().batch!);

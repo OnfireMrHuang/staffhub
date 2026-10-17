@@ -1,3 +1,4 @@
+import { scheduleTestMonth } from './payroll-test-fixtures';
 import { beforeEach, expect, it } from 'vitest';
 import { useHub } from './store';
 import type { CompensationRule } from './compensation-rules';
@@ -6,7 +7,8 @@ import { payrollDetailKey, payrollDetailValues } from './payroll-review';
 const admin = {kind:'admin' as const,username:'admin',method:'password' as const};
 const allowance = (id='review-allowance'):CompensationRule => ({id,name:id,scope:'global',roomIds:[],type:'allowance',version:1,status:'草稿',allowance:{field:'nightSessions',amount:20}});
 beforeEach(()=>{useHub.getState().reset();useHub.setState({session:admin,compensationRules:[],compensationTasks:[],payrollTasks:[]});});
-const calculate=()=>{const s=useHub.getState();s.saveCompensationRule(allowance());s.publishCompensationRule('review-allowance',s.month);s.runPayroll();return useHub.getState().batch!;};
+beforeEach(scheduleTestMonth);
+const calculate=()=>{scheduleTestMonth();const s=useHub.getState();s.saveCompensationRule(allowance());s.publishCompensationRule('review-allowance',s.month);s.runPayroll();return useHub.getState().batch!;};
 
 it('calculation stays open until an authorized person explicitly archives the reviewed result',()=>{
  const batch=calculate();expect(useHub.getState().archivedMonths).toEqual([]);expect(batch.review?.version).toBe(0);
@@ -24,11 +26,13 @@ it('stale sources or changed publication membership prevent archival without par
  expect(()=>useHub.getState().archivePayroll(current.month,0)).toThrow(/任务|规则|重新/);expect(useHub.getState().archivedMonths).toEqual([]);
 });
 
-it('completed open publications can be withdrawn and republished without overwriting prior results',()=>{
- const batch=calculate(),s=useHub.getState(),task=s.compensationTasks[0];s.withdrawCompensationTask(task.id);
- expect(useHub.getState().compensationTasks[0].status).toBe('已撤回');expect(useHub.getState().batch).toEqual(batch);
- expect(()=>useHub.getState().archivePayroll(batch.month,0)).toThrow(/任务|重新/);
- s.publishCompensationRule(task.ruleId,batch.month);s.runPayroll(batch.review!.version);expect(useHub.getState().compensationTasks.map(item=>item.status)).toEqual(['已撤回','已核算']);
+it('republishing replaces available rules but preserves results until HR recalculates',()=>{
+ const batch=calculate(),s=useHub.getState(),task=s.compensationTasks[0];
+ expect(()=>s.withdrawCompensationTask(task.id)).toThrow(/按月|自动|单独/);
+ s.saveCompensationRule({...allowance(),allowance:{field:'nightSessions',amount:30}});s.publishCompensationRule(task.ruleId);
+ expect(useHub.getState().batch).toEqual(batch);
+ expect(()=>useHub.getState().archivePayroll(batch.month,0)).toThrow(/规则|重新/);
+ s.runPayroll(batch.review!.version);expect(useHub.getState().compensationTasks.map(item=>[item.status,item.ruleVersion])).toEqual([['已核算',2]]);
 });
 
 it('browsing another month preserves the published dataset version and computed review',()=>{
@@ -93,10 +97,11 @@ it('rehydration normalizes only current employee rules and migrates untouched bu
  expect(options.merge!({compensationRules:restored.compensationRules},restored).compensationRules[0].version).toBe(4);
 });
 
-it('withdrawing a completed unarchived room set withdraws all sibling types together',()=>{
+it('legacy completed room sets still withdraw all sibling types together',()=>{
  const s=useHub.getState(),roomIds=[s.rooms[0].id],setId='review-room-set';
  const rules:CompensationRule[]=[{...allowance('room-allowance'),scope:'rooms',roomIds},{id:'room-hourly',name:'时薪',scope:'rooms',roomIds,type:'hourly',version:1,status:'草稿',hourly:{duration:'hours',items:[{id:'rate',name:'时段时薪',kind:'special',rate:10}],formula:{mode:'additions',itemIds:['rate']}}}];
  s.saveRoomRuleSet({id:setId,roomIds,rules});s.publishRoomRuleSet(setId,s.month);s.runPayroll();
+ const legacyBatch={...useHub.getState().batch!,ruleSource:undefined};useHub.setState({monthlyPayrollJobs:[],batch:legacyBatch,batches:{[s.month]:legacyBatch}});
  const batch=structuredClone(useHub.getState().batch);s.withdrawCompensationTask(useHub.getState().compensationTasks[0].id);
  expect(useHub.getState().compensationTasks.map(task=>task.status)).toEqual(['已撤回','已撤回']);expect(useHub.getState().batch).toEqual(batch);
  expect(()=>s.archivePayroll(s.month,0)).toThrow(/任务|重新/);
