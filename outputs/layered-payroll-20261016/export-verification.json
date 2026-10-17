@@ -4,6 +4,10 @@
     "merges": [],
     "errors": []
   },
+  "totalCell": {
+    "formula": "SUM(F7:F9)",
+    "cachedValue": "18690"
+  },
   "sheet2": {
     "pane": {
       "xSplit": "2",
@@ -13,13 +17,20 @@
       "state": "frozen"
     },
     "merges": [
-      "A5:AG5",
-      "AH5:AK5",
-      "AL5:AO5",
-      "AP5:AS5",
-      "AT5:AV5"
+      "A5:AI5",
+      "AJ5:AM5",
+      "AN5:AQ5",
+      "AR5:AT5"
     ],
-    "errors": []
+    "errors": [],
+    "columnCount": 46,
+    "hostDataRows": 4,
+    "groupLabels": [
+      "直播数据统计",
+      "全局核算指标",
+      "直播间核算指标",
+      "结果指标"
+    ]
   },
   "sheet3": {
     "pane": {
@@ -32,9 +43,5 @@
     "merges": [],
     "errors": []
   },
-  "totalCell": {
-    "formula": "SUM(F7:F9)",
-    "cachedValue": "18215"
-  },
-  "fileBytes": 18265
+  "fileBytes": 18421
 }

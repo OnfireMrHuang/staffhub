@@ -25,7 +25,7 @@ export default function PayrollResults({ batch, archived, initialTab = 'detail' 
   <div className="toolbar"><SearchBox value={search} onChange={setSearch} placeholder={tab === 'detail' ? '搜索员工 / 直播间' : '搜索员工姓名 / ID'} /><span className="spacer" />
    {tab === 'detail' && editable && <Button onClick={() => setAdding({ version: batch.review?.version ?? 0 })}><Plus size={15} />追加表头</Button>}
    {tab === 'detail' && editable && <Button variant="primary" disabled={!dirty} onClick={apply}><Check size={15} />应用修改</Button>}
-   <ExportButton onClick={() => batch.compensationResult ? XLSX.writeFile(buildReviewedPayrollWorkbook(batch), `月度薪酬核算-${batch.month}.xlsx`) : exportSheet(`员工月薪汇总-${batch.month}`, batch.salaries.map(salary => ({'员工ID':salary.employeeId,'员工名称':salary.employeeName,'部门':salary.departmentName,'月份':batch.month,'月薪合计':salary.total})), '员工月薪汇总')} />
+   <ExportButton onClick={() => batch.compensationResult ? XLSX.writeFile(buildReviewedPayrollWorkbook(batch), `${batch.ruleSource==='demo'?'模拟-':''}月度薪酬核算-${batch.month}.xlsx`) : exportSheet(`员工月薪汇总-${batch.month}`, batch.salaries.map(salary => ({'员工ID':salary.employeeId,'员工名称':salary.employeeName,'部门':salary.departmentName,'月份':batch.month,'月薪合计':salary.total})), '员工月薪汇总')} />
   </div>
   {dirty && <div className="payroll-review-notice" role="status"><span>明细有未应用的修改，员工月薪汇总仍为上次应用结果。{tab === 'summary' ? '请返回月度核算明细执行应用。' : '核对后点击“应用修改”更新汇总。'}</span><Badge tone="amber">待应用</Badge></div>}
   {error && <p className="rule-error" role="alert">{error}</p>}

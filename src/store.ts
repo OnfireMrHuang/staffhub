@@ -1,10 +1,11 @@
 import { create } from 'zustand';
+import { calculateDemoPayroll } from './demo-payroll';
 import { duePayrollJobs, previousPayrollMonth, type MonthlyPayrollJob } from './payroll-schedule';
 import { withEmployeeDefaults } from './employee-fields';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Department, Employee, Salary } from './domain';
 import { seedDepartments, seedEmployees, seedRules } from './seed';
-import { demoAdHours, demoMonth, demoProducts, demoRooms, demoRecords, demoRoomHours, septemberMockMonth, septemberMockRecords, septemberMockRoomHours } from './live-seed';
+import { demoAdHours, demoMonth, demoProducts, demoRooms, demoRecords, demoRoomHours, septemberMockMonth, septemberMockRecords, septemberMockRoomHours, fillSeptemberMockWaitingDays } from './live-seed';
 import { buildLiveStatistics, validateLiveRecord } from './live-domain';
 import { fillSimulatedHours } from './live-sync';
 import type { AdHourly, LiveDetail, LiveMonthly, LiveRecord, RoomHourly } from './live-domain';
@@ -49,7 +50,7 @@ export interface PayrollSnapshot {
  roomReports?:FrozenRoomReports;
  detailOverrides?:DetailOverride[]; monthlyOverrides?:MonthlyOverride[]; correctionAudit?:CorrectionAudit[];
 }
-export interface Batch { ruleSource?:'published-rules'; month:string; status:'已核算'|'已锁定'|'已发布'; salaries:Salary[]; datasetVersion:number; ruleVersion:number; created:string; logs:string[]; snapshot:PayrollSnapshot; compensationResult?:CompensationResult; review?:PayrollReview; archivedAt?:string; archivedBy?:string }
+export interface Batch { ruleSource?:'published-rules'|'demo'; month:string; status:'已核算'|'已锁定'|'已发布'; salaries:Salary[]; datasetVersion:number; ruleVersion:number; created:string; logs:string[]; snapshot:PayrollSnapshot; compensationResult?:CompensationResult; review?:PayrollReview; archivedAt?:string; archivedBy?:string }
 export interface Role { id:string; name:string; description:string; permissions:string[] }
 interface Hub {
  session:DemoSession|null;
@@ -78,6 +79,7 @@ interface Hub {
  savePayrollDetail:(month:string,key:string,patch:Record<string,PayrollCellValue>,reason:string,expectedVersion:number)=>void;
  addPayrollColumn:(month:string,column:PayrollCustomColumn,expectedVersion:number)=>void;
  applyPayrollEdits:(month:string,expectedVersion:number)=>void; archivePayroll:(month:string,expectedVersion:number)=>void;
+ runDemoPayroll:(expectedVersion?:number)=>void;
  runPayroll:(expectedVersion?:number)=>void; lockBatch:()=>void; publishBatch:()=>void; sync:()=>void; setPerspective:(value:'admin'|'employee')=>void;
 }
 const normalText = (value:string) => value.normalize('NFKC').trim();
@@ -105,8 +107,27 @@ const effectiveStatistics = (s:Hub, month:string, detailOverrides=s.detailOverri
  const reports=applyReportOverrides(baseReports,relevant,s.employees,s.departments,s.liveRecords);
  // Historical aggregate corrections retain their original identity and audit. The
  // normalized report contributions always own monthly values.
- const monthly=applyDatasetCorrections(reports.contributions,[],monthlyOverrides,s.employees,s.departments,s.rooms,s.products,month,s.liveRecords).monthly;
+ const corrected=applyDatasetCorrections(reports.contributions,[],monthlyOverrides,s.employees,s.departments,s.rooms,s.products,month,s.liveRecords).monthly;
+ const monthly=month===septemberMockMonth && !septemberMockFrozen(s)?fillSeptemberMockWaitingDays(corrected,s.liveRecords):corrected;
  return {details:legacy.details,monthly,reportHours:reports.hourly,reportDays:reports.daily,reportContributions:reports.contributions};
+};
+const septemberMockFrozen = (s:Hub) => s.archivedMonths.includes(septemberMockMonth) ||
+ [s.batches[septemberMockMonth],s.batch?.month===septemberMockMonth?s.batch:null].some(batch=>batch && (batch.status==='已锁定'||batch.status==='已发布'));
+/** Upgrade cached mock inputs too: a valid cache is reused when HR opens the task.
+ * Payroll snapshots and user corrections stay intact; changed input gets a new version. */
+const repairSeptemberMockWaitingDays = (s:Hub):Hub => {
+ if(septemberMockFrozen(s)) return s;
+ const fill=(rows:LiveMonthly[])=>fillSeptemberMockWaitingDays(rows,s.liveRecords);
+ const repairDataset=(dataset:Dataset):Dataset=>{
+  if(dataset.month!==septemberMockMonth) return dataset;
+  const rows=fill(dataset.rows);
+  return rows===dataset.rows?dataset:{...dataset,rows,version:dataset.version+1};
+ };
+ return {...s,dataset:repairDataset(s.dataset),monthlyRows:fill(s.monthlyRows),
+  datasetsByMonth:Object.fromEntries(Object.entries(s.datasetsByMonth).map(([month,dataset])=>[month,repairDataset(dataset)])),
+  monthlyOverrides:s.monthlyOverrides.map(override=>{
+   const [row]=fill([override.row]);return row===override.row?override:{...override,row};
+  })};
 };
 /** One-time additive demo upgrade. Never replace an existing month's facts or payroll evidence. */
 const withSeptemberMock = (s:Hub):Hub => {
@@ -251,11 +272,11 @@ const migratePublishedRules = (rules:CompensationRule[],tasks:CompensationTask[]
  }
  return published;
 };
-const freezePayrollSnapshot = (s:Hub,payrollTasks:PayrollTask[],compensationTasks:CompensationTask[]):PayrollSnapshot => structuredClone({
+const freezePayrollSnapshot = (s:Hub,payrollTasks:PayrollTask[],compensationTasks:CompensationTask[],reportContributions?:LiveDetail[]):PayrollSnapshot => structuredClone({
  records:s.liveRecords.filter(r=>r.date.startsWith(s.month+'-')),adHours:s.adHours.filter(r=>r.date.startsWith(s.month+'-')),roomHours:s.roomHours.filter(r=>r.date.startsWith(s.month+'-')),
  employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,details:s.liveDetails,monthly:s.monthlyRows,dataset:s.dataset,
  departmentRules:s.departmentRules,payrollTasks,compensationRules:s.compensationRules,compensationTasks,
- roomReports:{hourly:s.reportHours,daily:s.reportDays,contributions:effectiveStatistics(s,s.month).reportContributions,definitions:roomReportDefinitions,bindings:roomReportBindings,overrides:s.reportOverrides.filter(item=>item.sourceMonth===s.month),audit:s.reportAudit.filter(item=>item.sourceMonth===s.month)},
+ roomReports:{hourly:s.reportHours,daily:s.reportDays,contributions:reportContributions??effectiveStatistics(s,s.month).reportContributions,definitions:roomReportDefinitions,bindings:roomReportBindings,overrides:s.reportOverrides.filter(item=>item.sourceMonth===s.month),audit:s.reportAudit.filter(item=>item.sourceMonth===s.month)},
  detailOverrides:s.detailOverrides.filter(item=>item.sourceMonth===s.month || item.row.date.startsWith(s.month+'-')),
  monthlyOverrides:s.monthlyOverrides.filter(item=>item.sourceMonth===s.month || item.row.month===s.month),
  correctionAudit:s.correctionAudit.filter(item=>item.sourceMonth===s.month || item.targetMonth===s.month),
@@ -269,6 +290,7 @@ export function payrollBatchInputIssue(s:Pick<Hub,'archivedMonths'|'revision'|'m
  if(!batch.snapshot?.dataset || batch.snapshot.dataset.revision!==s.revision) return '来源或员工资料已变化，请重新核算';
  const dataset=s.dataset.month===batch.month?s.dataset:s.datasetsByMonth[batch.month];
  if(!dataset || !dataset.published || dataset.revision!==batch.snapshot.dataset.revision || dataset.version!==batch.datasetVersion || stableValue(dataset.rows)!==stableValue(batch.snapshot.dataset.rows)) return '月度汇总数据已变化，请重新核算';
+ if(batch.ruleSource==='demo') return '';
  if(batch.ruleSource==='published-rules') {
   const frozen=(batch.snapshot.compensationTasks??[]).filter(task=>task.month===batch.month && task.status!=='已撤回').map(task=>task.rule);
   return publishedRuleSignature(s.publishedCompensationRules)!==publishedRuleSignature(frozen)?'已发布规则已变化，请重新核算':'';
@@ -298,7 +320,7 @@ const initial = () => {
  const liveRecords=structuredClone([...demoRecords,...septemberMockRecords]),adHours=structuredClone(demoAdHours),roomHours=structuredClone([...demoRoomHours,...septemberMockRoomHours]);
  const {details,monthly}=buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,demoMonth);
  const reports=buildRoomReports(liveRecords,roomHours,employees,departments,rooms,products,demoMonth,[]);
- const september=buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,septemberMockMonth).monthly;
+ const september=fillSeptemberMockWaitingDays(buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,septemberMockMonth).monthly,liveRecords);
  return {
   page:'operations' as Page,opsTab:'datasets',month:demoMonth,employees,departments,products,rooms,liveRecords,adHours,roomHours,
   archivedMonths:[] as string[],liveDetails:details,monthlyRows:monthly,
@@ -643,6 +665,26 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const compensationRules=s.compensationRules.map(rule=>pending.some(item=>item.ruleId===rule.id && item.ruleVersion===rule.version) && !compensationTasks.some(item=>item.ruleId===rule.id && item.ruleVersion===rule.version && item.status!=='已撤回')?{...rule,status:'草稿' as const}:rule);
   set({compensationTasks,compensationRules});
  },
+ runDemoPayroll:expectedVersion=>{
+  const s=get();requirePayrollPermission(s,'薪酬核算');requireOpenMonth(s.month,s.archivedMonths);
+  const previous=s.batches[s.month],version=previous?.review?.version??0;
+  if(previous?.status==='已锁定'||previous?.status==='已发布') throw new Error('已归档结果不能模拟核算');
+  if(!Number.isSafeInteger(version)||version<0||(previous?expectedVersion!==version:expectedVersion!==undefined)) throw new Error('核算结果版本已更新，请重新确认模拟核算');
+  if(!s.monthlyPayrollJobs.some(job=>job.month===s.month)) throw new Error('当前月份尚未生成核算任务');
+  if(s.dataset.month!==s.month || !s.dataset.published || s.dataset.revision!==s.revision) throw new Error('请先刷新本月员工月度汇总');
+  const rows=activeCompensationRows(s);if(!rows.length) throw new Error('当前月份没有可模拟核算的主播数据');
+  const {rules,result}=calculateDemoPayroll(rows,s.employees,s.departments,s.rooms,s.month),created=auditTime();
+  const tasks:CompensationTask[]=rules.map(rule=>({id:crypto.randomUUID(),month:s.month,ruleId:rule.id,ruleName:rule.name,ruleVersion:rule.version,scope:rule.scope,type:rule.type,rule,datasetVersion:s.dataset.version,datasetRevision:s.dataset.revision,referenceDate:result.referenceDate,status:'已核算',...compensationParticipants(s,rule,rows),created}));
+  // Capture available evidence without rerunning the raw-data pipeline or invoking user rules.
+  const snapshot=freezePayrollSnapshot(s,[],tasks,[]);snapshot.compensationRules=structuredClone(rules);snapshot.departmentRules=[];
+  const batch:Batch={ruleSource:'demo',month:s.month,status:'已核算',salaries:structuredClone(result.salaries),compensationResult:result,datasetVersion:s.dataset.version,ruleVersion:1,created,snapshot,review:{...createPayrollReview(),version:previous?version+1:0},logs:[
+   '模拟核算：结果仅供汇报演示，未执行已配置的业务薪酬规则。',
+   '演示公式：50元基础时薪＋直播间10/15/20元时薪加成，乘总直播时长；夜班补贴20元/场。',
+   '保费演示：正常保费＋早班保费×1.2；缺失基础数值仅在模拟结果中使用演示默认值。',
+   `${rows.length} 条月度明细，${result.salaries.length} 位员工月薪汇总；待人工复核，未归档。`,
+  ]};
+  set({batch,batches:{...s.batches,[s.month]:batch},datasetsByMonth:{...s.datasetsByMonth,[s.month]:s.dataset},toast:'模拟核算完成，已生成月度明细和员工月薪汇总。'});
+ },
  runPayroll:expectedVersion=>{
   const s=get();requireOpenMonth(s.month,s.archivedMonths);
   requirePayrollPermission(s,'薪酬核算');
@@ -778,7 +820,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  merge:(persisted,current)=>{
   const saved=(persisted??{}) as Partial<Hub>;
   const compensationRules=(saved.compensationRules??(saved.compensationInitialized?[]:initialCompensationRules(saved.rooms??current.rooms))).map(normalizeCurrentCompensationRule);
-  return withSeptemberMock({...current,...saved,septemberMockInitialized:saved.septemberMockInitialized??false,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]});
+  return repairSeptemberMockWaitingDays(withSeptemberMock({...current,...saved,septemberMockInitialized:saved.septemberMockInitialized??false,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]}));
  },
  storage:createJSONStorage(()=>typeof localStorage!=='undefined'?localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),
  partialize:s=>({septemberMockInitialized:s.septemberMockInitialized,publishedCompensationRules:s.publishedCompensationRules,monthlyPayrollJobs:s.monthlyPayrollJobs,payrollScheduleStartMonth:s.payrollScheduleStartMonth,month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),

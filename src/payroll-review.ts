@@ -188,5 +188,6 @@ export function buildReviewedPayrollWorkbook(batch:Batch):XLSX.WorkBook {
  summary['!cols']=Array.from({length:5},()=>({wch:20}));
  batch.salaries.forEach((_,index)=>{summary[XLSX.utils.encode_cell({r:index+1,c:4})].z='0.00';});
  XLSX.utils.book_append_sheet(workbook,summary,'员工月薪汇总');
+ if(batch.ruleSource==='demo') XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['模拟核算 · 仅供汇报演示'],['核算月份',batch.month],...batch.logs.map(line=>[line])]),'模拟核算说明');
  return workbook;
 }

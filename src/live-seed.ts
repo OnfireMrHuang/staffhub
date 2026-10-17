@@ -1,6 +1,6 @@
 import type { Project, Scheme } from './domain';
 import { splitLegacyProjects } from './operations-domain';
-import type { AdHourly, LiveRecord, RoomHourly } from './live-domain';
+import type { AdHourly, LiveMonthly, LiveRecord, RoomHourly } from './live-domain';
 import { seedEmployees, seedProjects, seedRules } from './real-seed';
 
 /** Entirely fictional hourly platform data. Actual September source files remain in real-seed. */
@@ -51,6 +51,23 @@ export const demoRoomHours: RoomHourly[] = slots.map(({room, i, a, date, hour}) 
 export const septemberMockMonth = '2026-09';
 export const septemberMockRecords: LiveRecord[] = demoRecords.map(row => ({...row, id:row.id.replaceAll(demoMonth,septemberMockMonth), date:row.date.replace(demoMonth,septemberMockMonth)}));
 export const septemberMockRoomHours: RoomHourly[] = demoRoomHours.map(row => ({...row, id:row.id.replaceAll(demoMonth,septemberMockMonth), date:row.date.replace(demoMonth,septemberMockMonth)}));
+// Manually supplied fictional days for this fixture, not an automatic business formula.
+const septemberWaitingDays = new Map(seedEmployees.slice(0,12).map((employee,index)=>[employee.id,[0,3,5,2,0,4,1,2,3,0,1,2][index]]));
+/** Only fill missing manual input on identifiable September mock rows. Existing values,
+ * including zero or invalid values requiring repair, must never be silently replaced. */
+export function fillSeptemberMockWaitingDays(rows:LiveMonthly[], records:LiveRecord[]):LiveMonthly[] {
+ const eligible=new Set<string>();
+ for(const seed of septemberMockRecords) {
+  if(!records.some(record=>record.id===seed.id && (['date','productId','roomId','start','end','hostId','buyerId','controlId'] as const).every(field=>record[field]===seed[field]))) continue;
+  for(const employeeId of [seed.hostId,seed.buyerId,seed.controlId]) eligible.add(JSON.stringify([employeeId,seed.productId,seed.roomId]));
+ }
+ let changed=false;
+ const filled=rows.map(row=>{
+  if(row.month!==septemberMockMonth || row.waitingSalaryDays!==undefined || !eligible.has(JSON.stringify([row.employeeId,row.productId,row.roomId]))) return row;
+  changed=true;return {...row,waitingSalaryDays:septemberWaitingDays.get(row.employeeId)!};
+ });
+ return changed?filled:rows;
+}
 export const demoScheme: Scheme = {
   name: '10月模拟直播主播基础时薪方案', version: 1, fixedSalary: 0, departmentIds: ['live'], employeeIds: hosts,
   groups: demoProjects.map((project, i) => ({id: `demo-group-${i + 1}`, name: `${project.name}项目集`, projectIds: [project.id], hourlyRuleId: seedRules[i].id})),

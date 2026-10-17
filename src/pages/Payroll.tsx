@@ -34,7 +34,7 @@ export default function Payroll() {
    <span className="spacer" /><span className="muted">{rows.length} 项任务</span>
   </div>
   {rows.length ? <div className="table-scroll"><table aria-label="核算任务列表"><thead><tr><th>核算任务</th><th>发布规则</th><th>员工人数</th><th>状态</th><th>更新时间</th><th /></tr></thead><tbody>{rows.map(task => <tr key={task.month} className="payroll-task-row" onClick={() => openTask(task.month)}>
-   <td><button className="payroll-task-open" onClick={event => { event.stopPropagation(); openTask(task.month); }}>{task.month} 月度薪酬核算</button></td>
+   <td><button className="payroll-task-open" onClick={event => { event.stopPropagation(); openTask(task.month); }}>{task.month} 月度薪酬核算</button>{task.batch?.ruleSource==='demo' && <Badge tone="amber">模拟数据</Badge>}</td>
    <td>{task.rules?.length ?? task.tasks.filter(rule => rule.status !== '已撤回').length} 条</td><td>{task.employees} 人</td><td><Badge tone={task.status === '已归档' ? 'green' : task.status === '已撤回' ? 'gray' : 'amber'}>{task.status}</Badge></td><td>{task.updatedAt || '—'}</td><td><ChevronRight size={16} aria-hidden="true" /></td>
   </tr>)}</tbody></table></div> : <Empty title="暂无核算任务" description={tasks.length ? '请调整筛选条件。' : '系统每月 1 日生成上个月的待核算任务，由 HR 手动核算与确认。'} />}
  </Panel>;
