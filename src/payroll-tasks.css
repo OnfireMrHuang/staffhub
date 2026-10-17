@@ -1,4 +1,5 @@
 .payroll-task-list .toolbar{padding:18px 22px;border-bottom:1px solid var(--line,#e7ebe7)}
+.payroll-custom-header{display:inline-flex;align-items:center;gap:6px}.payroll-custom-header .icon-button{width:26px;height:26px;padding:4px;flex-shrink:0}.payroll-custom-header .icon-button:hover{color:#a33c35;background:#fff0ed}
 .payroll-task-filters select{min-width:145px;height:38px;border:1px solid var(--line,#dde4df);border-radius:7px;padding:0 12px;background:#fff;color:#45534b;font:inherit}
 .payroll-task-row{cursor:pointer}.payroll-task-row:hover td{background:#f7faf7}.payroll-task-open{padding:0;border:0;background:none;color:var(--text,#243c2f);font:inherit;font-weight:600;cursor:pointer;text-align:left}.payroll-task-open:focus-visible{outline:2px solid #16704a;outline-offset:5px;border-radius:2px}
 .payroll-detail-heading,.payroll-detail-title{display:flex;align-items:center;gap:12px}.payroll-detail-heading{margin-bottom:18px}.payroll-detail-title h1{font-size:23px;line-height:1.35;margin:0}.payroll-task-basics{padding:22px 24px;margin-bottom:20px}

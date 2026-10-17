@@ -9,7 +9,7 @@ import type { Batch } from './store';
 export interface PayrollCustomColumn { id:string; label:string; type:'text'|'number'|'money' }
 export type PayrollCellValue=string|number|null;
 export interface PayrollReviewAudit {
- id:string; at:string; actor:string; action:'edit-detail'|'append-column'|'apply'; reason?:string;
+ id:string; at:string; actor:string; action:'edit-detail'|'append-column'|'delete-column'|'apply'; reason?:string;
  rowKey?:string; before?:unknown; after?:unknown; version?:number;
 }
 export interface PayrollReview {
@@ -136,6 +136,23 @@ export function appendPayrollColumn(batch:Batch,column:PayrollCustomColumn,actor
  const next=cloneForReview(batch),clean={...column,label:normalizeLabel(column.label)};
  next.review.columns.push(clean);next.review.version++;next.review.dirty=true;
  audit(next.review,actor,{action:'append-column',after:structuredClone(clean)});
+ return next;
+}
+export function deletePayrollColumn(batch:Batch,columnId:string,actor:string):Batch {
+ validateColumns(batch);
+ const column=reviewOf(batch).columns.find(item=>item.id===columnId);
+ if(!column)throw new Error('仅可删除当前存在的自定义表头');
+ const next=cloneForReview(batch),cells:Record<string,PayrollCellValue>={};
+ next.review.columns=next.review.columns.filter(item=>item.id!==columnId);
+ for(const [key,patch] of Object.entries(next.review.draftCells)){
+  if(Object.hasOwn(patch,columnId)){
+   cells[key]=patch[columnId];
+   delete patch[columnId];
+   if(!Object.keys(patch).length)delete next.review.draftCells[key];
+  }
+ }
+ next.review.version++;next.review.dirty=true;
+ audit(next.review,actor,{action:'delete-column',before:{column:structuredClone(column),cells},after:null});
  return next;
 }
 export function applyPayrollReview(batch:Batch,actor:string):Batch {

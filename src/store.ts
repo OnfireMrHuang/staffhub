@@ -25,7 +25,7 @@ import { buildRoomReports, applyReportOverrides, prepareReportCorrection, getRoo
 import type { ReportRow, ReportPeriod, ReportOverride, ReportAudit, FrozenRoomReports } from './room-reports';
 import { normalizeCurrentCompensationRule } from './compensation-rule-migration';
 import { canPayroll, type PayrollPermission } from './payroll-permissions';
-import { createPayrollReview, editPayrollDetail, appendPayrollColumn, applyPayrollReview } from './payroll-review';
+import { createPayrollReview, editPayrollDetail, appendPayrollColumn, deletePayrollColumn, applyPayrollReview } from './payroll-review';
 import type { PayrollReview, PayrollCellValue, PayrollCustomColumn } from './payroll-review';
 
 export type Page = 'operations' | 'employees' | 'departments' | 'rules' | 'payroll' | 'profile' | 'roles';
@@ -78,6 +78,7 @@ interface Hub {
  saveRoomRuleSet:(ruleSet:RoomRuleSet)=>void; publishRoomRuleSet:(id:string,month?:string)=>void; deleteRoomRuleSet:(id:string)=>void;
  savePayrollDetail:(month:string,key:string,patch:Record<string,PayrollCellValue>,reason:string,expectedVersion:number)=>void;
  addPayrollColumn:(month:string,column:PayrollCustomColumn,expectedVersion:number)=>void;
+ deletePayrollColumn:(month:string,columnId:string,expectedVersion:number)=>void;
  applyPayrollEdits:(month:string,expectedVersion:number)=>void; archivePayroll:(month:string,expectedVersion:number)=>void;
  runDemoPayroll:(expectedVersion?:number)=>void;
  runPayroll:(expectedVersion?:number)=>void; lockBatch:()=>void; publishBatch:()=>void; sync:()=>void; setPerspective:(value:'admin'|'employee')=>void;
@@ -778,6 +779,11 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  addPayrollColumn:(month,column,expectedVersion)=>{
   const s=get();requirePayrollPermission(s,'薪酬结果编辑');
   const batch=appendPayrollColumn(reviewBatch(s,month,expectedVersion),column,s.session!.username);
+  set({batches:{...s.batches,[month]:batch},...(s.month===month?{batch}:{})});
+ },
+ deletePayrollColumn:(month,columnId,expectedVersion)=>{
+  const s=get();requirePayrollPermission(s,'薪酬结果编辑');
+  const batch=deletePayrollColumn(reviewBatch(s,month,expectedVersion),columnId,s.session!.username);
   set({batches:{...s.batches,[month]:batch},...(s.month===month?{batch}:{})});
  },
  applyPayrollEdits:(month,expectedVersion)=>{

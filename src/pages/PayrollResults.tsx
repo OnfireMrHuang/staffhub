@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Check, Pencil, Plus } from 'lucide-react';
+import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useHub, type Batch } from '../store';
 import { canPayroll } from '../payroll-permissions';
 import { payrollDetailLayout, editablePayrollDetailColumns, payrollDetailKey, payrollDetailValues, buildReviewedPayrollWorkbook, type PayrollCellValue, type PayrollCustomColumn } from '../payroll-review';
@@ -12,6 +12,7 @@ export default function PayrollResults({ batch, archived, initialTab = 'detail' 
  const state = useHub(), [tab, setTab] = useState(initialTab), [search, setSearch] = useState('');
  const [editing, setEditing] = useState<{ row: PayrollRowCalculation; version: number } | null>(null);
  const [adding, setAdding] = useState<{ version: number } | null>(null), [error, setError] = useState('');
+ const [deleting, setDeleting] = useState<{ id: string; label: string; version: number } | null>(null);
  const layout = batch.compensationResult ? payrollDetailLayout(batch) : null, columns = layout?.columns ?? [];
  const editable = !archived && !!batch.compensationResult?.rows.length && canPayroll(state, '薪酬结果编辑');
  const dirty = !!batch.review?.dirty, query = search.trim().toLocaleLowerCase();
@@ -31,7 +32,7 @@ export default function PayrollResults({ batch, archived, initialTab = 'detail' 
    {batch.compensationResult.settlementVersion === 2 && <div className="settlement-legend"><span>总计绩效金额 = max（最终保底金额，累计加成金额）</span><span>总计月薪 = 总计绩效金额 + 总计补贴</span></div>}
    <div className="table-scroll settlement-scroll" role="region" aria-label="月度核算明细，可横向滚动" tabIndex={0}><table className="settlement-table" aria-label="月度核算明细表"><thead>
     <tr>{layout?.groups.map(group => <th key={group.key} scope="colgroup" colSpan={group.count} className={`settlement-${group.key}`}><span className="settlement-group-label">{group.label}</span></th>)}{editable && <th rowSpan={2} className="payroll-row-action">操作</th>}</tr>
-    <tr>{columns.map(column => <th key={column.key} scope="col" data-column={column.key} className={`settlement-${column.group}`}>{column.label}</th>)}</tr>
+    <tr>{columns.map(column => <th key={column.key} scope="col" data-column={column.key} className={`settlement-${column.group}`}>{column.custom && editable ? <span className="payroll-custom-header">{column.label}<button type="button" className="icon-button" aria-label={`删除表头 ${column.label}`} title="删除自定义表头" onClick={() => { setError(''); setDeleting({ id: column.key, label: column.label, version: batch.review?.version ?? 0 }); }}><Trash2 size={14} /></button></span> : column.label}</th>)}</tr>
    </thead><tbody>{rows.map(row => { const values = payrollDetailValues(batch, row); return <tr key={payrollDetailKey(row)}>{columns.map(column => { const value = values[column.key]; return <td key={column.key} data-column={column.key} className={`settlement-${column.group}${column.numeric ? ' numeric align-right' : ''}${column.key === 'result.total' ? ' strong' : ''}`}>{typeof value === 'number' ? column.key === 'year' ? value : number(value, column.type === 'money' ? 2 : column.key === 'roi' ? 4 : column.key.endsWith('Rank') || column.key.endsWith('Sessions') || column.key === 'waitingSalaryDays' ? 0 : 2) : value ?? '—'}</td>; })}{editable && <td className="payroll-row-action"><button className="text-button" onClick={() => setEditing({ row, version: batch.review?.version ?? 0 })} aria-label={`编辑 ${row.employeeName} ${row.roomName}`}><Pencil size={14} />编辑</button></td>}</tr>; })}</tbody></table></div>
    {!rows.length && <p className="settlement-empty">当前条件下暂无核算明细。</p>}
    <div className="table-foot"><span>共 {rows.length} 行 · 员工 × 直播间 × 月份</span><span>{columns.length} 列{batch.review?.appliedAt ? ` · 最近应用 ${batch.review.appliedAt}` : ''}</span></div>
@@ -42,6 +43,9 @@ export default function PayrollResults({ batch, archived, initialTab = 'detail' 
   </>}
   {editing && <PayrollRowEditor batch={batch} row={editing.row} expectedVersion={editing.version} onClose={() => setEditing(null)} />}
   {adding && <PayrollColumnEditor batch={batch} expectedVersion={adding.version} onClose={() => setAdding(null)} />}
+  {deleting && <Modal open onOpenChange={open => !open && setDeleting(null)} title="删除自定义表头" description={`将删除“${deleting.label}”及本月所有行中该字段的数据。其他字段和员工月薪汇总保持不变；删除后需点击“应用修改”。`}>
+   <div className="dialog-foot"><Button onClick={() => setDeleting(null)}>取消</Button><Button variant="primary" onClick={() => { try { state.deletePayrollColumn(batch.month, deleting.id, deleting.version); setDeleting(null); setError(''); state.notify('自定义表头已删除，请核对后应用修改。'); } catch (cause) { setDeleting(null); setError(cause instanceof Error ? cause.message : '删除失败'); } }}>确认删除</Button></div>
+  </Modal>}
  </Panel>;
 }
 
