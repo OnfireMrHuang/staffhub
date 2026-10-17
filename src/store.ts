@@ -4,7 +4,7 @@ import { withEmployeeDefaults } from './employee-fields';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Department, Employee, Salary } from './domain';
 import { seedDepartments, seedEmployees, seedRules } from './seed';
-import { demoAdHours, demoMonth, demoProducts, demoRooms, demoRecords, demoRoomHours } from './live-seed';
+import { demoAdHours, demoMonth, demoProducts, demoRooms, demoRecords, demoRoomHours, septemberMockMonth, septemberMockRecords, septemberMockRoomHours } from './live-seed';
 import { buildLiveStatistics, validateLiveRecord } from './live-domain';
 import { fillSimulatedHours } from './live-sync';
 import type { AdHourly, LiveDetail, LiveMonthly, LiveRecord, RoomHourly } from './live-domain';
@@ -58,6 +58,7 @@ interface Hub {
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
  compensationInitialized:boolean; compensationRules:CompensationRule[]; compensationTasks:CompensationTask[];
  publishedCompensationRules:CompensationRule[]; monthlyPayrollJobs:MonthlyPayrollJob[]; payrollScheduleStartMonth:string|null;
+ septemberMockInitialized:boolean;
  ensureMonthlyPayrollJobs:(now?:Date)=>void;
  liveRecords:LiveRecord[]; adHours:AdHourly[]; roomHours:RoomHourly[]; archivedMonths:string[]; liveDetails:LiveDetail[]; monthlyRows:LiveMonthly[];
  reportHours:ReportRow[]; reportDays:ReportRow[]; reportOverrides:ReportOverride[]; reportAudit:ReportAudit[];
@@ -106,6 +107,30 @@ const effectiveStatistics = (s:Hub, month:string, detailOverrides=s.detailOverri
  // normalized report contributions always own monthly values.
  const monthly=applyDatasetCorrections(reports.contributions,[],monthlyOverrides,s.employees,s.departments,s.rooms,s.products,month,s.liveRecords).monthly;
  return {details:legacy.details,monthly,reportHours:reports.hourly,reportDays:reports.daily,reportContributions:reports.contributions};
+};
+/** One-time additive demo upgrade. Never replace an existing month's facts or payroll evidence. */
+const withSeptemberMock = (s:Hub):Hub => {
+ if(s.septemberMockInitialized) return s;
+ const marked={...s,septemberMockInitialized:true},month=septemberMockMonth;
+ const hasDate=(row:{date:string})=>row.date.startsWith(month+'-');
+ if(s.archivedMonths.includes(month) || s.batches[month] || s.batch?.month===month ||
+  s.liveRecords.some(hasDate) || s.roomHours.some(hasDate) || s.adHours.some(hasDate) ||
+  s.monthlyRows.some(row=>row.month===month) || s.liveDetails.some(hasDate) ||
+  (s.dataset.month===month&&s.dataset.rows.length>0) || s.datasetsByMonth[month]?.rows.length ||
+  s.monthlyOverrides.some(item=>item.sourceMonth===month||item.row.month===month) ||
+  s.detailOverrides.some(item=>item.sourceMonth===month||hasDate(item.row)) ||
+  s.reportOverrides.some(item=>item.sourceMonth===month) || s.payrollTasks.some(task=>task.month===month) ||
+  s.compensationTasks.some(task=>task.month===month)) return marked;
+ const roomIds=new Set(demoRooms.filter(seed=>s.rooms.some(room=>room.id===seed.id&&room.platformAccountId===seed.platformAccountId&&room.productId===seed.productId&&validRoom(room.id,s.rooms,s.products))&&
+  septemberMockRecords.filter(row=>row.roomId===seed.id).every(row=>[row.hostId,row.buyerId,row.controlId].every(id=>s.employees.some(employee=>employee.id===id)))).map(room=>room.id));
+ const records=septemberMockRecords.filter(row=>roomIds.has(row.roomId));
+ if(!records.length) return marked;
+ const next={...marked,liveRecords:[...s.liveRecords,...structuredClone(records)],roomHours:[...s.roomHours,...structuredClone(septemberMockRoomHours.filter(row=>roomIds.has(row.roomId)))]};
+ let statistics:ReturnType<typeof effectiveStatistics>;
+ try {statistics=effectiveStatistics(next,month);} catch {return marked;} // Preserve an invalid user save for repair rather than partially inserting sources.
+ const cached=s.dataset.month===month?s.dataset:s.datasetsByMonth[month];
+ const dataset:Dataset={rows:statistics.monthly,month,version:(cached?.version??0)+1,revision:s.revision,published:true};
+ return {...next,datasetsByMonth:{...s.datasetsByMonth,[month]:dataset},...(s.month===month?{dataset,monthlyRows:statistics.monthly,liveDetails:statistics.details,reportHours:statistics.reportHours,reportDays:statistics.reportDays}:{})};
 };
 const correctedDatasetCache = (s:Hub,candidates:Map<string,ReturnType<typeof effectiveStatistics>>):Record<string,Dataset> => ({
  ...s.datasetsByMonth,
@@ -270,9 +295,10 @@ const migratePayrollRoles = (roles:Role[]):Role[] => roles.map(role=>{
 });
 const initial = () => {
  const employees=structuredClone(seedEmployees).map(withEmployeeDefaults),departments=structuredClone(seedDepartments),products=structuredClone(demoProducts),rooms=structuredClone(demoRooms);
- const liveRecords=structuredClone(demoRecords),adHours=structuredClone(demoAdHours),roomHours=structuredClone(demoRoomHours);
+ const liveRecords=structuredClone([...demoRecords,...septemberMockRecords]),adHours=structuredClone(demoAdHours),roomHours=structuredClone([...demoRoomHours,...septemberMockRoomHours]);
  const {details,monthly}=buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,demoMonth);
  const reports=buildRoomReports(liveRecords,roomHours,employees,departments,rooms,products,demoMonth,[]);
+ const september=buildLiveStatistics(liveRecords,roomHours,employees,departments,rooms,products,septemberMockMonth).monthly;
  return {
   page:'operations' as Page,opsTab:'datasets',month:demoMonth,employees,departments,products,rooms,liveRecords,adHours,roomHours,
   archivedMonths:[] as string[],liveDetails:details,monthlyRows:monthly,
@@ -280,8 +306,9 @@ const initial = () => {
   detailOverrides:[] as DetailOverride[],monthlyOverrides:[] as MonthlyOverride[],correctionAudit:[] as CorrectionAudit[],
   departmentRules:migrateHourlyRules(seedRules,rooms,products),payrollTasks:[] as PayrollTask[],
   publishedCompensationRules:[] as CompensationRule[],monthlyPayrollJobs:[] as MonthlyPayrollJob[],payrollScheduleStartMonth:null as string|null,
+  septemberMockInitialized:true,
   compensationInitialized:true,compensationRules:initialCompensationRules(rooms).map(normalizeCurrentCompensationRule),compensationTasks:[] as CompensationTask[],
-  dataset:{rows:monthly,month:demoMonth,version:1,revision:1,published:true},datasetsByMonth:{} as Record<string,Dataset>,
+  dataset:{rows:monthly,month:demoMonth,version:1,revision:1,published:true},datasetsByMonth:{[septemberMockMonth]:{rows:september,month:septemberMockMonth,version:1,revision:1,published:true}} as Record<string,Dataset>,
   roles:[
    {id:'employee',name:'员工',description:'查看本人资料与已发布工资',permissions:['本人资料','本人薪资条']},
    {id:'hr',name:'HR',description:'维护员工档案并复核、归档月度薪酬',permissions:['员工管理','部门管理','身份绑定','薪酬核算','薪酬结果编辑','薪酬归档']},
@@ -751,8 +778,8 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  merge:(persisted,current)=>{
   const saved=(persisted??{}) as Partial<Hub>;
   const compensationRules=(saved.compensationRules??(saved.compensationInitialized?[]:initialCompensationRules(saved.rooms??current.rooms))).map(normalizeCurrentCompensationRule);
-  return {...current,...saved,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]};
+  return withSeptemberMock({...current,...saved,septemberMockInitialized:saved.septemberMockInitialized??false,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]});
  },
  storage:createJSONStorage(()=>typeof localStorage!=='undefined'?localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),
- partialize:s=>({publishedCompensationRules:s.publishedCompensationRules,monthlyPayrollJobs:s.monthlyPayrollJobs,payrollScheduleStartMonth:s.payrollScheduleStartMonth,month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
+ partialize:s=>({septemberMockInitialized:s.septemberMockInitialized,publishedCompensationRules:s.publishedCompensationRules,monthlyPayrollJobs:s.monthlyPayrollJobs,payrollScheduleStartMonth:s.payrollScheduleStartMonth,month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
 }));

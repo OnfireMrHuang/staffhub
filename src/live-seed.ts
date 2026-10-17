@@ -47,6 +47,10 @@ export const demoRoomHours: RoomHourly[] = slots.map(({room, i, a, date, hour}) 
   const clickRateDenominator = broadcasting ? 5000 + hour * 100 : 0, conversionRateDenominator = clicks;
   return {id: `demo-room-${room.id}-${accountId}-${date}-${hour}`, roomId: room.id, productId: room.productId, accountId, date, start: hh(hour), end: hh(hour + 1), spend, revenue, clicks, clickRate: clickRateDenominator ? clicks / clickRateDenominator : 0, clickRateDenominator, clickCost: clicks ? spend / clicks : 0, conversions, conversionRate: conversionRateDenominator ? conversions / conversionRateDenominator : 0, conversionRateDenominator, conversionCost: conversions ? spend / conversions : 0, roi: spend ? revenue / spend : 0, orders: conversions, viewers, fans: broadcasting ? 5 + i + a : 0, tips: 0};
 });
+/** September mock uses the same two-day fixture, not the historical real performance file. */
+export const septemberMockMonth = '2026-09';
+export const septemberMockRecords: LiveRecord[] = demoRecords.map(row => ({...row, id:row.id.replaceAll(demoMonth,septemberMockMonth), date:row.date.replace(demoMonth,septemberMockMonth)}));
+export const septemberMockRoomHours: RoomHourly[] = demoRoomHours.map(row => ({...row, id:row.id.replaceAll(demoMonth,septemberMockMonth), date:row.date.replace(demoMonth,septemberMockMonth)}));
 export const demoScheme: Scheme = {
   name: '10月模拟直播主播基础时薪方案', version: 1, fixedSalary: 0, departmentIds: ['live'], employeeIds: hosts,
   groups: demoProjects.map((project, i) => ({id: `demo-group-${i + 1}`, name: `${project.name}项目集`, projectIds: [project.id], hourlyRuleId: seedRules[i].id})),
