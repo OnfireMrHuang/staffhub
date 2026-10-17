@@ -41,6 +41,7 @@
       "totalAllowance": 450,
       "finalGuarantee": 6600,
       "totalAdditions": 6800,
+      "performance": 6800,
       "total": 7250,
       "rules": {
         "g-night-allowance": 200,
@@ -87,6 +88,7 @@
       "totalAllowance": 195,
       "finalGuarantee": 4400,
       "totalAdditions": 3100,
+      "performance": 4400,
       "total": 4595,
       "rules": {
         "g-night-allowance": 100,
@@ -133,6 +135,7 @@
       "totalAllowance": 165,
       "finalGuarantee": 4400,
       "totalAdditions": 3800,
+      "performance": 4400,
       "total": 4565,
       "rules": {
         "g-night-allowance": 60,
@@ -179,6 +182,7 @@
       "totalAllowance": 80,
       "finalGuarantee": 2200,
       "totalAdditions": 1850,
+      "performance": 2200,
       "total": 2280,
       "rules": {
         "g-night-allowance": 40,
@@ -202,18 +206,26 @@
     {
       "employeeId": "example-lin",
       "employeeName": "林晓",
+      "performance": 9000,
+      "allowance": 530,
       "total": 9530
     },
     {
       "employeeId": "example-zhou",
       "employeeName": "周宁",
+      "performance": 4400,
+      "allowance": 195,
       "total": 4595
     },
     {
       "employeeId": "example-chen",
       "employeeName": "陈雨",
+      "performance": 4400,
+      "allowance": 165,
       "total": 4565
     }
   ],
+  "performance": 17800,
+  "totalAllowance": 890,
   "total": 18690
 }

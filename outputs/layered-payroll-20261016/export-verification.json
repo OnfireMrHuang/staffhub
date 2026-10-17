@@ -5,8 +5,12 @@
     "errors": []
   },
   "totalCell": {
-    "formula": "SUM(F7:F9)",
+    "formula": "SUM(G7:G9)",
     "cachedValue": "18690"
+  },
+  "performanceCell": {
+    "formula": "SUM(F7:F9)",
+    "cachedValue": "17800"
   },
   "sheet2": {
     "pane": {
@@ -20,10 +24,10 @@
       "A5:AI5",
       "AJ5:AM5",
       "AN5:AQ5",
-      "AR5:AT5"
+      "AR5:AU5"
     ],
     "errors": [],
-    "columnCount": 46,
+    "columnCount": 47,
     "hostDataRows": 4,
     "groupLabels": [
       "直播数据统计",
@@ -43,5 +47,5 @@
     "merges": [],
     "errors": []
   },
-  "fileBytes": 18421
+  "fileBytes": 18622
 }

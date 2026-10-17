@@ -22,6 +22,7 @@ for (const row of result.rows) {
   assert.ok(check);
   for (const scope of ['global', 'rooms']) for (const metric of ['allowance', 'premium', 'guarantee', 'additions']) near(row.scopes[scope][metric], check.scopes[scope][metric], `${row.employeeName}/${row.roomName}/${scope}/${metric}`);
   near(row.total, check.total, 'row total');
+  near(row.performance, check.performance, 'row performance');
   near(row.premium.after, check.effectivePremium, 'effective premium');
   near(row.premium.roiAfter, check.effectiveRoi, 'effective ROI');
   near(row.premium.rank, check.effectiveRank, 'effective rank');
@@ -42,7 +43,8 @@ const columnName = index => { let n = index + 1, s = ''; while (n) { n--; s = St
 const metricFields = ['allowance', 'guarantee', 'additions', 'premium'];
 const metricLabels = ['补贴金额', '保底金额', '加成金额', '系数加成后保费'];
 const scopeCol = (scope, field) => columnName(monthlyColumns.length + scopes.indexOf(scope) * metricFields.length + metricFields.indexOf(field));
-const resultCol = field => columnName(monthlyColumns.length + scopes.length * metricFields.length + ['allowance', 'premium', 'total'].indexOf(field));
+const resultFields = ['allowance', 'premium', 'performance', 'total'];
+const resultCol = field => columnName(monthlyColumns.length + scopes.length * metricFields.length + resultFields.indexOf(field));
 const rawLastCol = columnName(monthlyColumns.length - 1), firstCalcCol = scopeCol('global', 'allowance'), lastCol = resultCol('total');
 const scopeRefs = (field, row, sheet = '') => scopes.map(scope => `${sheet}${scopeCol(scope, field)}${row}`).join(',');
 const rawCol = field => columnName(monthlyColumns.findIndex(item => item.key === field));
@@ -90,10 +92,10 @@ function note(sheet, cell, text) {
   sheet.getRange(cell).format.font = { name: 'Arial', size: 10, color: colors.muted, italic: true };
 }
 
-base(summary, 'A1:I27', colors.navy);
+base(summary, 'A1:J27', colors.navy);
 base(wide, `A1:${lastCol}15`, colors.blue);
 base(detail, `A1:P${cursor + 2}`, colors.teal);
-heading(summary, '主播月度薪酬核算示例', 'A3:I3');
+heading(summary, '主播月度薪酬核算示例', 'A3:J3');
 heading(wide, '月度核算明细', `A3:${lastCol}3`);
 heading(detail, '逐规则计算明细', 'A3:P3');
 note(summary, 'A4', `${input.month}　模拟数据，不是真实工资。金额单位：人民币元。`);
@@ -109,7 +111,7 @@ const groups = [
   [`${resultCol('allowance')}5:${lastCol}5`, '结果指标', colors.navy],
 ];
 for (const [address, label, fill] of groups) { wide.mergeCells(address); wide.getRange(address).values = [[label]]; header(wide, address, fill); wide.getRange(address).format.borders = { preset: 'none' }; }
-wide.getRange(`A6:${lastCol}6`).values = [[...monthlyColumns.map(item => item.label), ...scopes.flatMap(() => metricLabels), '总计补贴', '系数加成后总计保费', '总计月薪']];
+wide.getRange(`A6:${lastCol}6`).values = [[...monthlyColumns.map(item => item.label), ...scopes.flatMap(() => metricLabels), '总计补贴', '系数加成后总计保费', '总计绩效金额', '总计月薪']];
 for (const [address, , fill] of groups) header(wide, address.replaceAll('5', '6'), fill);
 wide.getRange(`A5:${lastCol}5`).format.rowHeight = 28;
 wide.getRange(`A6:${lastCol}6`).format.rowHeight = 42;
@@ -136,56 +138,56 @@ note(wide, 'A14', '原始ROI和排名保留；时薪规则使用各范围系数�
 wide.freezePanes.freezeRows(6); wide.freezePanes.freezeColumns(2);
 
 // A compact manager view answers the employee-level question first.
-summary.getRange('A6:F6').values = [['员工名称', '员工ID', '核算行数', '总补贴', '系数后总保费', '总计月薪']];
-header(summary, 'A6:F6');
-summary.getRange('A6:F6').format.rowHeight = 34;
+summary.getRange('A6:G6').values = [['员工名称', '员工ID', '核算行数', '总补贴', '系数后总保费', '总计绩效金额', '总计月薪']];
+header(summary, 'A6:G6');
+summary.getRange('A6:G6').format.rowHeight = 34;
 for (let i = 0; i < result.salaries.length; i++) {
   const employee = result.salaries[i], r = 7 + i;
   summary.getRange(`A${r}:B${r}`).values = [[employee.employeeName, employee.employeeId]];
-  summary.getRange(`C${r}:F${r}`).formulas = [[
+  summary.getRange(`C${r}:G${r}`).formulas = [[
     `=COUNTIFS('月度核算明细'!$A$7:$A$10,B${r})`,
-    ...['allowance', 'premium', 'total'].map(field => `=SUMIFS('月度核算明细'!$${resultCol(field)}$7:$${resultCol(field)}$10,'月度核算明细'!$A$7:$A$10,B${r})`),
+    ...resultFields.map(field => `=SUMIFS('月度核算明细'!$${resultCol(field)}$7:$${resultCol(field)}$10,'月度核算明细'!$A$7:$A$10,B${r})`),
   ]];
 }
-stripe(summary, 7, 9, 'F');
+stripe(summary, 7, 9, 'G');
 summary.getRange('A10').values = [['合计']];
-summary.getRange('C10:F10').formulas = [['=SUM(C7:C9)', '=SUM(D7:D9)', '=SUM(E7:E9)', '=SUM(F7:F9)']];
-summary.getRange('A10:F10').format = { fill: '#E8EFF5', font: { bold: true, color: colors.navy }, borders: { top: { style: 'thin', color: colors.line } } };
-summary.getRange('D7:F10').setNumberFormat(moneyFormat);
+summary.getRange('C10:G10').formulas = [['=SUM(C7:C9)', '=SUM(D7:D9)', '=SUM(E7:E9)', '=SUM(F7:F9)', '=SUM(G7:G9)']];
+summary.getRange('A10:G10').format = { fill: '#E8EFF5', font: { bold: true, color: colors.navy }, borders: { top: { style: 'thin', color: colors.line } } };
+summary.getRange('D7:G10').setNumberFormat(moneyFormat);
 summary.getRange('C7:C10').setNumberFormat(integerFormat);
-summary.getRange('F7:F10').format.font.bold = true;
+summary.getRange('G7:G10').format.font.bold = true;
 summary.getRange('A14').values = [['各直播间结算过程']];
 summary.getRange('A14').format.font.bold = true;
 note(summary, 'A15', '先按员工和直播间核算，再把该员工各房间月薪相加。');
-summary.getRange('A16:I16').values = [['员工名称', '直播间', '两类保底最大值', '两类加成合计', '总补贴', '总计月薪', '有效总保费', '有效ROI', '同房主播排名']];
-header(summary, 'A16:I16');
-summary.getRange('A16:I16').format.rowHeight = 40;
+summary.getRange('A16:J16').values = [['员工名称', '直播间', '两类保底最大值', '两类加成合计', '总补贴', '总计绩效金额', '总计月薪', '有效总保费', '有效ROI', '同房主播排名']];
+header(summary, 'A16:J16');
+summary.getRange('A16:J16').format.rowHeight = 40;
 for (const row of result.rows) {
   const sr = sourceIndex.get(rowKey(row)), r = summaryIndex.get(rowKey(row));
   summary.getRange(`A${r}:B${r}`).values = [[row.employeeName, row.roomName]];
-  summary.getRange(`C${r}:I${r}`).formulas = [[
+  summary.getRange(`C${r}:J${r}`).formulas = [[
     `=MAX(${scopeRefs('guarantee', sr, "'月度核算明细'!")})`,
     `=SUM(${scopeRefs('additions', sr, "'月度核算明细'!")})`,
-    ...['allowance', 'total', 'premium'].map(field => `='月度核算明细'!${resultCol(field)}${sr}`),
-    `=IF(${rawRef('spend', sr)}=0,"n.a.",G${r}/${rawRef('spend', sr)})`,
-    `=1+COUNTIFS($B$17:$B$20,B${r},$H$17:$H$20,">"&H${r})`,
+    ...['allowance', 'performance', 'total', 'premium'].map(field => `='月度核算明细'!${resultCol(field)}${sr}`),
+    `=IF(${rawRef('spend', sr)}=0,"n.a.",H${r}/${rawRef('spend', sr)})`,
+    `=1+COUNTIFS($B$17:$B$20,B${r},$I$17:$I$20,">"&I${r})`,
   ]];
 }
-stripe(summary, 17, 20, 'I');
-summary.getRange('C17:H20').setNumberFormat(moneyFormat);
-summary.getRange('I17:I20').setNumberFormat(integerFormat);
-summary.getRange('F17:F20').format.font.bold = true;
-note(summary, 'A23', '每行月薪 = MAX（全局与直播间保底最大值，两类加成合计）+ 总补贴。系数后保费用于ROI与排名。');
+stripe(summary, 17, 20, 'J');
+summary.getRange('C17:I20').setNumberFormat(moneyFormat);
+summary.getRange('J17:J20').setNumberFormat(integerFormat);
+summary.getRange('G17:G20').format.font.bold = true;
+note(summary, 'A23', '总计绩效金额 = MAX（全局与直播间保底最大值，两类加成合计）；总计月薪 = 总计绩效金额 + 总补贴。');
 note(summary, 'A24', '同房主播按有效ROI降序排名；并列时采用 1、1、3 的竞赛排名。陈雨兼任场控，仍只核算一次。');
 note(summary, 'A25', '本例含5行源数据、4行主播核算、3名主播；吴策为投手，未纳入主播月薪。');
 note(summary, 'A26', '来源：固定虚构演示样例。仅使用全局和直播间规则；身份、规则或数据粒度改变后须在系统重新核算。');
 note(summary, 'A27', '兼容输入：旧式条件保费；当前新建保费规则采用固定系数项目。');
-for (const [col, width] of Object.entries({ A: 13, B: 23, C: 17, D: 16, E: 18, F: 16, G: 18, H: 13, I: 16 })) summary.getRange(`${col}1:${col}27`).format.columnWidth = width;
-summary.getRange('C7:I20').format.horizontalAlignment = 'right';
-summary.getRange('A7:I20').format.rowHeight = 28;
-summary.getRange('A16:I16').format.rowHeight = 40;
-summary.getRange('A16:I16').format.horizontalAlignment = 'center';
-summary.getRange('A11:I13').format.rowHeight = 12;
+for (const [col, width] of Object.entries({ A: 13, B: 23, C: 17, D: 16, E: 18, F: 18, G: 18, H: 18, I: 13, J: 16 })) summary.getRange(`${col}1:${col}27`).format.columnWidth = width;
+summary.getRange('C7:J20').format.horizontalAlignment = 'right';
+summary.getRange('A7:J20').format.rowHeight = 28;
+summary.getRange('A16:J16').format.rowHeight = 40;
+summary.getRange('A16:J16').format.horizontalAlignment = 'center';
+summary.getRange('A11:J13').format.rowHeight = 12;
 
 // This fixture uses legacy normal + early × coefficient premium rules.
 // Scope matching is the immutable exported run; scalar arithmetic and the metric
@@ -216,7 +218,7 @@ for (const { row, calculation: calc, rule, excelRow: r, sourceRow: sr } of recor
   } else {
     const item = rule.hourly.items[0];
     if (item.kind === 'metric') {
-      const metricCell = `'员工月薪汇总'!${item.field === 'roi' ? 'H' : 'I'}${summaryIndex.get(rowKey(row))}`;
+      const metricCell = `'员工月薪汇总'!${item.field === 'roi' ? 'I' : 'J'}${summaryIndex.get(rowKey(row))}`;
       const clauses = item.bands.map(band => {
         const terms = band.keyType === 'exact' ? [`${metricCell}=${band.exact}`] : [...(band.min === undefined ? [] : [`${metricCell}${band.includeMin ? '>=' : '>'}${band.min}`]), ...(band.max === undefined ? [] : [`${metricCell}${band.includeMax ? '<=' : '<'}${band.max}`])];
         return { condition: terms.length === 1 ? terms[0] : `AND(${terms.join(',')})`, rate: band.rate };
@@ -252,7 +254,12 @@ for (const row of result.rows) {
       wide.getRange(`${col}${r}`).formulas = [[refs.length ? `=${metric === 'guarantee' || metric === 'premium' ? 'MAX' : 'SUM'}(${refs.join(',')})` : '=0']];
     }
   }
-  wide.getRange(`${resultCol('allowance')}${r}:${lastCol}${r}`).formulas = [[`=SUM(${scopeRefs('allowance', r)})`, `=MAX(${scopeRefs('premium', r)})`, `=ROUND(MAX(${scopeRefs('guarantee', r)},SUM(${scopeRefs('additions', r)}))+${resultCol('allowance')}${r},2)`]];
+  wide.getRange(`${resultCol('allowance')}${r}:${lastCol}${r}`).formulas = [[
+    `=SUM(${scopeRefs('allowance', r)})`,
+    `=MAX(${scopeRefs('premium', r)})`,
+    `=ROUND(MAX(${scopeRefs('guarantee', r)},SUM(${scopeRefs('additions', r)})),2)`,
+    `=ROUND(${resultCol('performance')}${r}+${resultCol('allowance')}${r},2)`,
+  ]];
 }
 
 wb.recalculate();
@@ -262,14 +269,22 @@ function verify() {
     near(wide.getRange(`${lastCol}${r}`).values[0][0], row.total, 'Excel room salary');
     near(wide.getRange(`${resultCol('allowance')}${r}`).values[0][0], row.totalAllowance, 'Excel allowance');
     near(wide.getRange(`${resultCol('premium')}${r}`).values[0][0], row.effectivePremium, 'Excel premium');
+    near(wide.getRange(`${resultCol('performance')}${r}`).values[0][0], row.performance, 'Excel row performance');
+    near(summary.getRange(`F${s}`).values[0][0], row.performance, 'Excel performance presentation');
     near(summary.getRange(`C${s}`).values[0][0], row.finalGuarantee, 'Excel guarantee');
     near(summary.getRange(`D${s}`).values[0][0], row.totalAdditions, 'Excel additions');
     for (const scope of scopes) for (const metric of metricFields) near(wide.getRange(`${scopeCol(scope, metric)}${r}`).values[0][0], row.scopes[scope][metric], `Excel ${scope}/${metric}`);
-    near(summary.getRange(`H${s}`).values[0][0], row.effectiveRoi, 'Excel ROI');
-    near(summary.getRange(`I${s}`).values[0][0], row.effectiveRank, 'Excel rank');
+    near(summary.getRange(`I${s}`).values[0][0], row.effectiveRoi, 'Excel ROI');
+    near(summary.getRange(`J${s}`).values[0][0], row.effectiveRank, 'Excel rank');
   }
-  for (let i = 0; i < expected.employees.length; i++) near(summary.getRange(`F${i + 7}`).values[0][0], expected.employees[i].total, 'Excel employee salary');
-  near(summary.getRange('F10').values[0][0], expected.total, 'Excel total salary');
+  for (let i = 0; i < expected.employees.length; i++) {
+    near(summary.getRange(`G${i + 7}`).values[0][0], expected.employees[i].total, 'Excel employee salary');
+    near(summary.getRange(`F${i + 7}`).values[0][0], expected.employees[i].performance, 'Excel employee performance');
+    near(summary.getRange(`D${i + 7}`).values[0][0], expected.employees[i].allowance, 'Excel employee allowance');
+  }
+  near(summary.getRange('F10').values[0][0], expected.performance, 'Excel total performance');
+  near(summary.getRange('G10').values[0][0], expected.total, 'Excel total salary');
+  near(summary.getRange('D10').values[0][0], expected.totalAllowance, 'Excel total allowance');
   assert.equal(records.length, 56);
   for (const record of records) {
     const check = expected.rows.find(row => rowKey(row) === rowKey(record.row));
@@ -283,32 +298,36 @@ verify();
 const allowanceRecord = records.find(record => record.row.employeeId === 'example-lin' && record.row.roomId === 'example-room-a' && record.rule.id === 'g-night-allowance');
 const rateCell = detail.getRange(`H${allowanceRecord.excelRow}`);
 rateCell.values = [[21]];
-near(summary.getRange('F7').values[0][0], 9540, 'allowance propagation');
-near(summary.getRange('F10').values[0][0], expected.total + 10, 'allowance total propagation');
+near(summary.getRange('G7').values[0][0], 9540, 'allowance propagation');
+near(summary.getRange('G10').values[0][0], expected.total + 10, 'allowance total propagation');
+near(summary.getRange('F10').values[0][0], expected.performance, 'allowance excludes performance');
 rateCell.values = [[20]];
 // Change a global premium coefficient so the first room's ROI order changes.
 const premiumRecord = records.find(record => record.row.employeeId === 'example-lin' && record.row.roomId === 'example-room-a' && record.rule.id === 'g-extra-premium');
 const coefficientCell = detail.getRange(`M${premiumRecord.excelRow}`);
 coefficientCell.values = [[1]];
-near(summary.getRange('H17').values[0][0], 3, 'premium recalculation');
-near(summary.getRange('I17').values[0][0], 2, 'rank recalculation');
-near(summary.getRange('I19').values[0][0], 1, 'peer rank recalculation');
-near(summary.getRange('F17').values[0][0], 7050, 'coefficient through hourly bands to salary');
-near(summary.getRange('F7').values[0][0], 9330, 'coefficient through employee salary');
-near(summary.getRange('F10').values[0][0], expected.total - 200, 'coefficient through total salary');
+near(summary.getRange('I17').values[0][0], 3, 'premium recalculation');
+near(summary.getRange('J17').values[0][0], 2, 'rank recalculation');
+near(summary.getRange('J19').values[0][0], 1, 'peer rank recalculation');
+near(summary.getRange('F17').values[0][0], 6600, 'coefficient through hourly bands to performance');
+near(summary.getRange('F7').values[0][0], 8800, 'coefficient through employee performance');
+near(summary.getRange('F10').values[0][0], expected.performance - 200, 'coefficient through total performance');
+near(summary.getRange('G17').values[0][0], 7050, 'coefficient through performance to salary');
+near(summary.getRange('G7').values[0][0], 9330, 'coefficient through employee salary');
+near(summary.getRange('G10').values[0][0], expected.total - 200, 'coefficient through total salary');
 coefficientCell.values = [[3]];
 wb.recalculate(); verify();
 
 const inspections = [];
-for (const range of ['员工月薪汇总!A6:F10', '员工月薪汇总!A16:I20', `月度核算明细!${firstCalcCol}5:${lastCol}11`, '逐规则计算!F7:J20']) {
+for (const range of ['员工月薪汇总!A6:G10', '员工月薪汇总!A16:J20', `月度核算明细!${firstCalcCol}5:${lastCol}11`, '逐规则计算!F7:J20']) {
   const inspection = await wb.inspect({ kind: 'table', range, include: 'values,formulas', tableMaxRows: 16, tableMaxCols: 16, maxChars: 16000 });
   inspections.push({ range, result: inspection.ndjson });
 }
 const errors = await wb.inspect({ kind: 'match', searchTerm: '#REF!|#DIV/0!|#VALUE!|#NAME\\?|#N/A|#NUM!|#NULL!|#SPILL!|#CALC!', options: { useRegex: true, maxResults: 100 }, summary: 'final formula error scan', maxChars: 4000 });
-await fs.writeFile(path.join(outputDir, 'verification.json'), JSON.stringify({ engineVersion: result.settlementVersion, sourceRows: input.rows.length, settlementRows: result.rows.length, statisticColumns: monthlyColumns.length, settlementColumns: monthlyColumns.length + scopes.length * metricFields.length + 3, headerGroups: groups.map(([,label]) => label), ruleCalculations: records.length, employees: expected.employees, total: summary.getRange('F10').values[0][0], verificationCoverage: ['every rule against independent expected amounts', 'every scope metric', 'ROI and room ranking', 'row and employee totals', 'undefined new source metrics retained', 'only host rows imported'], dynamicChecks: ['allowance to row/employee/grand total', 'premium coefficient to ROI, peer ranking, hourly bands and row/employee/grand total'], formulaErrorScan: errors.ndjson, inspections }, null, 2));
+await fs.writeFile(path.join(outputDir, 'verification.json'), JSON.stringify({ engineVersion: result.settlementVersion, sourceRows: input.rows.length, settlementRows: result.rows.length, statisticColumns: monthlyColumns.length, settlementColumns: monthlyColumns.length + scopes.length * metricFields.length + resultFields.length, headerGroups: groups.map(([,label]) => label), ruleCalculations: records.length, employees: expected.employees, performance: summary.getRange('F10').values[0][0], totalAllowance: summary.getRange('D10').values[0][0], total: summary.getRange('G10').values[0][0], verificationCoverage: ['every rule against independent expected amounts', 'every scope metric', 'ROI and room ranking', 'row and employee performance, allowance and salary totals', 'undefined new source metrics retained', 'only host rows imported'], dynamicChecks: ['allowance to row/employee/grand salary total without changing performance', 'premium coefficient to ROI, peer ranking, hourly bands and row/employee/grand performance and salary totals'], formulaErrorScan: errors.ndjson, inspections }, null, 2));
 console.log(errors.ndjson);
 for (const [sheetName, range, name] of [
-  ['员工月薪汇总', 'A1:I27', 'summary.png'],
+  ['员工月薪汇总', 'A1:J27', 'summary.png'],
   ['月度核算明细', 'A5:M11', 'monthly-dimensions.png'],
   ['月度核算明细', `N5:${rawLastCol}11`, 'monthly-statistics.png'],
   ['月度核算明细', `${firstCalcCol}5:${lastCol}11`, 'monthly-settlement.png'],
@@ -325,7 +344,7 @@ await output.save(target);
 // Inspect the saved OOXML so cached results, headers and panes are verified after export.
 const exportCheck = String.raw`
 import json, pathlib, sys, zipfile, xml.etree.ElementTree as ET
-target, output, total = sys.argv[1:]
+target, output, total, performance = sys.argv[1:]
 ns = {'s': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
 checks = {}
 with zipfile.ZipFile(target) as archive:
@@ -345,10 +364,15 @@ with zipfile.ZipFile(target) as archive:
         if i in (2, 3):
             assert pane.attrib['xSplit'] == '2' and pane.attrib['ySplit'] == '6' and pane.attrib['topLeftCell'] == 'C7'
         if i == 2:
-            assert merges == ['A5:AI5', 'AJ5:AM5', 'AN5:AQ5', 'AR5:AT5']
+            assert merges == ['A5:AI5', 'AJ5:AM5', 'AN5:AQ5', 'AR5:AU5']
             cells = {cell.attrib['r']: cell for cell in root.findall('.//s:c', ns)}
             headers = [cell for address, cell in cells.items() if address.rstrip('0123456789') and address[len(address.rstrip('0123456789')):] == '6']
-            assert len(headers) == 46
+            assert len(headers) == 47
+            assert text_value(cells['AT6']) == '总计绩效金额'
+            assert text_value(cells['AU6']) == '总计月薪'
+            for row, value in [(7, 6800), (8, 4400), (9, 4400), (10, 2200)]:
+                assert float(cells[f'AT{row}'].find('s:v', ns).text) == value
+                assert cells[f'AU{row}'].find('s:f', ns).text == f'ROUND(AT{row}+AR{row},2)'
             for address in ['AH7', 'AI7', 'AH8', 'AI8', 'AH9', 'AI9', 'AH10', 'AI10']:
                 assert text_value(cells[address]) == '未定义'
             assert 'A11' not in cells or cells['A11'].find('s:v', ns) is None
@@ -356,13 +380,17 @@ with zipfile.ZipFile(target) as archive:
             checks['sheet2']['hostDataRows'] = 4
             checks['sheet2']['groupLabels'] = [text_value(cells[address]) for address in ['A5', 'AJ5', 'AN5', 'AR5']]
         if i == 1:
-            cell = root.find(".//s:c[@r='F10']", ns)
+            cell = root.find(".//s:c[@r='G10']", ns)
             cached = cell.find('s:v', ns).text
             assert float(cached) == float(total)
             checks['totalCell'] = {'formula': cell.find('s:f', ns).text, 'cachedValue': cached}
+            performance_cell = root.find(".//s:c[@r='F10']", ns)
+            performance_cached = performance_cell.find('s:v', ns).text
+            assert float(performance_cached) == float(performance)
+            checks['performanceCell'] = {'formula': performance_cell.find('s:f', ns).text, 'cachedValue': performance_cached}
 checks['fileBytes'] = pathlib.Path(target).stat().st_size
 pathlib.Path(output).write_text(json.dumps(checks, ensure_ascii=False, indent=2))
-print(json.dumps({'exportVerified': True, 'total': float(total), 'columns': 46, 'groups': 4}))
+print(json.dumps({'exportVerified': True, 'total': float(total), 'performance': float(performance), 'columns': 47, 'groups': 4}))
 `;
-console.log(execFileSync('/Users/huangwenwu/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3', ['-c', exportCheck, target, path.join(outputDir, 'export-verification.json'), String(expected.total)], { encoding: 'utf8' }).trim());
-console.log(JSON.stringify({ target, total: expected.total, sourceRows: input.rows.length, settlementRows: result.rows.length, ruleCalculations: records.length }));
+console.log(execFileSync('/Users/huangwenwu/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3', ['-c', exportCheck, target, path.join(outputDir, 'export-verification.json'), String(expected.total), String(expected.performance)], { encoding: 'utf8' }).trim());
+console.log(JSON.stringify({ target, performance: expected.performance, total: expected.total, sourceRows: input.rows.length, settlementRows: result.rows.length, ruleCalculations: records.length }));

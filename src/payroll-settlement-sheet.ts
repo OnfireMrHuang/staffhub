@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { CompensationResult, PayrollRowCalculation, Scope } from './compensation-rules';
+import { payrollPerformanceAmount, type CompensationResult, type PayrollRowCalculation, type Scope } from './compensation-rules';
 import type { LiveMonthly } from './live-domain';
 import { monthlyCellValue, monthlyColumns, monthlyCountFields, monthlyFields, pendingMonthlyFields } from './pages/LiveDatasetFields';
 
@@ -28,12 +28,13 @@ function makeLayout(includeEmployees: boolean): PayrollSettlementLayout {
   ...visibleScopes.flatMap(scope => scopeFields.map(field => ({ key: `${scope.key}.${field.key}`, label: field.label, group: scope.key, numeric: true }))),
   { key: 'result.allowance', label: '总计补贴', group: 'result', numeric: true },
   { key: 'result.premium', label: '系数加成后总计保费', group: 'result', numeric: true },
+  { key: 'result.performance', label: '总计绩效金额', group: 'result', numeric: true },
   { key: 'result.total', label: '总计月薪', group: 'result', numeric: true },
 ];
  const groups: PayrollSettlementGroup[] = [
   { key: 'statistics', label: '直播数据统计', count: monthlyColumns.length },
   ...visibleScopes.map(scope => ({ ...scope, count: scopeFields.length })),
-  { key: 'result', label: '结果指标', count: 3 },
+  { key: 'result', label: '结果指标', count: 4 },
 ];
  return { columns, groups };
 }
@@ -66,7 +67,7 @@ export function payrollSettlementCells(row: PayrollRowCalculation, layout: Payro
   return [
     ...monthlyColumns.map(field => statisticCell(row, field.key)),
     ...visibleScopes.flatMap(scope => scopeFields.map(field => row.scopes?.[scope.key]?.[field.key] ?? 0)),
-    row.allowance, row.premium.after, row.total,
+    row.allowance, row.premium.after, payrollPerformanceAmount(row) ?? '未定义', row.total,
   ];
 }
 

@@ -90,7 +90,7 @@ export interface ScopeCalculation {allowance:number;premium:number;guarantee:num
 export interface RuleCalculation {ruleId:string;scope:Scope;type:CalculationType;mode?:'guarantee'|'additions';rate?:number;duration?:NewDuration;hours?:number;amount:number;coefficient?:number;matched?:boolean}
 export interface PayrollRowCalculation {
   employeeId:string;employeeName:string;roomId:string;roomName:string;month:string;matchedRuleIds:string[];
-  statistics?:LiveMonthly;scopes?:Record<Scope,ScopeCalculation>;guarantee?:number;additions?:number;ruleCalculations?:RuleCalculation[];
+  statistics?:LiveMonthly;scopes?:Record<Scope,ScopeCalculation>;guarantee?:number;additions?:number;performance?:number;ruleCalculations?:RuleCalculation[];
   allowance:number;allowanceItems:{ruleId:string;field?:CountMetric;sessions:number;rate:number;amount:number}[];
   premium:{before:number;regular:number|null;early:number|null;coefficient:number;after:number;roiBefore:number|null;roiAfter:number|null;rank:number|null;candidates?:PremiumRuleCalculation[]};
   durationGroups:DurationGroupCalculation[];conditions:ConditionEvidence[];total:number;
@@ -98,6 +98,12 @@ export interface PayrollRowCalculation {
 export interface CompensationResult {settlementVersion?:2;salaries:Salary[];rows:PayrollRowCalculation[];referenceDate:string}
 export function blankConditionGroup():ConditionGroup {return {kind:'group',operator:'and',children:[]};}
 const nonnegative = (value:unknown):value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+/** Read frozen performance, or derive it from complete historical hourly amounts without changing the snapshot. */
+export function payrollPerformanceAmount(row:PayrollRowCalculation):number|undefined {
+  if (nonnegative(row.performance)) return row.performance;
+  if (nonnegative(row.guarantee) && nonnegative(row.additions)) return Math.max(row.guarantee,row.additions);
+  return undefined;
+}
 function validNumber(value:unknown,label:string):number {
   if (!nonnegative(value)) throw new Error(`${label} 数据缺失、为负或非有限数值`);
   return value;
@@ -506,7 +512,8 @@ export function calculateCompensation(rows:LiveMonthly[],employees:Employee[],de
     const scopes=Object.values(trace.scopes!);
     trace.guarantee=Math.max(...scopes.map(scope=>scope.guarantee));
     trace.additions=money(scopes.reduce((sum,scope)=>finite(sum+scope.additions,'加成金额汇总'),0));
-    trace.total=money(finite(Math.max(trace.guarantee,trace.additions)+trace.allowance,'薪资汇总'));
+    trace.performance=money(Math.max(trace.guarantee,trace.additions));
+    trace.total=money(finite(trace.performance+trace.allowance,'薪资汇总'));
     traces.push(trace);
   }
   const salaries:Salary[]=[];

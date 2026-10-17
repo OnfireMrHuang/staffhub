@@ -679,7 +679,7 @@ export const useHub = create<Hub>()(persist((set,get)=>({
   const snapshot=freezePayrollSnapshot(s,[],tasks,[]);snapshot.compensationRules=structuredClone(rules);snapshot.departmentRules=[];
   const batch:Batch={ruleSource:'demo',month:s.month,status:'已核算',salaries:structuredClone(result.salaries),compensationResult:result,datasetVersion:s.dataset.version,ruleVersion:1,created,snapshot,review:{...createPayrollReview(),version:previous?version+1:0},logs:[
    '模拟核算：结果仅供汇报演示，未执行已配置的业务薪酬规则。',
-   '演示公式：50元基础时薪＋直播间10/15/20元时薪加成，乘总直播时长；夜班补贴20元/场。',
+   '演示绩效：（50元基础时薪＋直播间10/15/20元时薪加成）×总直播时长；总计月薪＝总计绩效金额＋总计补贴，夜班补贴20元/场。',
    '保费演示：正常保费＋早班保费×1.2；缺失基础数值仅在模拟结果中使用演示默认值。',
    `${rows.length} 条月度明细，${result.salaries.length} 位员工月薪汇总；待人工复核，未归档。`,
   ]};

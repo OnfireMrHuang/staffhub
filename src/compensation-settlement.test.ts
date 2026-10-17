@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 import type {Employee} from './domain';
 import type {LiveMonthly} from './live-domain';
 import type {LiveRoom} from './operations-domain';
-import {calculateCompensation,matchesCompensationRule,type CompensationRule,type ConditionGroup,type HourlyItem,type NewDuration,type Scope} from './compensation-rules';
+import {calculateCompensation,matchesCompensationRule,payrollPerformanceAmount,type CompensationRule,type ConditionGroup,type HourlyItem,type NewDuration,type Scope} from './compensation-rules';
 
 const employee:Employee={id:'e1',name:'甲',departmentId:'live',position:'投手',joined:'2026-01-01',status:'在职',phone:'',email:'',identities:[],role:'',nonCompeteSigned:true};
 const room:LiveRoom={id:'r1',name:'一',platformAccountId:'a',productId:'p',active:true};
@@ -20,7 +20,7 @@ describe('layered host payroll settlement',()=>{
  it('compares guarantee amounts across durations before choosing the final monthly pay',()=>{
   const result=calculate([hourly('whole-month',100,'hours','guarantee'),hourly('night-only',300,'nightHours','guarantee'),hourly('addition',20),allowance('allowance',10)]);
   expect(result.settlementVersion).toBe(2);
-  expect(result.rows[0]).toMatchObject({guarantee:1000,additions:200,allowance:20,total:1020});
+  expect(result.rows[0]).toMatchObject({guarantee:1000,additions:200,performance:1000,allowance:20,total:1020});
   expect(result.rows[0].ruleCalculations).toEqual(expect.arrayContaining([{ruleId:'whole-month',scope:'global',type:'hourly',mode:'guarantee',rate:100,duration:'hours',hours:10,amount:1000,matched:true},{ruleId:'night-only',scope:'global',type:'hourly',mode:'guarantee',rate:300,duration:'nightHours',hours:2,amount:600,matched:true}]));
  });
 
@@ -29,9 +29,28 @@ describe('layered host payroll settlement',()=>{
   for(const [scope,index] of (['global','rooms','employees'] as Scope[]).map((scope,index)=>[scope,index+1] as const)) rules.push(allowance(`${scope}-allowance`,index*10,scope),premium(`${scope}-premium`,index,scope),hourly(`${scope}-guarantee`,index*50,'hours','guarantee',scope),hourly(`${scope}-addition`,index*40,'hours','additions',scope));
   const result=calculate(rules),trace=result.rows[0];
   expect(trace.scopes).toEqual({global:{allowance:20,premium:900,guarantee:500,additions:400,matchedRuleIds:['global-allowance','global-premium','global-guarantee','global-addition']},rooms:{allowance:40,premium:1100,guarantee:1000,additions:800,matchedRuleIds:['rooms-allowance','rooms-premium','rooms-guarantee','rooms-addition']},employees:{allowance:60,premium:1300,guarantee:1500,additions:1200,matchedRuleIds:['employees-allowance','employees-premium','employees-guarantee','employees-addition']}});
-  expect(trace).toMatchObject({allowance:120,guarantee:1500,additions:2400,total:2520,premium:{after:1300}});
+  expect(trace).toMatchObject({allowance:120,guarantee:1500,additions:2400,performance:2400,total:2520,premium:{after:1300}});
   expect(trace.durationGroups.map(group=>group.scope)).toEqual(['global','rooms','employees']);
   expect(result.salaries[0].total).toBe(2520);
+ });
+
+ it('reads saved performance first and derives only complete frozen hourly amounts for legacy traces',()=>{
+  const trace=calculate([hourly('floor',100,'hours','guarantee'),hourly('addition',20),allowance('allowance',10)]).rows[0];
+  expect(payrollPerformanceAmount(trace)).toBe(1000);
+  const savedZero={...trace,performance:0};
+  expect(payrollPerformanceAmount(savedZero)).toBe(0);
+  const historical={...trace,performance:undefined,total:5000};
+  const before=structuredClone(historical);
+  expect(payrollPerformanceAmount(historical)).toBe(1000);
+  expect(payrollPerformanceAmount({...historical,guarantee:0,additions:0})).toBe(0);
+  expect(payrollPerformanceAmount({...historical,guarantee:0,additions:1234.56})).toBe(1234.56);
+  expect(historical).toEqual(before);
+  expect(Object.hasOwn(historical,'performance')).toBe(true);
+  for(const incomplete of [
+   {...historical,guarantee:undefined}, {...historical,additions:undefined},
+   {...historical,guarantee:NaN}, {...historical,additions:Infinity},
+   {...historical,guarantee:-1}, {...historical,guarantee:undefined,additions:undefined,scopes:undefined},
+  ])expect(payrollPerformanceAmount(incomplete)).toBeUndefined();
  });
 
  it('applies every coefficient before ROI and host-only room ranking, regardless of rule order',()=>{
@@ -79,7 +98,7 @@ describe('layered host payroll settlement',()=>{
   const excluded={...allowance('other-room',20,'rooms'),roomIds:['r2']};
   const result=calculate([excluded],[row()],[employee],[room,{...room,id:'r2'}]);
   expect(result.rows).toHaveLength(1);expect(result.salaries).toHaveLength(1);
-  expect(result.rows[0]).toMatchObject({allowance:0,guarantee:0,additions:0,total:0,premium:{after:1000},matchedRuleIds:[],ruleCalculations:[],scopes:{global:{allowance:0,premium:0,guarantee:0,additions:0,matchedRuleIds:[]},rooms:{allowance:0,premium:0,guarantee:0,additions:0,matchedRuleIds:[]},employees:{allowance:0,premium:0,guarantee:0,additions:0,matchedRuleIds:[]}}});
+  expect(result.rows[0]).toMatchObject({allowance:0,guarantee:0,additions:0,performance:0,total:0,premium:{after:1000},matchedRuleIds:[],ruleCalculations:[],scopes:{global:{allowance:0,premium:0,guarantee:0,additions:0,matchedRuleIds:[]},rooms:{allowance:0,premium:0,guarantee:0,additions:0,matchedRuleIds:[]},employees:{allowance:0,premium:0,guarantee:0,additions:0,matchedRuleIds:[]}}});
   expect(result.salaries[0].details[0].ruleVersion).toBe(0);
   expect(calculate([]).rows).toEqual([]);
  });
@@ -119,14 +138,14 @@ describe('layered host payroll settlement',()=>{
   const a=hourly('a',0.0049),b=hourly('b',0.0049),floor=hourly('floor',0.005,'hours','guarantee');
   const unused:HourlyItem={id:'unused',name:'未选',kind:'special',rate:999};a.hourly!.items.push(unused);
   const trace=calculate([a,b,floor,allowance('small-a',0.0049),allowance('small-b',0.0049)],[row({hours:1,nightHours:0,earlyHours:0,regularHours:1,nightSessions:1})]).rows[0];
-  expect(trace).toMatchObject({additions:0,guarantee:0.01,allowance:0,total:0.01});
+  expect(trace).toMatchObject({additions:0,guarantee:0.01,performance:0.01,allowance:0,total:0.01});
   expect(trace.ruleCalculations?.map(item=>item.amount)).toEqual([0,0,0,0,0.01]);
   expect(trace.durationGroups[0].items.map(item=>item.itemId)).toEqual(['item','item','item']);
  });
 
  it('rounds decimal half-cent amounts up for each rule before totals are combined',()=>{
   const trace=calculate([hourly('decimal-hourly',1.005),allowance('decimal-allowance',10.075)],[row({hours:1,nightHours:0,earlyHours:0,regularHours:1,nightSessions:1})]).rows[0];
-  expect(trace).toMatchObject({additions:1.01,allowance:10.08,total:11.09});
+  expect(trace).toMatchObject({additions:1.01,performance:1.01,allowance:10.08,total:11.09});
  });
 
  it('corrects multiplication error at half a cent without rounding lower amounts up',()=>{

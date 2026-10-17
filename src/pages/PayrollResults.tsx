@@ -3,8 +3,7 @@ import * as XLSX from 'xlsx';
 import { Check, Pencil, Plus } from 'lucide-react';
 import { useHub, type Batch } from '../store';
 import { canPayroll } from '../payroll-permissions';
-import { allPayrollDetailColumns, editablePayrollDetailColumns, payrollDetailKey, payrollDetailValues, buildReviewedPayrollWorkbook, type PayrollCellValue, type PayrollCustomColumn } from '../payroll-review';
-import { payrollSettlementLayout } from '../payroll-settlement-sheet';
+import { payrollDetailLayout, editablePayrollDetailColumns, payrollDetailKey, payrollDetailValues, buildReviewedPayrollWorkbook, type PayrollCellValue, type PayrollCustomColumn } from '../payroll-review';
 import { Badge, Button, Empty, exportSheet, ExportButton, Modal, number, Panel, Person, SearchBox, TabBar, yuan } from '../components';
 import type { PayrollRowCalculation } from '../compensation-rules';
 import '../payroll-settlement.css';
@@ -13,12 +12,11 @@ export default function PayrollResults({ batch, archived, initialTab = 'detail' 
  const state = useHub(), [tab, setTab] = useState(initialTab), [search, setSearch] = useState('');
  const [editing, setEditing] = useState<{ row: PayrollRowCalculation; version: number } | null>(null);
  const [adding, setAdding] = useState<{ version: number } | null>(null), [error, setError] = useState('');
- const columns = batch.compensationResult ? allPayrollDetailColumns(batch) : [], layout = batch.compensationResult ? payrollSettlementLayout(batch.compensationResult) : null;
+ const layout = batch.compensationResult ? payrollDetailLayout(batch) : null, columns = layout?.columns ?? [];
  const editable = !archived && !!batch.compensationResult?.rows.length && canPayroll(state, '薪酬结果编辑');
  const dirty = !!batch.review?.dirty, query = search.trim().toLocaleLowerCase();
  const rows = (batch.compensationResult?.rows ?? []).filter(row => `${row.employeeId} ${row.employeeName} ${row.roomName}`.toLocaleLowerCase().includes(query));
  const salaries = batch.salaries.filter(row => `${row.employeeId} ${row.employeeName}`.toLocaleLowerCase().includes(query));
- const customCount = columns.filter(column => column.custom).length;
  const apply = () => { try { state.applyPayrollEdits(batch.month, batch.review?.version ?? 0); setError(''); state.notify('已应用明细修改，员工月薪汇总已更新。'); } catch (cause) { setError(cause instanceof Error ? cause.message : '应用失败'); } };
  return <Panel className="payroll-results">
   <TabBar value={tab} onChange={value => setTab(value as 'detail' | 'summary')} items={[{ id: 'detail', label: '月度核算明细' }, { id: 'summary', label: '员工月薪汇总' }]} />
@@ -30,8 +28,9 @@ export default function PayrollResults({ batch, archived, initialTab = 'detail' 
   {dirty && <div className="payroll-review-notice" role="status"><span>明细有未应用的修改，员工月薪汇总仍为上次应用结果。{tab === 'summary' ? '请返回月度核算明细执行应用。' : '核对后点击“应用修改”更新汇总。'}</span><Badge tone="amber">待应用</Badge></div>}
   {error && <p className="rule-error" role="alert">{error}</p>}
   {tab === 'detail' ? batch.compensationResult ? <>
+   {batch.compensationResult.settlementVersion === 2 && <div className="settlement-legend"><span>总计绩效金额 = max（最终保底金额，累计加成金额）</span><span>总计月薪 = 总计绩效金额 + 总计补贴</span></div>}
    <div className="table-scroll settlement-scroll" role="region" aria-label="月度核算明细，可横向滚动" tabIndex={0}><table className="settlement-table" aria-label="月度核算明细表"><thead>
-    <tr>{layout?.groups.map(group => <th key={group.key} scope="colgroup" colSpan={group.count} className={`settlement-${group.key}`}><span className="settlement-group-label">{group.label}</span></th>)}{customCount > 0 && <th colSpan={customCount} scope="colgroup" className="settlement-custom">补充信息</th>}{editable && <th rowSpan={2} className="payroll-row-action">操作</th>}</tr>
+    <tr>{layout?.groups.map(group => <th key={group.key} scope="colgroup" colSpan={group.count} className={`settlement-${group.key}`}><span className="settlement-group-label">{group.label}</span></th>)}{editable && <th rowSpan={2} className="payroll-row-action">操作</th>}</tr>
     <tr>{columns.map(column => <th key={column.key} scope="col" data-column={column.key} className={`settlement-${column.group}`}>{column.label}</th>)}</tr>
    </thead><tbody>{rows.map(row => { const values = payrollDetailValues(batch, row); return <tr key={payrollDetailKey(row)}>{columns.map(column => { const value = values[column.key]; return <td key={column.key} data-column={column.key} className={`settlement-${column.group}${column.numeric ? ' numeric align-right' : ''}${column.key === 'result.total' ? ' strong' : ''}`}>{typeof value === 'number' ? column.key === 'year' ? value : number(value, column.type === 'money' ? 2 : column.key === 'roi' ? 4 : column.key.endsWith('Rank') || column.key.endsWith('Sessions') || column.key === 'waitingSalaryDays' ? 0 : 2) : value ?? '—'}</td>; })}{editable && <td className="payroll-row-action"><button className="text-button" onClick={() => setEditing({ row, version: batch.review?.version ?? 0 })} aria-label={`编辑 ${row.employeeName} ${row.roomName}`}><Pencil size={14} />编辑</button></td>}</tr>; })}</tbody></table></div>
    {!rows.length && <p className="settlement-empty">当前条件下暂无核算明细。</p>}
@@ -51,7 +50,7 @@ function PayrollRowEditor({ batch, row, expectedVersion, onClose }: { batch: Bat
  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(columns.map(column => [column.key, typeof original[column.key] === 'number' || column.type === 'text' ? String(original[column.key] ?? '') : ''])));
  const [reason, setReason] = useState(''), [error, setError] = useState('');
  const groups = [...new Set(columns.map(column => column.group))];
- const groupLabels: Record<string, string> = { statistics: '直播数据统计', global: '全局核算指标', rooms: '直播间核算指标', employees: '历史员工核算指标', result: '结果指标', custom: '补充信息' };
+ const groupLabels: Record<string, string> = { statistics: '直播数据统计', global: '全局核算指标', rooms: '直播间核算指标', employees: '历史员工核算指标', result: '结果指标', custom: '自定义' };
  const save = () => { try {
   const patch: Record<string, PayrollCellValue> = {};
   for (const column of columns) {
@@ -73,5 +72,5 @@ function PayrollRowEditor({ batch, row, expectedVersion, onClose }: { batch: Bat
 function PayrollColumnEditor({ batch, expectedVersion, onClose }: { batch: Batch; expectedVersion: number; onClose: () => void }) {
  const state = useHub(), [label, setLabel] = useState(''), [type, setType] = useState<PayrollCustomColumn['type']>('text'), [error, setError] = useState('');
  const save = () => { try { state.addPayrollColumn(batch.month, { id: `custom_${crypto.randomUUID().replaceAll('-', '')}`, label: label.trim(), type }, expectedVersion); onClose(); } catch (cause) { setError(cause instanceof Error ? cause.message : '追加失败'); } };
- return <Modal open onOpenChange={open => !open && onClose()} title="追加表头" description="追加字段仅用于本月核算明细的复核与补充信息。"><form onSubmit={event => { event.preventDefault(); save(); }}><div className="form-grid"><label>表头名称<input aria-label="表头名称" value={label} onChange={event => setLabel(event.target.value)} required /></label><label>字段类型<select aria-label="字段类型" value={type} onChange={event => setType(event.target.value as PayrollCustomColumn['type'])}><option value="text">文本</option><option value="number">数字</option><option value="money">金额</option></select></label></div>{error && <p className="rule-error" role="alert">{error}</p>}<div className="dialog-foot"><Button onClick={onClose}>取消</Button><Button type="submit" variant="primary">确认追加</Button></div></form></Modal>;
+ return <Modal open onOpenChange={open => !open && onClose()} title="追加表头" description="新增字段将放入“结果指标”前的“自定义”分类，按添加顺序排列。"><form onSubmit={event => { event.preventDefault(); save(); }}><div className="form-grid"><label>表头名称<input aria-label="表头名称" value={label} onChange={event => setLabel(event.target.value)} required /></label><label>字段类型<select aria-label="字段类型" value={type} onChange={event => setType(event.target.value as PayrollCustomColumn['type'])}><option value="text">文本</option><option value="number">数字</option><option value="money">金额</option></select></label></div>{error && <p className="rule-error" role="alert">{error}</p>}<div className="dialog-foot"><Button onClick={onClose}>取消</Button><Button type="submit" variant="primary">确认追加</Button></div></form></Modal>;
 }

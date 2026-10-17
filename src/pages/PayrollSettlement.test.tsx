@@ -69,18 +69,19 @@ it('shows frozen monthly statistics and the two current scopes in the detail res
   const headerRows = [...table!.matchAll(/<thead>([\s\S]*?)<\/thead>/g)][0][1].match(/<tr[^>]*>[\s\S]*?<\/tr>/g)!;
   expect(headerRows).toHaveLength(2);
   expect(textCells(headerRows[0])).toEqual(['直播数据统计', '全局核算指标', '直播间核算指标', '结果指标']);
-  expect([...headerRows[0].matchAll(/colSpan="(\d+)"/g)].map(match => Number(match[1]))).toEqual([35, 4, 4, 3]);
+  expect([...headerRows[0].matchAll(/colSpan="(\d+)"/g)].map(match => Number(match[1]))).toEqual([35, 4, 4, 4]);
   expect(textCells(headerRows[1])).toEqual([
    '员工ID', '员工名称', '部门ID', '部门名称', '入职日期', '是否签约竞业协议', '产品ID', '产品名称', '直播间ID', '直播间名称', '直播间开播时间', '年份', '月份',
    '总直播时长', '夜班直播时长', '早班直播时长', '正常直播时长', '夜班场次', '早班场次', '总消耗', '夜班消耗', '早班消耗', '正常消耗', '总保费', '夜班保费', '早班保费', '正常保费', 'ROI', '时耗', 'AD成本', '保单成本', 'ROI排名', '消耗排名', '等待薪资天数', '过去3个月的平均时薪',
-   '补贴金额', '保底金额', '加成金额', '系数加成后保费', '补贴金额', '保底金额', '加成金额', '系数加成后保费', '总计补贴', '系数加成后总计保费', '总计月薪',
+   '补贴金额', '保底金额', '加成金额', '系数加成后保费', '补贴金额', '保底金额', '加成金额', '系数加成后保费', '总计补贴', '系数加成后总计保费', '总计绩效金额', '总计月薪',
   ]);
   const rows = [...table!.matchAll(/<tbody>([\s\S]*?)<\/tbody>/g)][0][1].match(/<tr[^>]*>[\s\S]*?<\/tr>/g)!;
   expect(rows).toHaveLength(2);
   const first = textCells(rows[0]), second = textCells(rows[1]);
-  expect(first).toHaveLength(46);
+  expect(first).toHaveLength(47);
   expect(first.slice(23, 28)).toEqual(['1,000.00', '0.00', '200.00', '800.00', '1.0000']);
-  expect(first.slice(-3)).toEqual(['100.00', '1,250.00', '1,200.00']);
+  expect(first.slice(-4)).toEqual(['100.00', '1,250.00', '1,100.00', '1,200.00']);
+  expect(second.slice(-2)).toEqual(['500.00', '500.00']);
   expect(first[11]).toBe('2026');
   expect(first[33]).toBe('0');
   expect(first[34]).toBe('65.25');
@@ -98,7 +99,8 @@ it('shows frozen monthly statistics and the two current scopes in the detail res
 
 it('explains v2 settlement by scoped amounts, rule amounts, adjusted ROI, and the final amount comparison', () => {
  const html = renderToStaticMarkup(<CompensationSalaryDetails salary={salary} result={result} rules={rules} />);
- expect(html).toContain('每个直播间月薪 = max（最终保底金额，累计加成金额）+ 总计补贴');
+ expect(html).toContain('总计绩效金额 = max（最终保底金额，累计加成金额）');
+ expect(html).toContain('总计月薪 = 总计绩效金额 + 总计补贴');
  expect(html).toContain('员工月薪 = 各直播间月薪之和');
  expect(html).toContain('原始 ROI');
  expect(html).toContain('系数后 ROI');
@@ -108,7 +110,9 @@ it('explains v2 settlement by scoped amounts, rule amounts, adjusted ROI, and th
  expect(html).toContain('基础保底');
  expect(html).toContain('¥900.00');
  expect(html).toContain('¥500.00');
- expect(html).toContain('max（¥900.00，¥1,100.00）+ ¥100.00 = ¥1,200.00');
+ expect(html).toContain('总计绩效金额 · 时薪核算');
+ expect(html).toContain('¥1,100.00 + ¥100.00 = ¥1,200.00');
+ expect(html).toContain('¥500.00 + ¥0.00 = ¥500.00');
  expect(html).toContain('系数保费仅用于后续 ROI 与排名计算，不直接计入工资');
  expect(html).not.toContain('各直播间、各时长的 max');
  const scopeRows = [...html.matchAll(/<tr[^>]*data-scope="([^"]+)"[^>]*>([\s\S]*?)<\/tr>/g)];
@@ -138,6 +142,19 @@ it('preserves the historical detail formula when a snapshot has no settlement ve
  const html = renderToStaticMarkup(<CompensationSalaryDetails salary={salary} result={historical} rules={rules} />);
  expect(html).toContain('各直播间、各时长的 max');
  expect(html).not.toContain('逐规则金额');
+ expect(html).not.toContain('总计绩效金额 =');
+});
+
+it('keeps unavailable historical performance undefined while displaying its frozen salary', () => {
+ const historical = structuredClone(result);
+ historical.rows = [{ ...historical.rows[0], guarantee: undefined, additions: undefined }];
+ const html = renderToStaticMarkup(<CompensationSalaryDetails salary={salary} result={historical} rules={rules} />);
+ const outcome = html.match(/<div class="settlement-outcome">([\s\S]*?)<\/article>/)?.[1];
+ expect(outcome).toContain('总计绩效金额 · 时薪核算');
+ expect(outcome).toContain('<strong>未定义</strong>');
+ expect(outcome).toContain('<strong>¥1,200.00</strong>');
+ expect(outcome).not.toContain('¥0.00 +');
+ expect(outcome).not.toContain('未定义 +');
 });
 
 it('renders item-based premium expressions and each allowance count field from their frozen evidence', () => {
@@ -174,11 +191,11 @@ function reviewBatch(): Batch {
 }
 it('shows draft detail values separately from the last applied readonly employee summary',()=>{
  const before=useHub.getState(), batch=reviewBatch();
- batch.review={version:2,dirty:true,columns:[{id:'note',label:'复核备注',type:'text'}],appliedColumns:[],draftCells:{[payrollDetailKey(result.rows[0])]:{'result.total':1500,note:'补充金额'}},appliedCells:{},audit:[]};
+ batch.review={version:2,dirty:true,columns:[{id:'note',label:'复核备注',type:'text'}],appliedColumns:[],draftCells:{[payrollDetailKey(result.rows[0])]:{'result.total':1500,'result.performance':777,note:'补充金额'}},appliedCells:{},audit:[]};
  try {
   useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});
   const detail=renderToStaticMarkup(<PayrollResults batch={batch} archived={false}/>);
-  for(const label of ['追加表头','应用修改','编辑 测试主播 直播间A','复核备注','补充金额','1,500.00','待应用'])expect(detail).toContain(label);
+  for(const label of ['追加表头','应用修改','编辑 测试主播 直播间A','复核备注','补充金额','1,500.00','777.00','待应用'])expect(detail).toContain(label);
   const summary=renderToStaticMarkup(<PayrollResults batch={batch} archived={false} initialTab="summary"/>);
   expect(summary).toContain('员工月薪汇总表');
   expect(summary).toContain('¥1,700.00');

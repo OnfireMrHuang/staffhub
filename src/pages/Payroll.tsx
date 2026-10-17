@@ -4,7 +4,7 @@ import { useHub } from '../store';
 import type { Salary } from '../domain';
 import { metricNames } from '../domain';
 import { monthlyMetricOptions } from '../payroll-rules';
-import { guaranteeRateFieldOptions, premiumFieldOptions, type CompensationResult, type CompensationRule, type HourlyItemCalculation } from '../compensation-rules';
+import { guaranteeRateFieldOptions, payrollPerformanceAmount, premiumFieldOptions, type CompensationResult, type CompensationRule, type HourlyItemCalculation } from '../compensation-rules';
 import { compensationMetricLabel } from './CompensationRuleEditor';
 import { Badge, Empty, Modal, number, Panel, Person, SearchBox, yuan } from '../components';
 import { monthlyPayrollTasks, type MonthlyTaskStatus } from '../payroll-task-view';
@@ -68,8 +68,8 @@ function LayeredCompensationSalaryDetails({salary,result,rules}:{salary:Salary;r
  const metric=(value:number|null|undefined,digits=4)=>value==null?'未定义':number(value,digits);
  return <>
   <div className="salary-detail-head"><Person name={salary.employeeName} id={salary.employeeId}/><Badge tone="gray">{salary.departmentName}</Badge><span className="spacer"/><span>原始核算月薪<strong>{yuan(salary.total)}</strong></span></div>
-  <div className="settlement-formula"><strong>每个直播间月薪 = max（最终保底金额，累计加成金额）+ 总计补贴</strong><p>员工月薪 = 各直播间月薪之和。保底逐规则先乘时长再取最大金额；加成逐规则先乘时长再累加。条件日期参考：{result.referenceDate}。</p></div>
-  {rows.map(row=><article key={`${row.month}-${row.roomId}`} className="compensation-row-trace">
+  <div className="settlement-formula"><strong>总计绩效金额 = max（最终保底金额，累计加成金额）</strong><br/><strong>总计月薪 = 总计绩效金额 + 总计补贴</strong><p>员工月薪 = 各直播间月薪之和。保底逐规则先乘时长再取最大金额；加成逐规则先乘时长再累加。条件日期参考：{result.referenceDate}。</p></div>
+  {rows.map(row=>{const performance=payrollPerformanceAmount(row);return <article key={`${row.month}-${row.roomId}`} className="compensation-row-trace">
    <div className="inline"><strong>{row.roomName}</strong><Badge tone="gray">{row.month}</Badge><Badge tone="gray">{row.matchedRuleIds.length} 条适用规则</Badge><span className="spacer"/><strong className="green-text">{yuan(row.total)}</strong></div>
    <p className="compensation-trace-formula">参与规则：{row.matchedRuleIds.length?row.matchedRuleIds.map(ruleName).join('、'):'本行无适用规则'}</p>
    <h3 className="detail-section-title">原始统计与系数后指标</h3>
@@ -98,8 +98,9 @@ function LayeredCompensationSalaryDetails({salary,result,rules}:{salary:Salary;r
     return <tr key={`${calculation.ruleId}-${index}`}><td>{ruleName(calculation.ruleId)}</td><td>{scopeNames[calculation.scope]}</td><td>{calculation.type==='hourly'?(calculation.mode==='guarantee'?'保底':'加成'):calculation.type==='premium'?'系数保费':'补贴'}</td><td>{evidence}{items.map((item,itemIndex)=><small key={`${item.itemId}-${itemIndex}`}>{item.name} · {item.field?`${hourlyItemFieldLabel(item)} ${metric(item.value)}`:'直接时薪'} · {item.matched?'命中':'未命中'} · {yuan(item.rate)} / h</small>)}{candidate?.items.map(item=><small key={item.id}>{item.name}：{premiumFieldOptions.find(option=>option.field===item.field)?.label||item.field} {yuan(item.value)} × {number(item.coefficient,4)} = {yuan(item.amount)}</small>)}</td><td>{calculation.matched===undefined?'—':calculation.matched?'命中':'未命中'}</td><td>{selection}</td><td className="numeric align-right strong">{yuan(calculation.amount)}</td></tr>;
    })}</tbody></table></div>:<p className="compensation-trace-formula">本行无逐规则金额，核算金额按冻结结果展示。</p>}
    {row.conditions.length>0&&<details className="compensation-evidence"><summary>条件取值与判断依据</summary>{row.conditions.map((evidence,index)=><p key={index}><strong>{ruleName(evidence.ruleId)} · {evidence.matched?'命中':'未命中'}</strong> · {conditionEvidenceText(evidence.condition)}<br/>{Object.entries(evidence.values).map(([field,value])=>`${conditionEvidenceValueLabel(field)}：${typeof value==='boolean'?(value?'是':'否'):value}`).join('；')}</p>)}</details>}
-   <div className="settlement-outcome"><div><span>直播间月薪 · 比较金额后加补贴</span><p>各范围的保底金额取最大，加成金额和补贴分别求和。</p></div><strong>{`max（${amount(row.guarantee)}，${amount(row.additions)}）+ ${yuan(row.allowance)} = ${yuan(row.total)}`}</strong></div>
-  </article>)}
+   <div className="settlement-outcome"><div><span>总计绩效金额 · 时薪核算</span><p>最终保底金额 {amount(row.guarantee)}；累计加成金额 {amount(row.additions)}，取较大值。</p></div><strong>{amount(performance)}</strong></div>
+   <div className="settlement-outcome"><div><span>总计月薪 · 绩效加补贴</span>{performance===undefined&&<p>历史快照缺少绩效计算依据，月薪按冻结结果展示。</p>}</div><strong>{performance===undefined?yuan(row.total):`${yuan(performance)} + ${yuan(row.allowance)} = ${yuan(row.total)}`}</strong></div>
+  </article>})}
   <div className="settlement-outcome"><span>员工月薪 · {rows.length} 个直播间</span><strong>{rows.map(row=>yuan(row.total)).join(' + ')} = {yuan(salary.total)}</strong></div>
  </>;
 }

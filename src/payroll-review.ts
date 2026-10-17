@@ -49,26 +49,29 @@ function rowsOf(batch:Batch) {
  if(new Set(keys).size!==keys.length)throw new Error('月度核算明细存在重复数据行');
  return rows;
 }
-function validateColumn(batch:Batch,column:PayrollCustomColumn,existing:PayrollCustomColumn[]) {
+function validateColumn(batch:Batch,column:PayrollCustomColumn,existing:PayrollCustomColumn[],checkBuiltInLabel=true) {
  if(!column || typeof column.id!=='string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(column.id))throw new Error('追加字段标识须以字母开头，仅包含字母、数字、下划线或短横线');
  if(typeof column.label!=='string' || !normalizeLabel(column.label) || normalizeLabel(column.label).length>80)throw new Error('请填写 1 至 80 字的追加表头名称');
  if(!['text','number','money'].includes(column.type))throw new Error('追加字段类型仅支持文本、数字或金额');
  const builtIn=payrollSettlementLayout(resultOf(batch)).columns;
  if(builtIn.some(field=>field.key===column.id)||existing.some(field=>field.id===column.id))throw new Error('追加字段标识已存在');
  const label=normalizeLabel(column.label);
- if(builtIn.some(field=>normalizeLabel(field.label)===label)||existing.some(field=>normalizeLabel(field.label)===label))throw new Error('追加表头名称已存在');
+ if((checkBuiltInLabel&&builtIn.some(field=>normalizeLabel(field.label)===label))||existing.some(field=>normalizeLabel(field.label)===label))throw new Error('追加表头名称已存在');
 }
 function validateColumns(batch:Batch) {
  const checked:PayrollCustomColumn[]=[];
- for(const column of reviewOf(batch).columns){validateColumn(batch,column,checked);checked.push(column);}
+ // A later release may introduce a built-in label already used by a frozen custom column.
+ for(const column of reviewOf(batch).columns){validateColumn(batch,column,checked,false);checked.push(column);}
 }
-export function allPayrollDetailColumns(batch:Batch):PayrollReviewColumn[] {
- const base=payrollSettlementLayout(resultOf(batch)).columns;
- return [
-  ...base.map(column=>({...column,type:(!column.numeric?'text':column.group==='statistics'?'number':'money') as PayrollCustomColumn['type'],custom:false,readonly:dimensions.has(column.key)||!column.numeric})),
-  ...reviewOf(batch).columns.map(column=>({key:column.id,label:column.label,group:'custom',numeric:column.type!=='text',type:column.type,custom:true,readonly:false})),
- ];
+/** The table, editor and export share one order: custom fields precede results. */
+export function payrollDetailLayout(batch:Batch):{columns:PayrollReviewColumn[];groups:{key:string;label:string;count:number}[]} {
+ const base=payrollSettlementLayout(resultOf(batch));
+ const custom=reviewOf(batch).columns.map(column=>({key:column.id,label:column.label,group:'custom',numeric:column.type!=='text',type:column.type,custom:true,readonly:false}));
+ const groups=base.groups.flatMap(group=>group.key==='result' && custom.length ? [{key:'custom',label:'自定义',count:custom.length},group] : [group]);
+ const columns=groups.flatMap(group=>group.key==='custom' ? custom : base.columns.filter(column=>column.group===group.key).map(column=>({...column,type:(!column.numeric?'text':column.group==='statistics'?'number':'money') as PayrollCustomColumn['type'],custom:false,readonly:dimensions.has(column.key)||!column.numeric})));
+ return {columns,groups};
 }
+export const allPayrollDetailColumns=(batch:Batch):PayrollReviewColumn[]=>payrollDetailLayout(batch).columns;
 export const editablePayrollDetailColumns=(batch:Batch)=>allPayrollDetailColumns(batch).filter(column=>!column.readonly);
 function validatePatch(batch:Batch,patch:Record<string,PayrollCellValue>) {
  if(!patch||typeof patch!=='object'||Array.isArray(patch))throw new Error('核算明细修订内容无效');
@@ -167,8 +170,7 @@ export function applyPayrollReview(batch:Batch,actor:string):Batch {
 
 /** Detail exports include pending edits; employee totals remain at the last explicit application. */
 export function buildReviewedPayrollWorkbook(batch:Batch):XLSX.WorkBook {
- const workbook=XLSX.utils.book_new(),rows=rowsOf(batch),columns=allPayrollDetailColumns(batch),layout=payrollSettlementLayout(resultOf(batch));
- const groups=[...layout.groups,...(reviewOf(batch).columns.length?[{key:'custom',label:'补充字段',count:reviewOf(batch).columns.length}]:[])];
+ const workbook=XLSX.utils.book_new(),rows=rowsOf(batch),{columns,groups}=payrollDetailLayout(batch);
  const headers=Array<string>(columns.length).fill(''),merges:XLSX.Range[]=[];
  let first=0;
  for(const group of groups){headers[first]=group.label;if(group.count>1)merges.push({s:{r:0,c:first},e:{r:0,c:first+group.count-1}});first+=group.count;}

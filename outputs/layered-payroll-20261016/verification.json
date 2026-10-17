@@ -3,7 +3,7 @@
   "sourceRows": 5,
   "settlementRows": 4,
   "statisticColumns": 35,
-  "settlementColumns": 46,
+  "settlementColumns": 47,
   "headerGroups": [
     "直播数据统计",
     "全局核算指标",
@@ -15,45 +15,53 @@
     {
       "employeeId": "example-lin",
       "employeeName": "林晓",
+      "performance": 9000,
+      "allowance": 530,
       "total": 9530
     },
     {
       "employeeId": "example-zhou",
       "employeeName": "周宁",
+      "performance": 4400,
+      "allowance": 195,
       "total": 4595
     },
     {
       "employeeId": "example-chen",
       "employeeName": "陈雨",
+      "performance": 4400,
+      "allowance": 165,
       "total": 4565
     }
   ],
+  "performance": 17800,
+  "totalAllowance": 890,
   "total": 18690,
   "verificationCoverage": [
     "every rule against independent expected amounts",
     "every scope metric",
     "ROI and room ranking",
-    "row and employee totals",
+    "row and employee performance, allowance and salary totals",
     "undefined new source metrics retained",
     "only host rows imported"
   ],
   "dynamicChecks": [
-    "allowance to row/employee/grand total",
-    "premium coefficient to ROI, peer ranking, hourly bands and row/employee/grand total"
+    "allowance to row/employee/grand salary total without changing performance",
+    "premium coefficient to ROI, peer ranking, hourly bands and row/employee/grand performance and salary totals"
   ],
   "formulaErrorScan": "{\"kind\":\"notice\",\"message\":\"Cell search matched 0 entries.\"}",
   "inspections": [
     {
-      "range": "员工月薪汇总!A6:F10",
-      "result": "{\"kind\":\"table\",\"sheet\":\"员工月薪汇总\",\"address\":\"A6:F10\",\"rows\":5,\"cols\":6,\"values\":[[\"员工名称\",\"员工ID\",\"核算行数\",\"总补贴\",\"系数后总保费\",\"总计月薪\"],[\"林晓\",\"example-lin\",2,530,49000,9530],[\"周宁\",\"example-zhou\",1,195,28000,4595],[\"陈雨\",\"example-chen\",1,165,36000,4565],[\"合计\",null,4,890,113000,18690]]}"
+      "range": "员工月薪汇总!A6:G10",
+      "result": "{\"kind\":\"table\",\"sheet\":\"员工月薪汇总\",\"address\":\"A6:G10\",\"rows\":5,\"cols\":7,\"values\":[[\"员工名称\",\"员工ID\",\"核算行数\",\"总补贴\",\"系数后总保费\",\"总计绩效金额\",\"总计月薪\"],[\"林晓\",\"example-lin\",2,530,49000,9000,9530],[\"周宁\",\"example-zhou\",1,195,28000,4400,4595],[\"陈雨\",\"example-chen\",1,165,36000,4400,4565],[\"合计\",null,4,890,113000,17800,18690]]}"
     },
     {
-      "range": "员工月薪汇总!A16:I20",
-      "result": "{\"kind\":\"table\",\"sheet\":\"员工月薪汇总\",\"address\":\"A16:I20\",\"rows\":5,\"cols\":9,\"values\":[[\"员工名称\",\"直播间\",\"两类保底最大值\",\"两类加成合计\",\"总补贴\",\"总计月薪\",\"有效总保费\",\"有效ROI\",\"同房主播排名\"],[\"林晓\",\"示例一号房\",6600,6800,450,7250,40000,4,1],[\"周宁\",\"示例一号房\",4400,3100,195,4595,28000,2.8,3],[\"陈雨\",\"示例一号房\",4400,3800,165,4565,36000,3.6,2],[\"林晓\",\"示例二号房\",2200,1850,80,2280,9000,2.25,1]]}"
+      "range": "员工月薪汇总!A16:J20",
+      "result": "{\"kind\":\"table\",\"sheet\":\"员工月薪汇总\",\"address\":\"A16:J20\",\"rows\":5,\"cols\":10,\"values\":[[\"员工名称\",\"直播间\",\"两类保底最大值\",\"两类加成合计\",\"总补贴\",\"总计绩效金额\",\"总计月薪\",\"有效总保费\",\"有效ROI\",\"同房主播排名\"],[\"林晓\",\"示例一号房\",6600,6800,450,6800,7250,40000,4,1],[\"周宁\",\"示例一号房\",4400,3100,195,4400,4595,28000,2.8,3],[\"陈雨\",\"示例一号房\",4400,3800,165,4400,4565,36000,3.6,2],[\"林晓\",\"示例二号房\",2200,1850,80,2200,2280,9000,2.25,1]]}"
     },
     {
-      "range": "月度核算明细!AJ5:AT11",
-      "result": "{\"kind\":\"table\",\"sheet\":\"月度核算明细\",\"address\":\"AJ5:AT11\",\"rows\":7,\"cols\":11,\"values\":[[\"全局核算指标\",\"全局核算指标\",\"全局核算指标\",\"全局核算指标\",\"直播间核算指标\",\"直播间核算指标\",\"直播间核算指标\",\"直播间核算指标\",\"结果指标\",\"结果指标\",\"结果指标\"],[\"补贴金额\",\"保底金额\",\"加成金额\",\"系数加成后保费\",\"补贴金额\",\"保底金额\",\"加成金额\",\"系数加成后保费\",\"总计补贴\",\"系数加成后总计保费\",\"总计月薪\"],[450,6600,5800,40000,0,0,1000,0,450,40000,7250],[195,4400,2100,28000,0,0,1000,0,195,28000,4595],[165,4400,3200,36000,0,0,600,0,165,36000,4565],[80,2200,1250,9000,0,0,600,0,80,9000,2280],[null,null,null,null,null,null,null,null,null,null,null]]}"
+      "range": "月度核算明细!AJ5:AU11",
+      "result": "{\"kind\":\"table\",\"sheet\":\"月度核算明细\",\"address\":\"AJ5:AU11\",\"rows\":7,\"cols\":12,\"values\":[[\"全局核算指标\",\"全局核算指标\",\"全局核算指标\",\"全局核算指标\",\"直播间核算指标\",\"直播间核算指标\",\"直播间核算指标\",\"直播间核算指标\",\"结果指标\",\"结果指标\",\"结果指标\",\"结果指标\"],[\"补贴金额\",\"保底金额\",\"加成金额\",\"系数加成后保费\",\"补贴金额\",\"保底金额\",\"加成金额\",\"系数加成后保费\",\"总计补贴\",\"系数加成后总计保费\",\"总计绩效金额\",\"总计月薪\"],[450,6600,5800,40000,0,0,1000,0,450,40000,6800,7250],[195,4400,2100,28000,0,0,1000,0,195,28000,4400,4595],[165,4400,3200,36000,0,0,600,0,165,36000,4400,4565],[80,2200,1250,9000,0,0,600,0,80,9000,2200,2280],[null,null,null,null,null,null,null,null,null,null,null,null]]}"
     },
     {
       "range": "逐规则计算!F7:J20",

@@ -9,8 +9,8 @@ it('reconciles the fictional example against independently calculated row and em
   expect(example.rules.every(rule => rule.scope !== 'employees' && rule.employeeCondition === undefined)).toBe(true);
   const source = structuredClone(example);
   const result = calculateCompensation(source.rows, source.employees, source.departments, source.rooms, source.rules, source.month);
-  expect(result.rows.map(row => [row.allowance, row.guarantee, row.additions, row.total])).toEqual([
-    [450, 6600, 6800, 7250], [195, 4400, 3100, 4595], [165, 4400, 3800, 4565], [80, 2200, 1850, 2280],
+  expect(result.rows.map(row => [row.allowance, row.guarantee, row.additions, row.performance, row.total])).toEqual([
+    [450, 6600, 6800, 6800, 7250], [195, 4400, 3100, 4400, 4595], [165, 4400, 3800, 4400, 4565], [80, 2200, 1850, 2200, 2280],
   ]);
   expect(result.salaries.map(row => [row.employeeName, row.total])).toEqual([['林晓', 9530], ['周宁', 4595], ['陈雨', 4565]]);
   expect(result.salaries.reduce((sum, row) => sum + row.total, 0)).toBe(18690);
@@ -21,8 +21,11 @@ it('reconciles the fictional example against independently calculated row and em
     expect(actual.scopes?.rooms).toMatchObject(manual.scopes.rooms);
     expect(actual.scopes?.employees.matchedRuleIds).toEqual([]);
     expect(Object.fromEntries(actual.ruleCalculations!.map(rule => [rule.ruleId, rule.amount]))).toEqual(manual.rules);
+    expect(actual.performance).toBe(manual.performance);
+    expect(actual.total).toBe(actual.performance! + actual.allowance);
     expect(actual.total).toBe(manual.total);
   }
+  expect(result.rows.reduce((sum, row) => sum + row.performance!, 0)).toBe(expected.performance);
   expect(source).toEqual(example);
 });
 

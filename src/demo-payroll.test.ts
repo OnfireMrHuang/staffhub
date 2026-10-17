@@ -11,6 +11,15 @@ beforeEach(()=>{
  useHub.getState().ensureMonthlyPayrollJobs(new Date('2026-10-01T00:00:00+08:00'));
 });
 
+it('separates hourly performance from allowance before forming demo monthly salary',()=>{
+ const s=useHub.getState();
+ const source={...s.dataset.rows.find(row=>row.roles.includes('主播'))!,hours:10,nightHours:2,earlyHours:3,nightSessions:2};
+ const {result}=calculateDemoPayroll([source],s.employees,s.departments,s.rooms,s.month);
+ // One room: 10 hours at 50 + 10 yuan/hour gives 600; two night sessions add 40.
+ expect(result.rows[0]).toMatchObject({performance:600,allowance:40,total:640});
+ expect(result.salaries[0].total).toBe(640);
+});
+
 it('generates explicit demo results even when published rules are blocked by missing inputs',()=>{
  const s=useHub.getState();
  s.saveCompensationRule({id:'blocked-guarantee',name:'缺少历史时薪的保薪',version:1,status:'草稿',scope:'global',roomIds:[],type:'hourly',hourly:{duration:'hours',kind:'guarantee',items:[{id:'g',name:'历史时薪保薪',kind:'guarantee',rateField:'past3MonthsAvgHourlyRate',condition:{kind:'group',operator:'and',children:[{kind:'condition',field:'monthly.hours',operator:'gte',value:0}]}}],formula:{mode:'guarantee',itemId:'g'}}});

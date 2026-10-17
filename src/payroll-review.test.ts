@@ -4,7 +4,7 @@ import { calculateCompensation } from './compensation-rules';
 import { payrollSettlementExample as example } from './payroll-settlement-example';
 import type { Batch } from './store';
 import type { PayrollCellValue } from './payroll-review';
-import { appendPayrollColumn, applyPayrollReview, buildReviewedPayrollWorkbook, createPayrollReview, editPayrollDetail, editablePayrollDetailColumns, payrollDetailKey, payrollDetailValues } from './payroll-review';
+import { allPayrollDetailColumns, appendPayrollColumn, applyPayrollReview, buildReviewedPayrollWorkbook, createPayrollReview, deletePayrollColumn, editPayrollDetail, editablePayrollDetailColumns, payrollDetailKey, payrollDetailLayout, payrollDetailValues } from './payroll-review';
 
 function fixture():Batch {
  const result=calculateCompensation(example.rows,example.employees,example.departments,example.rooms,example.rules,example.month);
@@ -12,6 +12,36 @@ function fixture():Batch {
 }
 
 describe('payroll result review overlays',()=>{
+ it('deletes a custom header and its draft values across all rows without altering salaries or unrelated edits',()=>{
+  let batch=appendPayrollColumn(fixture(),{id:'note',label:'复核备注',type:'text'},'HR');
+  batch=appendPayrollColumn(batch,{id:'amount',label:'补充金额',type:'money'},'HR');
+  const rows=batch.compensationResult!.rows;
+  for(const row of rows) batch=editPayrollDetail(batch,payrollDetailKey(row),{note:'待复核',amount:0},'补充资料','HR');
+  batch=applyPayrollReview(batch,'HR');
+  const key=payrollDetailKey(rows[0]);
+  batch=editPayrollDetail(batch,key,{'result.total':123,note:'已修正'},'调整','HR');
+  const before=structuredClone(batch),deleted=deletePayrollColumn(batch,'note','HR');
+  expect(batch).toEqual(before);expect(deleted.salaries).toEqual(before.salaries);
+  expect(deleted.compensationResult).toEqual(before.compensationResult);expect(deleted.snapshot).toEqual(before.snapshot);
+  expect(deleted.review!.columns.map(column=>column.id)).toEqual(['amount']);
+  expect(Object.values(deleted.review!.draftCells).every(cells=>!Object.hasOwn(cells,'note'))).toBe(true);
+  expect(payrollDetailValues(deleted,rows[0])).toMatchObject({amount:0,'result.total':123});
+  expect(deleted.review).toMatchObject({dirty:true,version:before.review!.version+1,appliedColumns:before.review!.appliedColumns,appliedCells:before.review!.appliedCells});
+  expect(deleted.review!.audit.at(-1)).toMatchObject({action:'delete-column',actor:'HR',before:{column:{id:'note'},cells:{[key]:'已修正'}},after:null});
+  const data=XLSX.utils.sheet_to_json<(string|number)[]>(buildReviewedPayrollWorkbook(deleted).Sheets['月度核算明细'],{header:1});
+  expect(data[1]).not.toContain('复核备注');expect(data[1]).toContain('补充金额');
+  const applied=applyPayrollReview(deleted,'HR');
+  expect(applied.review!.appliedColumns.map(column=>column.id)).toEqual(['amount']);
+  expect(Object.values(applied.review!.appliedCells).every(cells=>!Object.hasOwn(cells,'note'))).toBe(true);
+ });
+ it('removes the custom group when its last header is deleted and rejects built-in or unknown headers',()=>{
+  const batch=appendPayrollColumn(fixture(),{id:'note',label:'备注',type:'text'},'HR'),before=structuredClone(batch);
+  for(const id of ['result.total','employeeId','missing']) expect(()=>deletePayrollColumn(batch,id,'HR')).toThrow(/自定义表头/);
+  expect(batch).toEqual(before);
+  const deleted=deletePayrollColumn(batch,'note','HR');
+  expect(payrollDetailLayout(deleted).groups.some(group=>group.key==='custom')).toBe(false);
+  expect(()=>deletePayrollColumn(deleted,'note','HR')).toThrow(/自定义表头/);
+ });
  it('edits independent result cells without recalculating any field or changing frozen originals or salary summary',()=>{
   const batch=fixture(),before=structuredClone(batch),row=batch.compensationResult!.rows[0],key=payrollDetailKey(row);
   const updated=editPayrollDetail(batch,key,{spend:1,roi:999,'result.total':123.45},'核对调整','HR');
@@ -37,6 +67,25 @@ describe('payroll result review overlays',()=>{
   const again=editPayrollDetail(applied,key,{'result.total':300},'再次修正','HR');
   expect(again.salaries).toEqual(applied.salaries);
   expect(again.review!.appliedCells[key]['result.total']).toBe(100.25);
+ });
+ it('keeps performance edits independent, exports the override before salary, and applies only explicit salary totals',()=>{
+  const batch=fixture(),before=structuredClone(batch),row=batch.compensationResult!.rows[0],key=payrollDetailKey(row);
+  expect(editablePayrollDetailColumns(batch).find(column=>column.key==='result.performance')).toMatchObject({label:'总计绩效金额',type:'money',custom:false});
+  const edited=editPayrollDetail(batch,key,{'result.performance':0},'单独复核绩效','HR');
+  expect(payrollDetailValues(edited,row)).toMatchObject({'result.performance':0,'result.allowance':row.allowance,'result.total':row.total});
+  const applied=applyPayrollReview(edited,'HR');
+  expect(applied.salaries).toEqual(batch.salaries);
+  expect(applied.review!.appliedCells[key]['result.performance']).toBe(0);
+  const workbook=buildReviewedPayrollWorkbook(applied);
+  const exported=XLSX.read(XLSX.write(workbook,{type:'array',bookType:'xlsx'}),{type:'array',cellNF:true});
+  const sheet=exported.Sheets['月度核算明细'];
+  const rows=XLSX.utils.sheet_to_json<(string|number)[]>(sheet,{header:1});
+  const performanceIndex=rows[1].indexOf('总计绩效金额'),totalIndex=rows[1].indexOf('总计月薪');
+  expect(performanceIndex).toBe(totalIndex-1);
+  expect(sheet[XLSX.utils.encode_cell({r:2,c:performanceIndex})]).toMatchObject({t:'n',v:0,z:'0.00'});
+  expect(rows[2][totalIndex]).toBe(row.total);
+  expect(batch).toEqual(before);
+  expect(applied.compensationResult).toEqual(before.compensationResult);
  });
  it('rounds the explicitly applied employee total consistently with payroll settlement without changing draft values',()=>{
   const batch=fixture(),before=structuredClone(batch),first=batch.compensationResult!.rows[0];
@@ -85,6 +134,45 @@ describe('payroll result review overlays',()=>{
   expect(()=>editPayrollDetail(updated,key,{note:1},'复核','HR')).toThrow();
   expect(()=>appendPayrollColumn(updated,{id:'note2',label:' 备注 ',type:'text'},'HR')).toThrow();
  });
+ it('preserves an existing custom performance column after the built-in column is introduced',()=>{
+  const batch=fixture(),row=batch.compensationResult!.rows[0],key=payrollDetailKey(row);
+  delete row.performance;
+  batch.review!.columns=[{id:'custom_perf',label:'总计绩效金额',type:'money'}];
+  batch.review!.draftCells[key]={custom_perf:123.45};
+  const before=structuredClone(batch);
+  expect(payrollDetailValues(batch,row)).toMatchObject({custom_perf:123.45,'result.performance':6800});
+  const edited=editPayrollDetail(batch,key,{custom_perf:456.78,'result.performance':6000},'分别核对绩效','HR');
+  const applied=applyPayrollReview(edited,'HR');
+  expect(payrollDetailValues(applied,row)).toMatchObject({custom_perf:456.78,'result.performance':6000,'result.total':row.total});
+  expect(applied.review!.columns).toEqual(before.review!.columns);
+  expect(applied.review!.appliedCells[key]).toEqual({custom_perf:456.78,'result.performance':6000});
+  expect(applied.salaries).toEqual(before.salaries);
+  const columns=allPayrollDetailColumns(applied);
+  const data=XLSX.utils.sheet_to_json<(string|number)[]>(buildReviewedPayrollWorkbook(applied).Sheets['月度核算明细'],{header:1});
+  const customIndex=columns.findIndex(column=>column.key==='custom_perf'),builtInIndex=columns.findIndex(column=>column.key==='result.performance');
+  expect(data[1][customIndex]).toBe('总计绩效金额');
+  expect(data[1][builtInIndex]).toBe('总计绩效金额');
+  expect(data[2][customIndex]).toBe(456.78);
+  expect(data[2][builtInIndex]).toBe(6000);
+  expect(()=>appendPayrollColumn(applied,{id:'another_perf',label:'总计绩效金额',type:'money'},'HR')).toThrow(/名称已存在/);
+  expect(()=>appendPayrollColumn(fixture(),{id:'new_perf',label:'总计绩效金额',type:'money'},'HR')).toThrow(/名称已存在/);
+  expect(appendPayrollColumn(applied,{id:'note',label:'备注',type:'text'},'HR').review!.columns).toHaveLength(2);
+  expect(batch).toEqual(before);
+  expect(applied.compensationResult).toEqual(before.compensationResult);
+ });
+ it('still rejects malformed or duplicate persisted custom columns when built-in labels overlap',()=>{
+  const batch=fixture(),key=payrollDetailKey(batch.compensationResult!.rows[0]);
+  for(const columns of [
+   [{id:'bad.id',label:'总计绩效金额',type:'money'}],
+   [{id:'custom_perf',label:'总计绩效金额',type:'date'}],
+   [{id:'custom_perf',label:'总计绩效金额',type:'money'},{id:'other_perf',label:' 总计绩效金额 ',type:'money'}],
+   [{id:'custom_perf',label:'总计绩效金额',type:'money'},{id:'custom_perf',label:'其他绩效',type:'money'}],
+  ]){
+   batch.review!.columns=columns as NonNullable<Batch['review']>['columns'];
+   expect(()=>editPayrollDetail(batch,key,{'result.total':100},'复核','HR')).toThrow();
+   expect(()=>applyPayrollReview(batch,'HR')).toThrow();
+  }
+ });
  it('rejects aggregate monetary overflow and invalid persisted overlays without mutating input',()=>{
   const batch=fixture(),key=payrollDetailKey(batch.compensationResult!.rows[0]);
   expect(()=>editPayrollDetail(batch,key,{'result.total':Number.MAX_VALUE},'复核','HR')).toThrow();
@@ -112,5 +200,25 @@ describe('payroll result review overlays',()=>{
   expect(detail[2][headers.indexOf('核对备注')]).toBe('待应用');
   const summary=XLSX.utils.sheet_to_json<(string|number)[]>(workbook.Sheets['员工月薪汇总'],{header:1});
   expect(summary[1][4]).toBe(summaryBefore);
+ });
+ it.each([false,true])('places custom columns immediately before results in the table, editor and export (historical scope: %s)',historical=>{
+  let batch=fixture();
+  const row=batch.compensationResult!.rows[0],key=payrollDetailKey(row);
+  if(historical) row.scopes!.employees.allowance=1;
+  const originalKeys=allPayrollDetailColumns(batch).map(column=>column.key);
+  for(const column of [{id:'note',label:'复核备注',type:'text'},{id:'days',label:'补充天数',type:'number'},{id:'adjustment',label:'补充金额',type:'money'}] as const) batch=appendPayrollColumn(batch,column,'HR');
+  batch=editPayrollDetail(batch,key,{note:'确认',days:2,adjustment:125.5,'result.total':321},'核对','HR');
+  const columns=allPayrollDetailColumns(batch),resultIndex=columns.findIndex(column=>column.group==='result');
+  expect(columns.slice(resultIndex-3,resultIndex).map(column=>column.key)).toEqual(['note','days','adjustment']);
+  expect(columns.filter(column=>!column.custom).map(column=>column.key)).toEqual(originalKeys);
+  const editable=editablePayrollDetailColumns(batch);
+  expect(editable.findIndex(column=>column.key==='adjustment')).toBeLessThan(editable.findIndex(column=>column.group==='result'));
+  const sheet=buildReviewedPayrollWorkbook(batch).Sheets['月度核算明细'];
+  const data=XLSX.utils.sheet_to_json<(string|number)[]>(sheet,{header:1});
+  expect(data[0][resultIndex-3]).toBe('自定义');expect(data[0][resultIndex]).toBe('结果指标');
+  expect(sheet['!merges']).toContainEqual({s:{r:0,c:resultIndex-3},e:{r:0,c:resultIndex-1}});
+  expect(data[1]).toEqual(columns.map(column=>column.label));
+  expect(data[2].slice(resultIndex-3,resultIndex)).toEqual(['确认',2,125.5]);
+  expect(data[2][columns.findIndex(column=>column.key==='result.total')]).toBe(321);
  });
 });

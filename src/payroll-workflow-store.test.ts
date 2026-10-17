@@ -63,15 +63,33 @@ it('all result mutations require permissions and a current review version',()=>{
  useHub.setState({session:null});
  expect(()=>useHub.getState().savePayrollDetail(batch.month,key,{'result.total':100},'review',0)).toThrow(/权限/);
  expect(()=>useHub.getState().addPayrollColumn(batch.month,{id:'note',label:'备注',type:'text'},0)).toThrow(/权限/);
+ expect(()=>useHub.getState().deletePayrollColumn(batch.month,'note',0)).toThrow(/权限/);
  expect(()=>useHub.getState().applyPayrollEdits(batch.month,0)).toThrow(/权限/);
  expect(()=>useHub.getState().lockBatch()).toThrow(/权限/);
  useHub.setState({session:admin});useHub.getState().addPayrollColumn(batch.month,{id:'note',label:'备注',type:'text'},0);
  const before=structuredClone(useHub.getState().batch);
  expect(()=>useHub.getState().savePayrollDetail(batch.month,key,{'result.total':100},'review',0)).toThrow(/版本/);
  expect(()=>useHub.getState().addPayrollColumn(batch.month,{id:'note2',label:'备注2',type:'text'},0)).toThrow(/版本/);
+ expect(()=>useHub.getState().deletePayrollColumn(batch.month,'note',0)).toThrow(/版本/);
  expect(()=>useHub.getState().applyPayrollEdits(batch.month,0)).toThrow(/版本/);
  expect(()=>useHub.getState().archivePayroll(batch.month,0)).toThrow(/版本/);
  expect(useHub.getState().batch).toEqual(before);
+});
+
+it('persists custom-header deletion and requires apply before archival, then locks deletion',()=>{
+ const batch=calculate(),s=useHub.getState();
+ s.addPayrollColumn(batch.month,{id:'note',label:'备注',type:'text'},0);
+ s.addPayrollColumn(batch.month,{id:'keep',label:'补充',type:'text'},1);
+ s.applyPayrollEdits(batch.month,2);s.deletePayrollColumn(batch.month,'note',3);
+ expect(()=>s.archivePayroll(batch.month,4)).toThrow(/应用/);
+ const options=useHub.persist.getOptions(),saved=JSON.parse(JSON.stringify(options.partialize!(useHub.getState())));
+ const restored=options.merge!(saved,useHub.getInitialState());
+ expect(restored.batch!.review!.columns.map(column=>column.id)).toEqual(['keep']);
+ expect(restored.batch!.review!.dirty).toBe(true);
+ s.applyPayrollEdits(batch.month,4);s.archivePayroll(batch.month,5);
+ const frozen=structuredClone(useHub.getState().batch);
+ expect(()=>s.deletePayrollColumn(batch.month,'keep',5)).toThrow(/归档/);
+ expect(useHub.getState().batch).toEqual(frozen);
 });
 
 it('HR can archive while salary operators can only review and apply',()=>{
