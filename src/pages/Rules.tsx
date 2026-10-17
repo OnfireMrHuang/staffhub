@@ -9,6 +9,15 @@ import '../salary-rules.css';
 import '../compensation-rules.css';
 
 export default function Rules() {
+ const {departments}=useHub(),[departmentId,setDepartmentId]=useState('live');
+ const department=departments.find(item=>item.id===departmentId);
+ return <>
+  <header className="compensation-department-header"><label>部门<select aria-label="薪酬规则部门" value={departmentId} onChange={event=>setDepartmentId(event.target.value)}>{departments.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></header>
+  {departmentId==='live'?<LiveDepartmentRules/>:<Panel><Empty title="待开发" description={`${department?.name||'该部门'}薪酬规则暂未开放。`}/></Panel>}
+ </>;
+}
+
+function LiveDepartmentRules() {
  const s=useHub(),[scope,setScope]=useState<Scope>('global'),[editor,setEditor]=useState<{rule:CompensationRule;readOnly:boolean}|null>(null),[publishing,setPublishing]=useState<CompensationRule|null>(null),[publishError,setPublishError]=useState('');
  const [deleting,setDeleting]=useState<CompensationRule|null>(null),[deleteError,setDeleteError]=useState('');
  const rules=s.compensationRules.filter(r=>!r.deletedAt&&r.scope===scope);
