@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { normalizeOperationSection, operationSections } from './operations-navigation';
-it('运营数据管理六个二级入口按业务顺序排列',()=>{
+it('直播数据管理六个二级入口按业务顺序排列',()=>{
  expect(operationSections.map(item=>item.label)).toEqual(['投放产品','直播间','直播原始统计数据','时报','日报','员工月度汇总']);
  expect(new Set(operationSections.map(item=>item.id)).size).toBe(6);
 });

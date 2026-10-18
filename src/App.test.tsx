@@ -15,7 +15,7 @@ const navigation=()=>renderToStaticMarkup(<App/>).match(/<nav aria-label="主导
 it('薪酬两个入口归于员工薪酬管理并反映当前二级页面',()=>{
  useHub.getState().loginPassword('admin',DEMO_PASSWORD);useHub.getState().navigate('rules');
  const html=navigation();
- expect(html).toContain('运营数据管理');
+ expect(html).toContain('直播数据管理');
  expect(html).not.toContain('运营工作台');
  const group=html.match(/id="payroll-subnav"[^>]*>([\s\S]*?)<\/div>/)![1];
  expect(group).toMatch(/aria-current="page"[^>]*>薪酬规则/);
@@ -34,5 +34,5 @@ it('具有核算权限的员工仅显示薪酬核算二级入口',()=>{
 it('普通员工没有运营或薪酬管理导航',()=>{
  const s=useHub.getState(),employee=s.employees[1];useHub.setState({roles:[]});
  useHub.getState().loginPassword(employee.id,DEMO_PASSWORD);
- const html=navigation();expect(html).toContain('本人资料');expect(html).not.toContain('员工薪酬管理');expect(html).not.toContain('运营数据管理');
+ const html=navigation();expect(html).toContain('本人资料');expect(html).not.toContain('员工薪酬管理');expect(html).not.toContain('直播数据管理');
 });
