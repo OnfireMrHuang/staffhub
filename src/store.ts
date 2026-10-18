@@ -9,7 +9,7 @@ import { demoAdHours, demoMonth, demoProducts, demoRooms, demoRecords, demoRoomH
 import { buildLiveStatistics, validateLiveRecord } from './live-domain';
 import { fillSimulatedHours } from './live-sync';
 import type { AdHourly, LiveDetail, LiveMonthly, LiveRecord, RoomHourly } from './live-domain';
-import { authenticatePassword, authenticateSso } from './auth';
+import { authenticatePassword, authenticateSso, DEMO_ADMIN_USERNAME, SESSION_DURATION_MS } from './auth';
 import type { DemoSession } from './auth';
 import { calculateDepartmentRules, migrateHourlyRules, validateDepartmentRule } from './payroll-rules';
 import type { DepartmentRule } from './payroll-rules';
@@ -54,6 +54,8 @@ export interface Batch { ruleSource?:'published-rules'|'demo'; month:string; sta
 export interface Role { id:string; name:string; description:string; permissions:string[] }
 interface Hub {
  session:DemoSession|null;
+ sessionExpiresAt:number|null;
+ checkSessionExpiry:()=>void;
  loginPassword:(username:string,password:string)=>void; loginSso:(platform:string,employeeId:string)=>void; logout:()=>void;
  page:Page; opsTab:string; month:string; employees:Employee[]; departments:Department[]; products:AdvertisingProduct[]; rooms:LiveRoom[];
  departmentRules:DepartmentRule[]; payrollTasks:PayrollTask[];
@@ -342,9 +344,11 @@ const initial = () => {
 };
 export const useHub = create<Hub>()(persist((set,get)=>({
  session:null,
- loginPassword:(username,password)=>{const session=authenticatePassword(username,password,get().employees);set({session,perspective:session.kind,page:session.kind==='admin'?'operations':'profile',toast:''});},
- loginSso:(platform,employeeId)=>{const session=authenticateSso(platform,employeeId,get().employees);set({session,perspective:'employee',page:'profile',toast:''});},
- logout:()=>set({session:null,perspective:'admin',page:'operations',toast:''}),
+ sessionExpiresAt:null,
+ checkSessionExpiry:()=>{const s=get();if(s.session&&(!s.sessionExpiresAt||s.sessionExpiresAt<=Date.now()))s.logout();},
+ loginPassword:(username,password)=>{const session=authenticatePassword(username,password,get().employees);set({session,sessionExpiresAt:Date.now()+SESSION_DURATION_MS,perspective:session.kind,page:session.kind==='admin'?'operations':'profile',toast:''});},
+ loginSso:(platform,employeeId)=>{const session=authenticateSso(platform,employeeId,get().employees);set({session,sessionExpiresAt:Date.now()+SESSION_DURATION_MS,perspective:'employee',page:'profile',toast:''});},
+ logout:()=>set({session:null,sessionExpiresAt:null,perspective:'admin',page:'operations',toast:''}),
  ...initial(),
  ensureMonthlyPayrollJobs:(now=new Date())=>{
   const s=get(),start=s.payrollScheduleStartMonth??previousPayrollMonth(now);
@@ -825,9 +829,15 @@ export const useHub = create<Hub>()(persist((set,get)=>({
  migrate:persisted=>migrateOperationsState(persisted) as ReturnType<typeof initial>,
  merge:(persisted,current)=>{
   const saved=(persisted??{}) as Partial<Hub>;
+  const employees=(saved.employees??current.employees).map(withEmployeeDefaults);
+  const candidate=saved.session;
+  const session=candidate && Number.isFinite(saved.sessionExpiresAt) && saved.sessionExpiresAt!>Date.now() &&
+   (candidate.method==='password'||candidate.method==='sso') &&
+   (candidate.kind==='admin'?candidate.username===DEMO_ADMIN_USERNAME&&candidate.method==='password':candidate.kind==='employee'&&employees.some(e=>e.id===candidate.employeeId&&e.id===candidate.username&&e.status==='在职'))?candidate:null;
+  const loginState={session,sessionExpiresAt:session?saved.sessionExpiresAt!:null,perspective:session?.kind??'admin',page:session?.kind==='employee'?'profile' as const:'operations' as const};
   const compensationRules=(saved.compensationRules??(saved.compensationInitialized?[]:initialCompensationRules(saved.rooms??current.rooms))).map(normalizeCurrentCompensationRule);
-  return repairSeptemberMockWaitingDays(withSeptemberMock({...current,...saved,septemberMockInitialized:saved.septemberMockInitialized??false,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees:(saved.employees??current.employees).map(withEmployeeDefaults),roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]}));
+  return repairSeptemberMockWaitingDays(withSeptemberMock({...current,...saved,...loginState,septemberMockInitialized:saved.septemberMockInitialized??false,monthlyPayrollJobs:saved.monthlyPayrollJobs??[],payrollScheduleStartMonth:saved.payrollScheduleStartMonth??null,publishedCompensationRules:saved.publishedCompensationRules??migratePublishedRules(compensationRules,saved.compensationTasks??[]),employees,roles:migratePayrollRoles(saved.roles??current.roles),datasetsByMonth:saved.datasetsByMonth??{},compensationInitialized:true,compensationRules,compensationTasks:saved.compensationTasks??[],reportHours:saved.reportHours??[],reportDays:saved.reportDays??[],reportOverrides:saved.reportOverrides??[],reportAudit:saved.reportAudit??[]}));
  },
  storage:createJSONStorage(()=>typeof localStorage!=='undefined'?localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),
- partialize:s=>({septemberMockInitialized:s.septemberMockInitialized,publishedCompensationRules:s.publishedCompensationRules,monthlyPayrollJobs:s.monthlyPayrollJobs,payrollScheduleStartMonth:s.payrollScheduleStartMonth,month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
+ partialize:s=>({session:s.session,sessionExpiresAt:s.sessionExpiresAt,septemberMockInitialized:s.septemberMockInitialized,publishedCompensationRules:s.publishedCompensationRules,monthlyPayrollJobs:s.monthlyPayrollJobs,payrollScheduleStartMonth:s.payrollScheduleStartMonth,month:s.month,batches:s.batches,employees:s.employees,departments:s.departments,products:s.products.map(safeProduct),rooms:s.rooms,liveRecords:s.liveRecords,adHours:s.adHours,roomHours:s.roomHours,archivedMonths:s.archivedMonths,liveDetails:s.liveDetails,monthlyRows:s.monthlyRows,detailOverrides:s.detailOverrides,monthlyOverrides:s.monthlyOverrides,correctionAudit:s.correctionAudit,reportHours:s.reportHours,reportDays:s.reportDays,reportOverrides:s.reportOverrides,reportAudit:s.reportAudit,departmentRules:s.departmentRules,payrollTasks:s.payrollTasks,compensationInitialized:s.compensationInitialized,compensationRules:s.compensationRules,compensationTasks:s.compensationTasks,dataset:s.dataset,datasetsByMonth:s.datasetsByMonth,roles:s.roles,revision:s.revision,batch:s.batch,syncTime:s.syncTime}),
 }));

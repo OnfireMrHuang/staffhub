@@ -2,6 +2,7 @@ import type { Employee } from './domain';
 // Public demo fixtures only. Production credentials are never handled by this frontend.
 export const DEMO_PASSWORD = 'StaffHub@2026';
 export const DEMO_ADMIN_USERNAME = 'admin';
+export const SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 export interface DemoSession {kind:'admin'|'employee';username:string;employeeId?:string;method:'password'|'sso'}
 export function authenticatePassword(username:string,password:string,employees:Employee[]):DemoSession {
  const loginName=username.trim().toLowerCase();

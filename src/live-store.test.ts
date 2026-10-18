@@ -104,7 +104,9 @@ it('持久化只保存配置标记并保留原命名空间',()=>{
  useHub.getState().saveProduct({...product,access:{appId:'app',secretConfigured:true,authCodeConfigured:true,secret:'secret',authCode:'code'} as typeof product.access});
  const saved=useHub.persist.getOptions().partialize?.(useHub.getState()) as ReturnType<typeof useHub.getState>;
  expect(saved.products[0].access).toEqual({appId:'app',secretConfigured:true,authCodeConfigured:true});
- expect(saved.archivedMonths).toEqual([]);expect(saved.liveRecords).toEqual([record]);expect(saved.session).toBeUndefined();
+ expect(saved.archivedMonths).toEqual([]);expect(saved.liveRecords).toEqual([record]);
+ expect(saved.session).toMatchObject({kind:'admin',username:'admin',method:'password'});
+ expect(saved.session).not.toHaveProperty('password');
  expect(saved).not.toHaveProperty('projects');expect(saved).not.toHaveProperty('rules');expect(saved).not.toHaveProperty('scheme');
 });
 it('跨月核算保留各月批次并从归档快照恢复两表',()=>{
@@ -121,14 +123,15 @@ it('跨月核算保留各月批次并从归档快照恢复两表',()=>{
  expect(useHub.getState().monthlyRows).toEqual(october?.snapshot.monthly);
  expect(useHub.getState().liveDetails).toEqual(october?.snapshot.details);
 });
-it('归档来源和冻结依据进入持久化导出，运行时登录信息不进入',()=>{
+it('归档来源和冻结依据进入持久化导出，会话不混入薪酬快照',()=>{
  useHub.getState().cleanDataset();publishRule();useHub.getState().runPayroll();archiveCurrentMonth();
  const saved=useHub.persist.getOptions().partialize?.(useHub.getState()) as ReturnType<typeof useHub.getState>;
  expect(saved.archivedMonths).toEqual(['2026-10']);
  expect(saved.liveRecords).toEqual([record]);expect(saved.roomHours).toEqual([room]);
  expect(saved.batches['2026-10'].snapshot.records).toEqual([record]);
  expect(saved.batches['2026-10'].snapshot.dataset.rows).toEqual(saved.monthlyRows);
- expect(saved.session).toBeUndefined();
+ expect(saved.batches['2026-10'].snapshot).not.toHaveProperty('session');
+ expect(saved).not.toHaveProperty('perspective');expect(saved).not.toHaveProperty('page');
 });
 it('混合人员非法上传整批拒绝且不修改来源版本',()=>{
  const revision=useHub.getState().revision;
