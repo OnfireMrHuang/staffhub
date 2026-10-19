@@ -9,13 +9,15 @@ it('renders typed boolean, date, numeric and nested AND/OR condition controls',(
  const html=renderToStaticMarkup(<ConditionBuilder value={{kind:'group',operator:'and',children:[{kind:'condition',field:'employee.nonCompeteSigned',operator:'eq',value:false},{kind:'condition',field:'employee.joined',operator:'withinMonths',value:3},{kind:'group',operator:'or',children:[{kind:'condition',field:'monthly.earlySessions',operator:'gte',value:2}]}]}} onChange={()=>{}}/>);
  expect(html).toContain('全部满足（AND）'); expect(html).toContain('任一满足（OR）'); expect(html).toContain('添加条件组'); expect(html).toContain('未签署 / 否'); expect(html).toContain('最近月数'); expect(html).toContain('type="number"');
 });
-it('exposes selectable count metrics and named premium items without employee targeting',()=>{
+it('offers only allowance and hourly calculation types while preserving readonly premium history',()=>{
  const rule=createCompensationRule('global');
  const html=renderToStaticMarkup(<CompensationRuleForm rule={rule} rooms={[]} onChange={()=>{}}/>);
  expect(html).not.toContain('员工筛选条件'); expect(html).toContain('夜班场次'); expect(html).toContain('补贴计数指标'); expect(html).toContain('早班场次'); expect(html).toContain('补贴金额');
+ expect(html).not.toContain('value="premium"');expect(html).not.toContain('保费系数规则');
  const premium=withType(rule,'premium');
- const p=renderToStaticMarkup(<CompensationRuleForm rule={premium} rooms={[]} onChange={()=>{}}/>);
- for(const label of ['保费系数规则','新增系数项','系数项1名称','系数项1保费字段','系数项1保费系数','保费计算公式']) expect(p).toContain(label);
+ const p=renderToStaticMarkup(<CompensationRuleForm rule={premium} rooms={[]} readOnly onChange={()=>{}}/>);
+ for(const label of ['保费系数规则','系数项1名称','系数项1保费字段','系数项1保费系数','保费计算公式']) expect(p).toContain(label);
+ expect(p).not.toContain('新增系数项');expect(p).not.toContain('删除系数项');
  expect(p).not.toContain('早班场次条件');
 });
 it('offers band editing with three exclusive hourly calculation modes',()=>{

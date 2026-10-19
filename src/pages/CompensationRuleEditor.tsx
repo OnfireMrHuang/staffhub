@@ -24,7 +24,7 @@ export default function CompensationRuleEditor({initial,rooms,rules=[],readOnly=
  const save=()=>{try{validateCompensationRule({...rule,version:Math.max(1,rule.version)});onSave(rule)}catch(e){setError(e instanceof Error?e.message:'请核对配置')}};
  const changedTemplate=initial.definitionVersion!==2&&initial.type!=='allowance';
  return <Modal open onOpenChange={v=>!v&&onClose()} title={readOnly?'薪酬规则详情':initial.version===0?'新增薪酬规则':'编辑薪酬规则'} description={`${scopeLabels[rule.scope]} · ${readOnly?`v${rule.version} · ${rule.status}`:'保存为草稿后单独发布。'}`} wide>
-  {!readOnly&&changedTemplate&&<p className="rule-template-note">保存后使用新模板：保费系数按系数项求和；时薪仅保留所选计算类型。原系数条件和加成触发条件不再使用，请核对配置。保存草稿不改变已发布版本，重新发布后供 HR 核算使用。</p>}
+  {!readOnly&&changedTemplate&&<p className="rule-template-note">保存后使用新模板：时薪仅保留所选计算类型。原加成触发条件不再使用，请核对配置。保存草稿不改变已发布版本，重新发布后供 HR 核算使用。</p>}
   <CompensationRuleForm rule={rule} rooms={rooms} rules={rules} onChange={next=>{setRule(next);setError('')}} readOnly={readOnly}/>{error&&<p className="rule-error" role="alert">{error}</p>}
   <div className="dialog-foot"><Button onClick={onClose}>{readOnly?'关闭':'取消'}</Button>{!readOnly&&<Button variant="primary" onClick={save}>保存草稿</Button>}</div>
  </Modal>;

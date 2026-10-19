@@ -1,10 +1,9 @@
 import { scheduleTestMonth, loadLegacyPendingInputs } from './payroll-test-fixtures';
 import {beforeEach,expect,it} from 'vitest';
 import {useHub} from './store';
-import type {CompensationRule,ConditionGroup} from './compensation-rules';
+import type {CompensationRule} from './compensation-rules';
 import {monthlyRowKey} from './dataset-corrections';
 const archiveCurrentMonth = () => { useHub.setState({session:{kind:'admin',username:'admin',method:'password'}});const s=useHub.getState();s.archivePayroll(s.month,s.batch!.review!.version); };
-const condition=(field:string,value:string|number|boolean):ConditionGroup=>({kind:'group',operator:'and',children:[{kind:'condition',field,operator:'eq',value}]});
 const allowance=(id='allow',amount=20):CompensationRule=>({id,name:id,version:1,status:'草稿',scope:'global',roomIds:[],type:'allowance',allowance:{field:'nightSessions',amount}});
 const hourly=(id:string,rate:number,guarantee=false):CompensationRule=>({id,name:id,version:1,status:'草稿',scope:'global',roomIds:[],type:'hourly',hourly:{duration:'hours',items:[{id:'item',name:'项目',kind:guarantee?'guarantee':'special',rate}],formula:guarantee?{mode:'guarantee',itemId:'item'}:{mode:'additions',itemIds:['item']}}});
 const publish=(rule:CompensationRule)=>{useHub.getState().saveCompensationRule(rule);useHub.getState().publishCompensationRule(rule.id,'2026-10');};
@@ -17,14 +16,13 @@ beforeEach(()=>{
 beforeEach(scheduleTestMonth);
 it('merges every published rule once per row and freezes the full new task/result context',()=>{
  publish(allowance());publish(allowance('global-extra',10));
- for(const coefficient of [1.2,1.5]) publish({id:`premium-${coefficient}`,name:'系数',version:1,status:'草稿',scope:'global',roomIds:[],type:'premium',premium:{normalField:'regularPremium',earlyField:'earlyPremium',coefficient,condition:condition('monthly.earlySessions',2)}});
  publish(hourly('floor',60,true));publish(hourly('add30',30));publish(hourly('add50',50));
  useHub.getState().runPayroll();const s=useHub.getState();
  expect(s.batch?.salaries[0].total).toBe(860);
- expect(s.batch?.compensationResult?.rows[0]).toMatchObject({allowance:60,premium:{coefficient:1.5,after:1100},durationGroups:[{rate:80,amount:800}],total:860});
+ expect(s.batch?.compensationResult?.rows[0]).toMatchObject({allowance:60,premium:{coefficient:1,after:1000},durationGroups:[{rate:80,amount:800}],total:860});
  expect(s.dataset.rows[0].premium).toBe(1000);expect(s.archivedMonths).toEqual([]);
  expect(s.compensationTasks.every(t=>t.status==='已核算')).toBe(true);
- expect(s.batch?.snapshot.compensationRules).toHaveLength(7);expect(s.batch?.snapshot.compensationTasks).toHaveLength(7);
+ expect(s.batch?.snapshot.compensationRules).toHaveLength(5);expect(s.batch?.snapshot.compensationTasks).toHaveLength(5);
  expect(s.batch?.snapshot.compensationTasks?.[0]).toMatchObject({referenceDate:'2026-10-31',employeeIds:[s.employees[0].id],rowKeys:[monthlyRowKey(s.dataset.rows[0])],datasetRevision:1,datasetVersion:1});
 });
 it('published definitions survive draft edits until a new version is explicitly published',()=>{
@@ -74,7 +72,7 @@ it('archived rule/date/employee changes leave new salary evidence frozen',()=>{
 });
 it('new rules initialize once for old saves while empty arrays and all payroll history rehydrate without reset',()=>{
  const options=useHub.persist.getOptions(),current=useHub.getState();const legacy={...(options.partialize!(current) as object)} as Record<string,unknown>;delete legacy.compensationInitialized;delete legacy.compensationRules;delete legacy.compensationTasks;
- const migrated=options.merge!(legacy,current);expect(migrated.compensationRules).toHaveLength(3);expect(migrated.compensationRules.every(r=>r.status==='草稿')).toBe(true);expect(migrated.compensationInitialized).toBe(true);
+ const migrated=options.merge!(legacy,current);expect(migrated.compensationRules).toHaveLength(2);expect(migrated.compensationRules.every(r=>r.status==='草稿')).toBe(true);expect(migrated.compensationInitialized).toBe(true);
  const saved={...legacy,compensationInitialized:true,compensationRules:[],compensationTasks:[]};const restored=options.merge!(saved,current);expect(restored.compensationRules).toEqual([]);expect(restored.compensationTasks).toEqual([]);expect(restored.departmentRules).toEqual(current.departmentRules);expect(restored.dataset).toEqual(current.dataset);
  expect(options.name).toBe('meimei-staffhub-department-rules-v1');expect(options.version).toBe(1);expect(options.partialize!(restored)).toMatchObject({compensationInitialized:true,compensationRules:[],compensationTasks:[]});
 });
@@ -232,4 +230,16 @@ it('rehydrates logically deleted rules and withdrawn tasks without adding starte
  expect(restored.compensationRules[0].deletedAt).toEqual(expect.any(String));
  expect(restored.compensationTasks).toEqual(saved.compensationTasks);expect(restored.compensationTasks[0].status).toBe('已撤回');
  expect(()=>useHub.getState().saveCompensationRule(stale)).toThrow('已删除');
+});
+
+it('rejects premium creation and publication while preserving the stored state on failure',()=>{
+ const premium:CompensationRule={id:'disabled-premium',name:'旧保费系数',version:1,status:'草稿',scope:'global',roomIds:[],type:'premium',premium:{items:[{id:'p',name:'总保费',field:'premium',coefficient:2}]}};
+ const s=useHub.getState();
+ expect(()=>s.saveCompensationRule(premium)).toThrow(/保费系数.*停用/);
+ expect(useHub.getState().compensationRules).toEqual([]);
+ useHub.setState({compensationRules:[premium]});
+ expect(()=>s.publishCompensationRule(premium.id)).toThrow(/保费系数.*停用/);
+ expect(useHub.getState().publishedCompensationRules).toEqual([]);
+ useHub.setState({publishedCompensationRules:[{...premium,status:'已发布'}]});
+ expect(()=>s.runPayroll()).toThrow(/保费系数.*停用/);expect(useHub.getState().batch).toBeNull();
 });

@@ -29,7 +29,8 @@ it('reconciles the fictional example against independently calculated row and em
   expect(source).toEqual(example);
 });
 
-it('publishes the example under current room ownership and settles through the real store', () => {
+it('publishes supported example rules and settles with original premiums through the real store', () => {
+  const currentRules=example.rules.filter(rule=>rule.type!=='premium');
   const before = useHub.getState();
   try {
     useHub.getState().reset();
@@ -42,15 +43,16 @@ it('publishes the example under current room ownership and settles through the r
       monthlyRows: structuredClone(example.rows), revision: 1, liveRecords: [], roomHours: [], adHours: [], compensationRules: [], compensationTasks: [], payrollTasks: [],
     });
     scheduleTestMonth();
-    for (const rule of example.rules) {
+    for (const rule of currentRules) {
       useHub.getState().saveCompensationRule({ ...structuredClone(rule), status: '草稿' });
       useHub.getState().publishCompensationRule(rule.id, example.month);
     }
     useHub.getState().runPayroll();
     const batch = useHub.getState().batch!;
     expect(batch.compensationResult!.rows).toHaveLength(4);
-    expect(batch.salaries.reduce((sum, row) => sum + row.total, 0)).toBe(18690);
-    expect(batch.snapshot.compensationTasks).toHaveLength(example.rules.length);
+    expect(batch.salaries.reduce((sum, row) => sum + row.total, 0)).toBe(19590);
+    expect(batch.compensationResult!.rows.every(row=>row.premium.after===row.premium.before)).toBe(true);
+    expect(batch.snapshot.compensationTasks).toHaveLength(currentRules.length);
     expect(batch.snapshot.compensationTasks!.every(task => task.status === '已核算')).toBe(true);
   } finally {
     useHub.setState(before, true);

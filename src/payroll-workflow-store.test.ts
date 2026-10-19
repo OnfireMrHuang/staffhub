@@ -115,16 +115,6 @@ it('rehydration normalizes only current employee rules and migrates untouched bu
  expect(options.merge!({compensationRules:restored.compensationRules},restored).compensationRules[0].version).toBe(4);
 });
 
-it('legacy completed room sets still withdraw all sibling types together',()=>{
- const s=useHub.getState(),roomIds=[s.rooms[0].id],setId='review-room-set';
- const rules:CompensationRule[]=[{...allowance('room-allowance'),scope:'rooms',roomIds},{id:'room-hourly',name:'时薪',scope:'rooms',roomIds,type:'hourly',version:1,status:'草稿',hourly:{duration:'hours',items:[{id:'rate',name:'时段时薪',kind:'special',rate:10}],formula:{mode:'additions',itemIds:['rate']}}}];
- s.saveRoomRuleSet({id:setId,roomIds,rules});s.publishRoomRuleSet(setId,s.month);s.runPayroll();
- const legacyBatch={...useHub.getState().batch!,ruleSource:undefined};useHub.setState({monthlyPayrollJobs:[],batch:legacyBatch,batches:{[s.month]:legacyBatch}});
- const batch=structuredClone(useHub.getState().batch);s.withdrawCompensationTask(useHub.getState().compensationTasks[0].id);
- expect(useHub.getState().compensationTasks.map(task=>task.status)).toEqual(['已撤回','已撤回']);expect(useHub.getState().batch).toEqual(batch);
- expect(()=>s.archivePayroll(s.month,0)).toThrow(/任务|重新/);
-});
-
 it('wage-slip publication requires both archival and explicit publishing permission',()=>{
  const batch=calculate();expect(()=>useHub.getState().publishBatch()).toThrow(/归档/);
  useHub.getState().archivePayroll(batch.month,0);useHub.setState({session:null});expect(()=>useHub.getState().publishBatch()).toThrow(/权限/);

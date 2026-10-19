@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button, Modal } from '../components';
-import { allowanceCountOptions, blankConditionGroup, compensationMetricOptions, conditionFieldOptions, durationOptions, guaranteeRateFieldOptions, premiumFieldOptions, validateCompensationRule, type CalculationType, type CompensationRule, type CountMetric, type HourlyItem, type PremiumField } from '../compensation-rules';
+import { allowanceCountOptions, blankConditionGroup, compensationMetricOptions, conditionFieldOptions, durationOptions, guaranteeRateFieldOptions, premiumFieldOptions, validateCompensationRule, type CalculationType, type CompensationRule, type CountMetric, type HourlyItem } from '../compensation-rules';
 import ConditionBuilder from './ConditionBuilder';
 import HourlyBandEditor, { blankHourlyBand } from './HourlyBandEditor';
 import { calculationLabels, compensationExpression, compensationMetricLabel, displayNumber, editableHourlyBand, hourlyItemRateLabel, hourlyKindLabels, numberValue, uid, withGuaranteeRateSource, withHourlyItems, withHourlyKind, withType } from './compensation-definition';
@@ -13,7 +13,7 @@ export function withValidatedHourlyItem(rule:CompensationRule,item:HourlyItem):C
  return withHourlyItems(rule,hourly.items.some(existing=>existing.id===item.id)?hourly.items.map(existing=>existing.id===item.id?item:existing):[...hourly.items,item]);
 }
 
-export default function CompensationRuleDefinition({rule,onChange,readOnly=false,lockType=false}:{rule:CompensationRule;onChange:(rule:CompensationRule)=>void;readOnly?:boolean;lockType?:boolean}) {
+export default function CompensationRuleDefinition({rule,onChange,readOnly=false}:{rule:CompensationRule;onChange:(rule:CompensationRule)=>void;readOnly?:boolean}) {
  const [editing,setEditing]=useState<HourlyItem|null>(null),[itemError,setItemError]=useState(''),[expandFirstBand,setExpandFirstBand]=useState(false);
  const hourly=rule.hourly,kind=hourly?.kind||hourly?.items[0]?.kind||'metric';
  const updateSingle=(patch:Partial<HourlyItem>)=>{if(hourly?.items[0])onChange(withHourlyItems(rule,[{...hourly.items[0],...patch}]))};
@@ -24,21 +24,21 @@ export default function CompensationRuleDefinition({rule,onChange,readOnly=false
   }catch(error){setItemError(error instanceof Error?error.message:'请核对统计指标配置')}
  };
  return <section className="compensation-rule-definition" aria-label="规则定义">
-  <div className="compensation-definition-basics compensation-definition-identity"><label>计算类型{lockType?<input aria-label="计算类型" value={calculationLabels[rule.type]} readOnly/>:<select aria-label="计算类型" value={rule.type} onChange={e=>onChange(withType(rule,e.target.value as CalculationType))}>{Object.entries(calculationLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>}</label><label>规则名称<input aria-label="规则名称" value={rule.name} onChange={e=>onChange({...rule,name:e.target.value})}/></label></div>
+  <div className="compensation-definition-basics compensation-definition-identity"><label>计算类型{readOnly?<input aria-label="计算类型" value={calculationLabels[rule.type]} readOnly/>:<select aria-label="计算类型" value={rule.type} onChange={e=>onChange(withType(rule,e.target.value as CalculationType))}>{Object.entries(calculationLabels).filter(([id])=>id!=='premium'||(readOnly&&rule.type==='premium')).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>}</label><label>规则名称<input aria-label="规则名称" value={rule.name} onChange={e=>onChange({...rule,name:e.target.value})}/></label></div>
   {rule.type==='allowance'&&rule.allowance&&<div className="compensation-definition-basics">
    <label>计数指标<select aria-label="补贴计数指标" value={rule.allowance.field} onChange={e=>onChange({...rule,allowance:{...rule.allowance!,field:e.target.value as CountMetric}})}>{allowanceCountOptions.map(option=><option key={option.field} value={option.field}>{option.label}</option>)}</select></label>
    <label>补贴金额（元 / {rule.allowance.field==='waitingSalaryDays'?'天':'次'}）<input aria-label="补贴金额" type="number" min="0" step="any" value={displayNumber(rule.allowance.amount)} onChange={e=>onChange({...rule,allowance:{...rule.allowance!,amount:numberValue(e.target.value)}})}/></label>
   </div>}
-  {rule.type==='premium'&&rule.premium&&('items' in rule.premium?<section>
-   <div className="inline"><h3>系数项</h3><span className="spacer"/>{!readOnly&&<Button onClick={()=>{if(rule.premium&&'items' in rule.premium)onChange({...rule,premium:{items:[...rule.premium.items,{id:uid(),name:'',field:'earlyPremium',coefficient:1}]}})}}><Plus size={14}/>新增系数项</Button>}</div>
+  {readOnly&&rule.type==='premium'&&rule.premium&&('items' in rule.premium?<section>
+   <h3>历史系数项</h3>
    {rule.premium.items.map((item,index)=><article className="premium-definition-item" key={item.id}><div className="compensation-form-row">
-    <label>名称<input aria-label={`系数项${index+1}名称`} value={item.name} onChange={e=>{if(rule.premium&&'items' in rule.premium)onChange({...rule,premium:{items:rule.premium.items.map(i=>i.id===item.id?{...i,name:e.target.value}:i)}})}}/></label>
-    <label>保费字段<select aria-label={`系数项${index+1}保费字段`} value={item.field} onChange={e=>{if(rule.premium&&'items' in rule.premium)onChange({...rule,premium:{items:rule.premium.items.map(i=>i.id===item.id?{...i,field:e.target.value as PremiumField}:i)}})}}>{premiumFieldOptions.map(option=><option key={option.field} value={option.field}>{option.label}</option>)}</select></label>
-    <label>保费系数<input aria-label={`系数项${index+1}保费系数`} type="number" min="0" step="any" value={displayNumber(item.coefficient)} onChange={e=>{if(rule.premium&&'items' in rule.premium)onChange({...rule,premium:{items:rule.premium.items.map(i=>i.id===item.id?{...i,coefficient:numberValue(e.target.value)}:i)}})}}/></label>
-   </div>{!readOnly&&<button type="button" className="icon-button" aria-label={`删除系数项${index+1}`} onClick={()=>{if(rule.premium&&'items' in rule.premium)onChange({...rule,premium:{items:rule.premium.items.filter(i=>i.id!==item.id)}})}}><Trash2 size={15}/></button>}</article>)}
+    <label>名称<input aria-label={`系数项${index+1}名称`} value={item.name} readOnly/></label>
+    <label>保费字段<input aria-label={`系数项${index+1}保费字段`} value={premiumFieldOptions.find(option=>option.field===item.field)?.label||item.field} readOnly/></label>
+    <label>保费系数<input aria-label={`系数项${index+1}保费系数`} value={displayNumber(item.coefficient)} readOnly/></label>
+   </div></article>)}
    <h3>保费计算公式</h3><div className="expression-display">{compensationExpression(rule)}</div>
   </section>:<section><h3>原保费配置</h3><div className="expression-display">正常保费 + 早班保费 × {rule.premium.coefficient}</div><ConditionBuilder label="原早班场次条件" fields={conditionFieldOptions.filter(field=>field.field==='monthly.earlySessions')} value={rule.premium.condition} readOnly onChange={()=>{}}/></section>)}
-  {rule.type==='premium'&&<p className="caption" role="note">应用保费系数后，将重新计算 ROI 和同直播间、同月的 ROI 排名，后续时薪档位匹配使用更新后的指标。</p>}
+  {readOnly&&rule.type==='premium'&&<p className="caption" role="note">历史保费系数配置仅供核对原核算依据，已停止用于新的薪酬规则。</p>}
   {rule.type==='hourly'&&hourly&&<>
    <div className="compensation-definition-basics"><label>计薪时长<select aria-label="计薪时长" value={hourly.duration} onChange={e=>onChange({...rule,hourly:{...hourly,duration:e.target.value as typeof hourly.duration}})}>{durationOptions.map(option=><option key={option.field} value={option.field}>{option.label}</option>)}</select></label><label>时薪计算类型<select aria-label="时薪计算类型" value={kind} onChange={e=>{setEditing(null);onChange(withHourlyKind(rule,e.target.value as HourlyItem['kind']))}}>{Object.entries(hourlyKindLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
    {(kind==='metric'||(readOnly&&!hourly.kind))&&<section><div className="inline"><h3>统计指标列表</h3><span className="spacer"/>{!readOnly&&<Button onClick={()=>{setItemError('');setExpandFirstBand(true);setEditing({id:uid(),name:'',kind:'metric',field:'roi',bands:[blankHourlyBand()]})}}><Plus size={14}/>新增统计指标</Button>}</div>

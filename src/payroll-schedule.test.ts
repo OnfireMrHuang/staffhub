@@ -75,17 +75,3 @@ it('missing rules or missing confirmed data leave the job pending without partia
 it('publishing cannot make the not-yet-due current month calculable',()=>{
  publish();expect(()=>useHub.getState().runPayroll()).toThrow(/任务/);expect(useHub.getState().monthlyPayrollJobs).toEqual([]);
 });
-it('migrates complete published room sets without mixing newer draft members or dropping removed draft children',()=>{
- const s=useHub.getState(),roomIds=[s.rooms[0].id];
- const members:CompensationRule[]=[{...rule(),id:'old-allowance',scope:'rooms',roomIds},{id:'old-premium',name:'保费',version:1,status:'草稿',scope:'rooms',roomIds,type:'premium',premium:{items:[{id:'p',name:'总保费',field:'premium',coefficient:1}]}}];
- s.ensureMonthlyPayrollJobs(due);s.saveRoomRuleSet({id:'old-set',roomIds,rules:members});s.publishRoomRuleSet('old-set');s.runPayroll();
- const published=structuredClone(useHub.getState().publishedCompensationRules);
- s.saveRoomRuleSet({id:'old-set',roomIds,rules:[members[0]]});
- const options=useHub.persist.getOptions(),saved=JSON.parse(JSON.stringify(options.partialize!(useHub.getState())));
- delete saved.publishedCompensationRules;delete saved.monthlyPayrollJobs;delete saved.payrollScheduleStartMonth;
- const restored=options.merge!(saved,useHub.getInitialState());
- expect(restored.publishedCompensationRules).toEqual(published);
- expect(restored.batch).toEqual(useHub.getState().batch);
- const deleted=options.merge!({...saved,compensationRules:saved.compensationRules.map((rule:CompensationRule)=>({...rule,deletedAt:'2026-10-17'}))},useHub.getInitialState());
- expect(deleted.publishedCompensationRules).toEqual([]);
-});

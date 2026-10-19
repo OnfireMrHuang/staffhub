@@ -26,6 +26,11 @@ export interface CompensationRule {
   premium?:LegacyPremiumConfig|PremiumItemConfig;
   hourly?:{duration:NewDuration; kind?:HourlyItem['kind']; items:HourlyItem[]; formula:{mode:'additions';itemIds:string[]}|{mode:'guarantee';itemId:string}};
 }
+/** Supported definitions for current rule authoring and payroll publication. */
+export function requireCurrentCompensationRule(rule:CompensationRule):void {
+  if(rule.type==='premium') throw new Error('保费系数规则已停用，请选择补贴或时薪规则');
+  if(rule.roomRuleSetId!==undefined) throw new Error('直播间仅支持单条规则');
+}
 /** Current draft and published room rules reserve their selected rooms. */
 export function compensationRoomOwners(rules:CompensationRule[],excludeRuleId:string):Map<string,CompensationRule> {
   const owners=new Map<string,CompensationRule>();
