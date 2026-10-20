@@ -1,0 +1,10 @@
+.env
+!.env.example
+.venv/
+.secrets/
+output/
+__pycache__/
+.pytest_cache/
+*.xlsx
+*.lock
+!uv.lock

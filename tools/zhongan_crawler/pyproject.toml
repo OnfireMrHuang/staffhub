@@ -1,0 +1,15 @@
+[project]
+name = "zhongan-crawler"
+version = "0.1.0"
+description = "众安直播看板与订单采集，支持浏览器登录和 Excel 增量更新"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.51,<2",
+    "openpyxl>=3.1,<4",
+    "python-dotenv>=1.0,<2",
+    "httpx>=0.28,<1",
+    "filelock>=3.16,<4",
+]
+
+[tool.uv]
+package = false
