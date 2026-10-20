@@ -1,0 +1,12 @@
+{
+  "advertiser_id": "1819397088257036",
+  "data_topic": "BASIC_DATA",
+  "dimensions": ["stat_time_day"],
+  "metrics": ["stat_cost", "show_cnt", "click_cnt"],
+  "filters": [],
+  "start_time": "2026-10-18 00:00:00",
+  "end_time": "2026-10-18 23:59:59",
+  "order_by": [{"field": "stat_cost", "type": "DESC"}],
+  "page": 1,
+  "page_size": 100
+}

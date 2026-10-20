@@ -1,0 +1,9 @@
+[project]
+name = "oceanengine-data-report-tool"
+version = "0.1.0"
+description = "巨量引擎报表接口调试工具"
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.28,<0.29", "python-dotenv>=1.0,<2"]
+
+[tool.uv]
+package = false
