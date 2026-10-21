@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import os
@@ -15,7 +16,8 @@ from typing import Any
 import httpx
 from dotenv import dotenv_values
 from report_profiles import (ToolError, normalize_version, report_endpoint, prepare_query,
-                             get_topic_config, aweme_filter_field, add_aweme_filter)
+                             get_topic_config, aweme_filter_field, add_aweme_filter,
+                             qianchuan_catalog, identifier, VERSIONS)
 
 ROOT = Path(__file__).resolve().parent
 BASE_URL = "https://api.oceanengine.com"
@@ -86,10 +88,12 @@ def write_json(path: Path, value: dict) -> None:
 
 def request_parts(command: str, params: dict, token: str | None = None, version: str = 'smart') -> dict:
     method, path = ENDPOINTS[command]
+    version = normalize_version(version)
     if command in ('fields', 'report'):
-        path = report_endpoint(command, normalize_version(version))
+        path = report_endpoint(command, version)
     headers = {"Accept": "application/json"}
-    result = {"method": method, "url": BASE_URL + path, "headers": headers}
+    base = 'https://ad.oceanengine.com' if command == 'report' and version == 'qianchuan' else BASE_URL
+    result = {"method": method, "url": base + path, "headers": headers}
     if method == "GET":
         headers["Access-Token"] = token or "***"
         result["params"] = {
@@ -128,9 +132,10 @@ def api_request(client: httpx.Client, command: str, params: dict, token: str | N
 
 
 def preview_request(command: str, params: dict, version: str) -> dict:
-    return {'method': 'GET', 'url': BASE_URL + report_endpoint(command, version),
+    return {'method': 'GET', 'url': request_parts(command, params, version=version)['url'],
             'headers': {'Access-Token': '***'}, 'params': redact(params),
-            'version': version, 'credential_profile': 'qianchuan' if version == 'qianchuan' else 'marketing'}
+            'stat_platform': VERSIONS[version][0],
+            'credential_profile': 'qianchuan' if version == 'qianchuan' else 'marketing'}
 
 
 def resolve_qianchuan_aweme(client: httpx.Client, token: str, advertiser_id: str, show_id: str) -> str:
@@ -147,10 +152,8 @@ def resolve_qianchuan_aweme(client: httpx.Client, token: str, advertiser_id: str
             if not isinstance(row, dict):
                 raise ToolError('千川授权抖音号记录格式无效。')
             if str(row.get('aweme_show_id')) == show_id:
-                internal = row.get('aweme_id')
-                if isinstance(internal, bool) or not isinstance(internal, (str, int)) or not str(internal).isdigit():
-                    raise ToolError('匹配的千川抖音号缺少有效内部ID。')
-                ids.add(str(internal))
+                internal = identifier(row.get('aweme_id'), '匹配的千川内部抖音号ID', numeric=True)
+                ids.add(str(int(internal)))
         info = data.get('page_info')
         total = info.get('total_page') if isinstance(info, dict) else None
         if isinstance(total, bool) or not isinstance(total, int) or total < 0:
@@ -165,8 +168,19 @@ def resolve_qianchuan_aweme(client: httpx.Client, token: str, advertiser_id: str
     return next(iter(ids))
 
 
-def scoped_report(params: dict, fields: dict, aweme: str, version: str,
+def scoped_report(params: dict, fields: dict | None, aweme: str, version: str,
                   client: httpx.Client | None = None, token: str | None = None) -> dict:
+    if version == 'qianchuan':
+        if client is None:
+            raise ToolError('千川手机端抖音号需要联网解析内部ID；离线预览请取消 --aweme-id/'
+                            '_context.aweme_id，并在 filtering.aweme_ids 填入已核验的内部ID。')
+        internal = int(resolve_qianchuan_aweme(client, token, params['advertiser_id'], aweme))
+        result = copy.deepcopy(params)
+        existing = result['filtering'].get('aweme_ids')
+        if existing is not None and existing != [internal]:
+            raise ToolError('filtering.aweme_ids 与指定抖音号冲突，请删除冲突条件后再查询。')
+        result['filtering']['aweme_ids'] = [internal]
+        return result
     config = get_topic_config(fields, params['data_topic'])
     field, internal_id = aweme_filter_field(config, version)
     if internal_id:
@@ -248,9 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="巨量引擎报表查询工具（Python + uv）")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command, help_text in (("token", "获取/复用访问 token"), ("refresh", "刷新缓存中的 token"),
-                               ("fields", "获取可用指标和维度"), ("report", "查询一页自定义报表")):
+                               ("fields", "营销字段配置/千川文档字段目录"), ("report", "查询一页投放报表")):
         sub = subparsers.add_parser(command, help=help_text)
-        sub.add_argument('--version', help='smart/legacy/qianchuan，或巨量营销-智擎版/巨量营销-旧版/巨量千川')
+        sub.add_argument('--stat-platform', '--version', dest='version', help='统计平台：smart/legacy/qianchuan，或对应中文名称；兼容 --version')
         sub.add_argument("--env", type=Path, default=ROOT / ".env", help="凭据文件，默认工具目录/.env")
         sub.add_argument("--cache", type=Path, help="token 缓存；默认 .env 同目录/.cache/，营销和千川分别保存")
         sub.add_argument("--timeout", type=float, default=30, help="网络超时秒数，默认 30")
@@ -259,9 +273,9 @@ def build_parser() -> argparse.ArgumentParser:
         if command in ("fields", "report"):
             sub.add_argument("--params", type=Path, help="请求参数 JSON 文件；report 必填")
             sub.add_argument('--advertiser-id', help='投放账户ID，覆盖 JSON 中的值')
-            sub.add_argument('--data-topic', help='覆盖默认数据主题')
+            sub.add_argument('--data-topic', help='覆盖营销默认数据主题；千川投放账户接口不支持')
             sub.add_argument('--aweme-id', '--room-id', dest='aweme_id', help='手机端抖音号（不是直播场次ID）')
-            sub.add_argument('--fields-config', type=Path, help='该账户/版本/主题的字段配置响应，用于离线过滤校验')
+            sub.add_argument('--fields-config', type=Path, help='营销账户/主题的字段配置响应；千川不使用此参数')
             sub.add_argument("--output", type=Path, help="保存完整响应 JSON，API 错误响应也保存")
             sub.add_argument("--dry-run", action="store_true", help="只预览请求，不鉴权、不联网")
             sub.add_argument("--verbose", action="store_true", help="在 stderr 输出脱敏请求")
@@ -277,14 +291,24 @@ def main(argv: list[str] | None = None) -> int:
         aweme = None
         if args.command in ("fields", "report"):
             if args.command == 'report' and not args.params:
-                raise ToolError('report 需要 --params 指定指标、维度和时间范围。')
+                raise ToolError('report 需要 --params 指定指标、筛选条件和时间范围。')
             version, params, aweme = prepare_query(args.command, read_json(args.params) if args.params else {},
                 version=args.version, advertiser_id=args.advertiser_id, aweme_id=args.aweme_id, data_topic=args.data_topic)
-            if aweme and args.dry_run and not args.fields_config:
+            if version == 'qianchuan':
+                if args.fields_config:
+                    raise ToolError('千川投放账户接口不使用 --fields-config；fields 命令输出官方文档目录。')
+                if args.command == 'fields':
+                    catalog = qianchuan_catalog()
+                    if args.output and not args.dry_run:
+                        write_json(args.output, catalog)
+                    print(json.dumps(catalog, ensure_ascii=False, indent=2))
+                    return 0
+            if aweme and args.dry_run and not args.fields_config and version != 'qianchuan':
                 raise ToolError('指定抖音号的离线预览需要 --fields-config；先执行 fields 保存该主题配置。')
             if args.dry_run:
                 if aweme:
-                    params = scoped_report(params, read_json(args.fields_config), aweme, version)
+                    fields = read_json(args.fields_config) if args.fields_config else None
+                    params = scoped_report(params, fields, aweme, version)
                 preview = preview_request(args.command, params, version)
                 print(json.dumps(preview, ensure_ascii=False, indent=2))
                 return 0
@@ -306,8 +330,10 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             token = manager.get()
             if aweme:
-                fields = read_json(args.fields_config) if args.fields_config else api_request(client, 'fields',
-                    {'advertiser_id':params['advertiser_id'], 'data_topics':[params['data_topic']]}, token, version)
+                fields = None
+                if version != 'qianchuan':
+                    fields = read_json(args.fields_config) if args.fields_config else api_request(client, 'fields',
+                        {'advertiser_id':params['advertiser_id'], 'data_topics':[params['data_topic']]}, token, version)
                 params = scoped_report(params, fields, aweme, version, client, token)
             if args.verbose:
                 print(json.dumps(preview_request(args.command, params, version), ensure_ascii=False, indent=2), file=sys.stderr)

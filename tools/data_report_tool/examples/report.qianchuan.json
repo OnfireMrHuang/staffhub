@@ -1,12 +1,16 @@
 {
-  "_context": {"version": "巨量千川", "aweme_id": "66160988329"},
+  "_context": {"stat_platform": "巨量千川"},
   "advertiser_id": "1867684356876288",
-  "dimensions": ["stat_time_day"],
-  "metrics": ["stat_cost"],
-  "filters": [],
-  "start_time": "2026-10-18 00:00:00",
-  "end_time": "2026-10-18 23:59:59",
-  "order_by": [{"field": "stat_cost", "type": "DESC"}],
+  "fields": ["stat_cost", "show_cnt", "click_cnt", "ecp_convert_cnt"],
+  "filtering": {
+    "marketing_goal": "LIVE_PROM_GOODS",
+    "order_platform": "QIANCHUAN"
+  },
+  "start_date": "2026-10-18",
+  "end_date": "2026-10-18",
+  "time_granularity": "TIME_GRANULARITY_DAILY",
+  "order_field": "stat_cost",
+  "order_type": "DESC",
   "page": 1,
   "page_size": 100
 }

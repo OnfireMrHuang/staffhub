@@ -1,16 +1,18 @@
 # 巨量引擎报表查询工具
 
-Python 3.11+ / uv 工具。通过 JSON 设置维度、指标、时间和分页，通过账户ID、抖音号和巨量版本查询投放数据，保留平台原始响应。
+Python 3.11+ / uv 工具。通过 JSON 设置指标、时间、筛选和分页，按账户ID、抖音号和统计平台查询投放数据，保留平台原始响应。
 
-## 版本与应用
+## 统计平台与接口
 
-| --version | 中文名称 | 默认主题 | 报表接口前缀 | 凭据 |
+| --stat-platform（兼容 --version） | 中文名称 | 默认主题 | 报表路径 | 凭据 |
 | --- | --- | --- | --- | --- |
-| smart | 巨量营销-智擎版 | BASIC_DATA | /open_api/v3.0 | app_id 等 |
+| smart | 巨量营销-智擎版 | BASIC_DATA | /open_api/v3.0/report/custom/get/ | app_id 等 |
 | legacy | 巨量营销-旧版 | STD_BASIC_DATA | 同上 | 与智擎版共用 |
-| qianchuan | 巨量千川 | ECP_BASIC_DATA | /open_api/v1.0/qianchuan | qianchuan_app_id 等 |
+| qianchuan | 巨量千川 | 无 | /open_api/v1.0/qianchuan/report/advertiser/get/ | qianchuan_app_id 等 |
 
-版本参数也接受表中的中文名称。旧版主题已按本项目业务口径确认。两类接口分别在前缀后接 `/report/custom/get/`（数据）或 `/report/custom/config/get/`（字段配置）。千川默认基础报表，可通过 `--data-topic` 切换账户支持的其他主题，不将全域、实时和基础报表混成一份数据。
+统计平台参数也接受表中的中文名称。营销版继续请求 `https://api.oceanengine.com` 的自定义报表及字段配置接口；旧版主题仍为 STD_BASIC_DATA。
+
+千川按[获取投放账户数据](https://open.oceanengine.com/labels/12/docs/1697466393573376)文档请求 `https://ad.oceanengine.com/open_api/v1.0/qianchuan/report/advertiser/get/`，使用 `fields`、`filtering`、`start_date`、`end_date`，不使用自定义报表接口或数据主题。千川拒绝 `--data-topic`、`--fields-config` 和旧模板参数，并提示迁移，不静默丢弃筛选条件。
 
 这里的“直播间ID”按需求指**手机端可见的抖音号**，例如 37365205524，不是业务直播间编号，也不是直播场次 room_id。`--room-id` 是 `--aweme-id` 的别名。
 
@@ -64,32 +66,37 @@ uv run report_tool.py refresh --version qianchuan
 ```bash
 uv run report_tool.py fields --version smart --advertiser-id 1779361682132999 --output output/smart.fields.json
 uv run report_tool.py fields --version legacy --advertiser-id YOUR_LEGACY_ACCOUNT_ID --output output/legacy.fields.json
-uv run report_tool.py fields --version qianchuan --advertiser-id 1867684356876288 --output output/qianchuan.fields.json
+uv run report_tool.py fields --stat-platform qianchuan --output output/qianchuan.fields.json
 ```
 
-fields 查询账户及主题配置，不接受抖音号。先查询对应主题，再选择报表的 dimensions / metrics；不要直接套用营销版35项指标到千川。
+营销的 fields 查询账户及主题配置；根据配置选择 dimensions / metrics。千川的 fields 输出随工具提供的 `qianchuan_advertiser_fields.json` 官方文档目录（96项指标、2项原生返回维度），无需账户、凭据或联网；输出包含 `source=official_document`、`account_verified=false`、文档链接及整理日期，不代表指定账户实测支持，也不能用作营销的 `--fields-config`。
+
+所有 fields 命令都不接受抖音号。主数据、筛选、派生等关联维度在标准表中另有说明，不应加入千川 `fields` 指标数组。
 
 ## 按账户和抖音号查询
 
 ```bash
 cp examples/report.smart.json params.local.smart.json
-# 编辑日期、字段后查询；命令行可覆盖账户、版本和抖音号
+# 编辑日期、字段后查询；命令行可覆盖账户、统计平台和抖音号
 uv run report_tool.py report --params params.local.smart.json \
   --version smart --advertiser-id 1779361682132999 \
   --aweme-id 37365205524 --output output/smart.report.json
 
 cp examples/report.legacy.json params.local.legacy.json
 cp examples/report.qianchuan.json params.local.qianchuan.json
-# 编辑旧版模板，填入实际账户ID及抖音号；编辑千川模板的日期/字段
+# 编辑日期与账户；千川模板默认查询账户直播投放，不限定单一抖音号
 uv run report_tool.py report --params params.local.legacy.json --output output/legacy.report.json
 uv run report_tool.py report --params params.local.qianchuan.json --output output/qianchuan.report.json
+# 按手机端抖音号限定千川查询；工具先解析内部ID，再填 filtering.aweme_ids
+uv run report_tool.py report --params params.local.qianchuan.json \
+  --aweme-id 66160988329 --output output/qianchuan.aweme.report.json
 ```
 
-也可以在 JSON 内指定版本和抖音号：
+营销参数示例（JSON 中可指定统计平台和抖音号）：
 
 ```json
 {
-  "_context": {"version": "巨量营销-智擎版", "aweme_id": "37365205524"},
+  "_context": {"stat_platform": "巨量营销-智擎版", "aweme_id": "37365205524"},
   "advertiser_id": "1779361682132999",
   "dimensions": ["stat_time_day"],
   "metrics": ["stat_cost"],
@@ -102,26 +109,52 @@ uv run report_tool.py report --params params.local.qianchuan.json --output outpu
 }
 ```
 
-_context 是工具配置，不发送给平台。ID推荐使用字符串，避免超长ID精度丢失；抖音号支持字母和下划线。
+_context 是工具配置，不发送给平台。推荐 `_context.stat_platform`，兼容旧名称 `_context.version`；两者冲突且无CLI覆盖时拒绝请求。ID推荐使用字符串避免精度丢失；手机端抖音号可含字母和下划线。千川 `filtering.aweme_ids` 则必须是内部数字ID数组，序列化时转成JSON整数，保持大整数精度。
 
 参数优先级：
 
-1. CLI版本、账户、抖音号覆盖 JSON 的对应值。
-2. 显式指定版本（CLI或 _context.version）会选择版本默认主题，覆盖参数文件原有 data_topic / data_topics，避免切版本后仍查旧主题。
-3. --data-topic 或 _context.data_topic 可显式覆盖版本默认主题，CLI优先。
-4. 未指定版本时沿用原营销接口和 JSON 内的主题，未提供主题则默认 BASIC_DATA。原 fields/report --params 用法继续可用。
+1. CLI统计平台、账户、手机端抖音号覆盖 JSON 对应配置；若与已有内部ID筛选冲突则报错，不自动扩大查询范围。
+2. 营销版：显式指定统计平台会选择默认主题；`--data-topic` 或 `_context.data_topic` 可覆盖默认主题，CLI优先。
+3. 千川：不接受主题及营销参数；切换统计平台时必须使用相应模板，不自动将 dimensions / metrics / filters 转换为另一套语义。
+4. 未指定统计平台时沿用营销接口和 JSON 内的主题，未提供主题则默认 BASIC_DATA。原营销 fields/report --params 用法继续可用。
+
+## 千川账户报表参数
+
+```json
+{
+  "_context": {"stat_platform": "巨量千川"},
+  "advertiser_id": "1867684356876288",
+  "fields": ["stat_cost", "show_cnt", "click_cnt", "ecp_convert_cnt"],
+  "filtering": {"marketing_goal": "LIVE_PROM_GOODS", "order_platform": "QIANCHUAN"},
+  "start_date": "2026-10-18",
+  "end_date": "2026-10-18",
+  "time_granularity": "TIME_GRANULARITY_DAILY",
+  "order_field": "stat_cost",
+  "order_type": "DESC",
+  "page": 1,
+  "page_size": 100
+}
+```
+
+执行前更新示例日期。`start_date` 不得早于上海时区今日前180天；工具按含首尾的查询日期数校验：日粒度最多30天、小时粒度最多7天、不传粒度时区间汇总最多180天。小时粒度使用 `TIME_GRANULARITY_HOURLY`；无月粒度。`page` 为正整数，`page_size` 为1—500。
+
+`filtering.marketing_goal` 必填，可选 ALL / VIDEO_PROM_GOODS / LIVE_PROM_GOODS。它已不在响应中返回，若落库需要，须从请求上下文保存。`order_platform` 是下单平台，不是统计平台 `stat_platform`。工具校验文档明确的枚举以及小店随心推、搜索的筛选限制；`status` 的具体状态枚举由接口校验。
+
+接口响应保留 `data.list`、`data.page_info` 和 `request_id`，不注入派生维度、不换算金额。新文档未明确金额单位，不能沿用旧直播接口除以100000规则。文档标记即将下线的 convert_cnt / convert_cost / convert_rate 仍可查询，目录保留标记，不擅自替换成其他归因指标。
 
 ## 主播过滤
 
-指定抖音号时默认先获取当前账户、主题的字段配置：
+营销版指定抖音号时先获取当前账户、主题的字段配置：
 
-- 支持营销 data.list / filter_able 和千川 data.custom_config_datas / filterable 两种结构。
-- 优先使用可筛选的手机端抖音号字段，例如营销 aweme_id、千川 anchor_show_id / aweme_show_id；根据返回的 type、operator 构造精确匹配条件。
-- 千川只提供内部 aweme_id / anchor_id 时，分页调用 `/open_api/v1.0/qianchuan/aweme/authorized/get/`，按 aweme_show_id 精确匹配并取得内部 aweme_id。缺少唯一匹配时报错，不将手机端号码当作内部ID；此步骤需要授权抖音号列表权限。
+- 使用可筛选的手机端抖音号字段，如营销 aweme_id；根据配置的 type、operator 构造精确匹配条件。
 - 保留其他 filters；已有主播条件冲突时报错，相同条件不重复添加。
 - 校验请求字段、必选维度及声明的互斥关系。不支持或无法安全过滤时停止，不静默删除过滤条件或退回全账户查询。
 
-不指定抖音号时保持原有账户级调试行为，由上游校验字段。报表仅取 page 指定的一页，需根据 data.page_info 自行翻页；授权抖音号列表的自动翻页仅用于唯一匹配主播。
+千川指定 `--aweme-id` / `--room-id` 或 `_context.aweme_id` 时，分页调用 `/open_api/v1.0/qianchuan/aweme/authorized/get/`，按手机端 `aweme_show_id` 唯一匹配内部 `aweme_id`，填入 `filtering.aweme_ids`。不再调用千川自定义字段配置接口；缺失、多重匹配或与参数中的ID集合冲突时停止，不退回全账户查询。
+
+若已掌握核验后的内部ID，可直接在参数中填写 `filtering.aweme_ids`，无需手机端抖音号或授权列表请求。其他 filtering 条件保留。多个ID表示筛选集合，响应仍按账户及时间汇总，不能将一行数据拆成多个直播间数据。
+
+未提供抖音号筛选时查询账户范围。报表仅取 page 指定的一页，需根据 data.page_info 自行翻页；授权抖音号列表的自动翻页仅用于唯一匹配主播。
 
 ## 离线预览
 
@@ -131,11 +164,14 @@ uv run report_tool.py report --params examples/report.json --version legacy --dr
 
 # 指定主播时，提供同账户、同主题的字段响应
 uv run report_tool.py report --params params.local.smart.json --fields-config output/smart.fields.json --dry-run
+
+# 千川账户级预览：不联网、不鉴权
+uv run report_tool.py report --params examples/report.qianchuan.json --dry-run
 ```
 
---dry-run 不读取凭据、不联网、不更新 token，输出脱敏请求、版本和凭据配置名称。字段响应不含账户ID，需要用户保证 --fields-config 来自同一账户和当前主题。千川需要在线解析内部ID时，离线预览会明确报错。
+--dry-run 不读取凭据、不联网、不更新 token，输出脱敏请求、统计平台和凭据配置名称。营销 `--fields-config` 须来自同一账户和主题。千川离线预览若指定手机端抖音号会报错；取消该手机端配置并直接填写已核验的 `filtering.aweme_ids` 即可预览限定范围，不可用手机端号码冒充内部ID。
 
---fields-config 也可用于正式查询以跳过元数据请求；不会替代真实报表数据。--verbose 输出最终脱敏请求到 stderr；--timeout 60 可调整超时。错误保留 code、message、request_id，指定 --output 时保存错误响应；不会自动重试授权码交换。
+营销 --fields-config 也可用于正式查询以跳过元数据请求；不会替代真实报表数据。--verbose 输出最终脱敏请求到 stderr；--timeout 60 可调整超时。错误保留 code、message、request_id，指定 --output 时保存错误响应；不会自动重试授权码交换。
 
 ## 试点表格
 
@@ -149,15 +185,14 @@ uv run report_tool.py report --params params.local.smart.json --fields-config ou
 uv run python -m unittest discover -s . -v
 ```
 
-测试通过 HTTP 模拟响应覆盖版本路由、凭据隔离、token获取/刷新、两种配置结构、主播过滤、千川内部ID匹配及分页、冲突校验、离线预览和旧用法兼容。
+测试通过 HTTP 模拟响应覆盖正确主机/路径、字段编码、凭据隔离、token获取/刷新、营销字段配置、千川内部ID匹配及分页、筛选冲突、时间边界、参数拒绝、离线目录和营销旧用法兼容。测试不调用实际账户数据接口。
 
-接口路径、参数及枚举参考官方SDK固定版本：
+营销接口及授权列表参考下列官方SDK固定版本；千川账户报表以用户指定的官方文档为准：
 
 - [营销自定义报表](https://github.com/oceanengine/ad_open_sdk_java/blob/b9a89b8b4a86ac151935502ed3cd40fc050b53aa/src/main/java/com/bytedance/ads/api/ReportCustomGetV30Api.java)
 - [营销数据主题](https://github.com/oceanengine/ad_open_sdk_java/blob/b9a89b8b4a86ac151935502ed3cd40fc050b53aa/src/main/java/com/bytedance/ads/model/ReportCustomGetV30DataTopic.java)
-- [千川自定义报表](https://github.com/oceanengine/ad_open_sdk_java/blob/b9a89b8b4a86ac151935502ed3cd40fc050b53aa/src/main/java/com/bytedance/ads/api/QianchuanReportCustomGetV10Api.java)
-- [千川字段配置](https://github.com/oceanengine/ad_open_sdk_java/blob/b9a89b8b4a86ac151935502ed3cd40fc050b53aa/src/main/java/com/bytedance/ads/api/QianchuanReportCustomConfigGetV10Api.java)
-- [千川数据主题](https://github.com/oceanengine/ad_open_sdk_java/blob/b9a89b8b4a86ac151935502ed3cd40fc050b53aa/src/main/java/com/bytedance/ads/model/QianchuanReportCustomGetV10DataTopic.java)
+- [千川投放账户报表（本次修正的接口）](https://open.oceanengine.com/labels/12/docs/1697466393573376)
+- [同一文档的结构化定义](https://open.oceanengine.com/skiff/api/doc/client/schema/markdown/get/?doc_id=1697466393573376)
 - [千川授权抖音号列表](https://github.com/oceanengine/ad_open_sdk_java/blob/b9a89b8b4a86ac151935502ed3cd40fc050b53aa/src/main/java/com/bytedance/ads/api/QianchuanAwemeAuthorizedGetV10Api.java)
 
-实际字段以对应账户当前主题的 fields 响应为准。
+营销字段以账户当前主题的 fields 响应为准。千川目录按2026-10-21官方文档核对，不表示账户权限或实际可用性已经验证；文档更新时需同步更新目录。

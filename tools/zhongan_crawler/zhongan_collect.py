@@ -286,11 +286,16 @@ def collect_once(client, args):
             batches.append((metadata, aggregate, orders))
             print(f"场次 {room_id}：已读取 {len(orders)} 条订单。", flush=True)
         collected_at = datetime.now(CHINA).isoformat(timespec="seconds")
-        export_excel(args.output, batches, collected_at)
+        raw_only = getattr(args, "raw_only", False)
+        if raw_only:
+            private_json(run_dir / "batches.json", {"collectedAt": collected_at, "batches": batches})
+        else:
+            export_excel(args.output, batches, collected_at)
         manifest.update(complete=True, collectedAt=collected_at, sessions=len(batches),
-                        orders=sum(len(b[2]) for b in batches), workbook=str(args.output))
+                        orders=sum(len(b[2]) for b in batches),
+                        workbook=None if raw_only else str(args.output))
         private_json(run_dir / "manifest.json", manifest)
-        print(f"Excel 已更新：{args.output}")
+        print(f"原始数据已保存：{run_dir}" if raw_only else f"Excel 已更新：{args.output}")
         return batches
     except Exception as exc:
         manifest.update(errorType=type(exc).__name__, error=str(exc))
@@ -303,7 +308,8 @@ def collect_once(client, args):
 def parser():
     load_dotenv(ROOT / ".env")
     result = argparse.ArgumentParser(description="众安看板采集：人工短信验证码登录、游标分页、Excel 增量更新")
-    result.add_argument("command", choices=("login", "collect", "import-session"))
+    result.add_argument("command", choices=("login", "collect", "collect-api", "import-session"))
+    result.add_argument("--raw-only", action="store_true", help="仅保存完整原始数据及 batches.json，供独立报表导出")
     result.add_argument("--curl-file", type=Path, help="Chrome“以 cURL 格式复制”保存的纯文本文件；只解析，不执行")
     result.add_argument("--browser-channel", choices=("chrome", "chromium"),
                         default=os.getenv("ZHONGAN_BROWSER_CHANNEL", "chrome"))
@@ -337,6 +343,10 @@ def main(argv=None):
         cli.error("--curl-file 仅用于 import-session。")
     if args.command == "login" and args.headless:
         cli.error("login 需要可见浏览器，不能使用 --headless。")
+    if args.raw_only and args.command not in ("collect", "collect-api"):
+        cli.error("--raw-only 仅用于采集命令。")
+    if args.command == "collect-api" and args.interval:
+        cli.error("collect-api 仅执行一次采集，不支持 --interval。")
     if args.room_id and args.all_sessions:
         cli.error("--room-id 与 --all-sessions 不能同时设置。")
     if args.interval < 0 or 0 < args.interval < 60 or min(args.login_timeout, args.timeout, args.max_pages) < 1 or args.pause < 0:
@@ -354,6 +364,19 @@ def main(argv=None):
     try:
         # Prevent a scheduler and manual login from overwriting the same session.
         with FileLock(str(args.session) + ".lock", timeout=0), sync_playwright() as playwright:
+            if args.command == "collect-api":
+                if not args.session.exists():
+                    raise LoginExpired("没有保存的登录态，请先运行 login 或 import-session。")
+                from types import SimpleNamespace
+                state = json.loads(args.session.read_text(encoding="utf-8"))
+                api = playwright.request.new_context(storage_state=state)
+                try:
+                    client = Client(SimpleNamespace(request=api, storage_state=lambda: state),
+                                    dashboard_url(args), args.timeout, args.pause)
+                    collect_once(client, args)
+                finally:
+                    api.dispose()
+                return 0
             if args.command == "import-session":
                 state = session_from_curl(args.curl_file.read_text(encoding="utf-8"))
                 api = playwright.request.new_context(storage_state=state)

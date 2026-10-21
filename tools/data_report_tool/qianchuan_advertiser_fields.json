@@ -1,0 +1,601 @@
+{
+  "source": "official_document",
+  "account_verified": false,
+  "title": "获取投放账户数据",
+  "document_url": "https://open.oceanengine.com/labels/12/docs/1697466393573376",
+  "retrieved_on": "2026-10-21",
+  "method": "GET",
+  "url": "https://ad.oceanengine.com/open_api/v1.0/qianchuan/report/advertiser/get/",
+  "dimensions": [
+    {
+      "field": "advertiser_id",
+      "name": "客户id",
+      "type": "number",
+      "description": "客户id"
+    },
+    {
+      "field": "stat_datetime",
+      "name": "数据起始时间，当time_granularity有入參时返回，格式为： yyyy-MM-dd HH:mm:ss",
+      "type": "string",
+      "description": "数据起始时间，当time_granularity有入參时返回，格式为： yyyy-MM-dd HH:mm:ss"
+    }
+  ],
+  "metrics": [
+    {
+      "field": "stat_cost",
+      "name": "消耗",
+      "type": "float",
+      "description": "消耗"
+    },
+    {
+      "field": "show_cnt",
+      "name": "展示次数",
+      "type": "float",
+      "description": "展示次数"
+    },
+    {
+      "field": "ctr",
+      "name": "点击率",
+      "type": "float",
+      "description": "点击率"
+    },
+    {
+      "field": "cpm_platform",
+      "name": "平均千次展示费用",
+      "type": "float",
+      "description": "平均千次展示费用"
+    },
+    {
+      "field": "click_cnt",
+      "name": "点击次数",
+      "type": "float",
+      "description": "点击次数"
+    },
+    {
+      "field": "pay_order_count",
+      "name": "直接成交订单数",
+      "type": "float",
+      "description": "直接成交订单数"
+    },
+    {
+      "field": "create_order_amount",
+      "name": "直接下单金额",
+      "type": "float",
+      "description": "直接下单金额"
+    },
+    {
+      "field": "create_order_count",
+      "name": "直接下单订单数",
+      "type": "float",
+      "description": "直接下单订单数"
+    },
+    {
+      "field": "pay_order_amount",
+      "name": "直接成交金额",
+      "type": "float",
+      "description": "直接成交金额"
+    },
+    {
+      "field": "create_order_roi",
+      "name": "直接下单roi",
+      "type": "float",
+      "description": "直接下单roi"
+    },
+    {
+      "field": "dy_follow",
+      "name": "新增粉丝数",
+      "type": "float",
+      "description": "新增粉丝数"
+    },
+    {
+      "field": "prepay_and_pay_order_roi",
+      "name": "直接支付roi",
+      "type": "float",
+      "description": "直接支付roi"
+    },
+    {
+      "field": "prepay_order_count",
+      "name": "直接预售订单数",
+      "type": "float",
+      "description": "直接预售订单数"
+    },
+    {
+      "field": "prepay_order_amount",
+      "name": "直接预售金额",
+      "type": "float",
+      "description": "直接预售金额"
+    },
+    {
+      "field": "total_play",
+      "name": "播放数",
+      "type": "float",
+      "description": "播放数"
+    },
+    {
+      "field": "play_duration_3s",
+      "name": "3s播放数",
+      "type": "float",
+      "description": "3s播放数"
+    },
+    {
+      "field": "play_25_feed_break",
+      "name": "25%进度播放数",
+      "type": "float",
+      "description": "25%进度播放数"
+    },
+    {
+      "field": "play_50_feed_break",
+      "name": "50%进度播放数",
+      "type": "float",
+      "description": "50%进度播放数"
+    },
+    {
+      "field": "play_75_feed_break",
+      "name": "75%进度播放数",
+      "type": "float",
+      "description": "75%进度播放数"
+    },
+    {
+      "field": "play_over",
+      "name": "播放完成数",
+      "type": "float",
+      "description": "播放完成数"
+    },
+    {
+      "field": "play_over_rate",
+      "name": "完播率",
+      "type": "float",
+      "description": "完播率"
+    },
+    {
+      "field": "convert_cnt",
+      "name": "转化次数 （即将下线）",
+      "type": "float",
+      "description": "转化次数 （即将下线）"
+    },
+    {
+      "field": "convert_cost",
+      "name": "转化成本 （即将下线）",
+      "type": "float",
+      "description": "转化成本 （即将下线）"
+    },
+    {
+      "field": "convert_rate",
+      "name": "转化率 （即将下线）",
+      "type": "float",
+      "description": "转化率 （即将下线）"
+    },
+    {
+      "field": "luban_live_click_product_cnt",
+      "name": "直播间商品点击次数",
+      "type": "float",
+      "description": "直播间商品点击次数"
+    },
+    {
+      "field": "luban_live_enter_cnt",
+      "name": "直播间观看人次",
+      "type": "float",
+      "description": "直播间观看人次"
+    },
+    {
+      "field": "cpc_platform",
+      "name": "平均点击单价",
+      "type": "float",
+      "description": "平均点击单价"
+    },
+    {
+      "field": "deep_convert_cnt",
+      "name": "深度转化次数",
+      "type": "float",
+      "description": "深度转化次数"
+    },
+    {
+      "field": "deep_convert_cost",
+      "name": "深度转化成本",
+      "type": "float",
+      "description": "深度转化成本"
+    },
+    {
+      "field": "deep_convert_rate",
+      "name": "深度转化率",
+      "type": "float",
+      "description": "深度转化率"
+    },
+    {
+      "field": "attribution_convert_cnt",
+      "name": "转化数（计费时间）",
+      "type": "float",
+      "description": "转化数（计费时间）"
+    },
+    {
+      "field": "attribution_convert_rate",
+      "name": "转化率（计费时间）",
+      "type": "float",
+      "description": "转化率（计费时间）"
+    },
+    {
+      "field": "attribution_convert_cost",
+      "name": "转化成本（计费时间）",
+      "type": "float",
+      "description": "转化成本（计费时间）"
+    },
+    {
+      "field": "attribution_deep_convert_cnt",
+      "name": "深度转化次数（计费时间）",
+      "type": "float",
+      "description": "深度转化次数（计费时间）"
+    },
+    {
+      "field": "attribution_deep_convert_cost",
+      "name": "深度转化成本（计费时间）",
+      "type": "float",
+      "description": "深度转化成本（计费时间）"
+    },
+    {
+      "field": "attribution_deep_convert_rate",
+      "name": "深度转化率（计费时间）",
+      "type": "float",
+      "description": "深度转化率（计费时间）"
+    },
+    {
+      "field": "all_order_create_roi_7days",
+      "name": "7日总下单ROI",
+      "type": "float",
+      "description": "7日总下单ROI"
+    },
+    {
+      "field": "all_order_pay_roi_7days",
+      "name": "7日总支付ROI",
+      "type": "float",
+      "description": "7日总支付ROI"
+    },
+    {
+      "field": "all_order_pay_gmv_7days",
+      "name": "7日总成交金额",
+      "type": "float",
+      "description": "7日总成交金额"
+    },
+    {
+      "field": "all_order_pay_count_7days",
+      "name": "7日总成交订单",
+      "type": "float",
+      "description": "7日总成交订单"
+    },
+    {
+      "field": "pay_order_cost_per_order",
+      "name": "直接成交客单价",
+      "type": "float",
+      "description": "直接成交客单价"
+    },
+    {
+      "field": "create_order_coupon_amount",
+      "name": "下单智能优惠券金额",
+      "type": "float",
+      "description": "下单智能优惠券金额"
+    },
+    {
+      "field": "pay_order_coupon_amount",
+      "name": "成交智能优惠券金额",
+      "type": "float",
+      "description": "成交智能优惠券金额"
+    },
+    {
+      "field": "indirect_order_create_count_7days",
+      "name": "间接下单订单数",
+      "type": "float",
+      "description": "间接下单订单数"
+    },
+    {
+      "field": "indirect_order_create_gmv_7days",
+      "name": "间接下单金额",
+      "type": "float",
+      "description": "间接下单金额"
+    },
+    {
+      "field": "indirect_order_pay_count_7days",
+      "name": "间接成交订单数",
+      "type": "float",
+      "description": "间接成交订单数"
+    },
+    {
+      "field": "indirect_order_pay_gmv_7days",
+      "name": "间接成交金额",
+      "type": "float",
+      "description": "间接成交金额"
+    },
+    {
+      "field": "indirect_order_prepay_count_7days",
+      "name": "间接预售订单数",
+      "type": "float",
+      "description": "间接预售订单数"
+    },
+    {
+      "field": "indirect_order_prepay_gmv_7days",
+      "name": "间接预售金额",
+      "type": "float",
+      "description": "间接预售金额"
+    },
+    {
+      "field": "qianchuan_first_order_cnt",
+      "name": "店铺首单新客人数",
+      "type": "float",
+      "description": "店铺首单新客人数"
+    },
+    {
+      "field": "qianchuan_first_order_rate",
+      "name": "店铺首单新客订单占比",
+      "type": "float",
+      "description": "店铺首单新客订单占比"
+    },
+    {
+      "field": "qianchuan_first_order_convert_cost",
+      "name": "店铺首单新客转化成本",
+      "type": "float",
+      "description": "店铺首单新客转化成本"
+    },
+    {
+      "field": "qianchuan_first_order_direct_pay_gmv",
+      "name": "店铺首单新客直接成交金额",
+      "type": "float",
+      "description": "店铺首单新客直接成交金额"
+    },
+    {
+      "field": "qianchuan_first_order_direct_pay_order_roi",
+      "name": "店铺首单新客直接支付ROI",
+      "type": "float",
+      "description": "店铺首单新客直接支付ROI"
+    },
+    {
+      "field": "qianchuan_first_order_ltv30",
+      "name": "店铺首单新客30天累计成交金额",
+      "type": "float",
+      "description": "店铺首单新客30天累计成交金额"
+    },
+    {
+      "field": "qianchuan_first_order_roi30",
+      "name": "店铺首单新客30天累计支付ROI",
+      "type": "float",
+      "description": "店铺首单新客30天累计支付ROI"
+    },
+    {
+      "field": "live_pay_order_cost_per_order",
+      "name": "成交客单价",
+      "type": "float",
+      "description": "成交客单价"
+    },
+    {
+      "field": "qianchuan_brand_first_order_rate",
+      "name": "品牌首单新客订单占比",
+      "type": "float",
+      "description": "品牌首单新客订单占比"
+    },
+    {
+      "field": "qianchuan_brand_first_order_convert_cost",
+      "name": "品牌首单新客转化成本",
+      "type": "float",
+      "description": "品牌首单新客转化成本"
+    },
+    {
+      "field": "qianchuan_brand_first_order_ltv30",
+      "name": "品牌首单新客30天累计成交金额",
+      "type": "float",
+      "description": "品牌首单新客30天累计成交金额"
+    },
+    {
+      "field": "qianchuan_brand_first_order_direct_pay_order_roi",
+      "name": "品牌首单新客直接支付roi",
+      "type": "float",
+      "description": "品牌首单新客直接支付roi"
+    },
+    {
+      "field": "qianchuan_brand_first_order_roi30",
+      "name": "品牌首单新客30天累计支付roi",
+      "type": "float",
+      "description": "品牌首单新客30天累计支付roi"
+    },
+    {
+      "field": "qianchuan_brand_first_order_cnt",
+      "name": "品牌首单新客数",
+      "type": "float",
+      "description": "品牌首单新客数"
+    },
+    {
+      "field": "qianchuan_brand_first_order_direct_pay_gmv",
+      "name": "品牌首单新客直接成交金额",
+      "type": "float",
+      "description": "品牌首单新客直接成交金额"
+    },
+    {
+      "field": "qianchuan_author_first_order_rate",
+      "name": "抖音号首单新客订单占比",
+      "type": "float",
+      "description": "抖音号首单新客订单占比"
+    },
+    {
+      "field": "qianchuan_author_first_order_roi30",
+      "name": "抖音号首单新客30天累计支付roi",
+      "type": "float",
+      "description": "抖音号首单新客30天累计支付roi"
+    },
+    {
+      "field": "qianchuan_author_first_order_cnt",
+      "name": "抖音号首单新客数",
+      "type": "float",
+      "description": "抖音号首单新客数"
+    },
+    {
+      "field": "qianchuan_author_first_order_convert_cost",
+      "name": "抖音号首单新客转化成本",
+      "type": "float",
+      "description": "抖音号首单新客转化成本"
+    },
+    {
+      "field": "qianchuan_author_first_order_direct_pay_gmv",
+      "name": "抖音号首单新客直接成交金额",
+      "type": "float",
+      "description": "抖音号首单新客直接成交金额"
+    },
+    {
+      "field": "qianchuan_author_first_order_direct_pay_order_roi",
+      "name": "抖音号首单新客直接支付roi",
+      "type": "float",
+      "description": "抖音号首单新客直接支付roi"
+    },
+    {
+      "field": "qianchuan_author_first_order_ltv30",
+      "name": "抖音号首单新客30天累计成交金额",
+      "type": "float",
+      "description": "抖音号首单新客30天累计成交金额"
+    },
+    {
+      "field": "ad_all_order_gmv_settle_rate_7d",
+      "name": "直接成交金额结算率(7天)",
+      "type": "float",
+      "description": "直接成交金额结算率(7天)"
+    },
+    {
+      "field": "ad_all_order_gmv_settle_rate_14d",
+      "name": "直接成交金额结算率(14天)",
+      "type": "float",
+      "description": "直接成交金额结算率(14天)"
+    },
+    {
+      "field": "unfinished_estimate_order_gmv",
+      "name": "未完结直接预售订单预估金额",
+      "type": "number",
+      "description": "未完结直接预售订单预估金额"
+    },
+    {
+      "field": "indirect_order_unfinished_estimate_gmv_7days",
+      "name": "未完结间接预售订单预估金额",
+      "type": "number",
+      "description": "未完结间接预售订单预估金额"
+    },
+    {
+      "field": "ad_all_order_settle_amount_7d",
+      "name": "直接结算金额(7天)",
+      "type": "float",
+      "description": "直接结算金额(7天)"
+    },
+    {
+      "field": "ad_all_order_settle_count_7d",
+      "name": "直接结算订单数(7天)",
+      "type": "float",
+      "description": "直接结算订单数(7天)"
+    },
+    {
+      "field": "ad_all_order_count_settle_rate_7d",
+      "name": "直接订单结算率(7天)",
+      "type": "float",
+      "description": "直接订单结算率(7天)"
+    },
+    {
+      "field": "ad_all_order_settle_roi_7d",
+      "name": "直接结算ROI(7天)",
+      "type": "float",
+      "description": "直接结算ROI(7天)"
+    },
+    {
+      "field": "ad_all_order_settle_cost_7d",
+      "name": "直接结算成本(7天)",
+      "type": "float",
+      "description": "直接结算成本(7天)"
+    },
+    {
+      "field": "all_order_refund_count_7d",
+      "name": "直接退款订单数(7天)",
+      "type": "float",
+      "description": "直接退款订单数(7天)"
+    },
+    {
+      "field": "all_order_refund_amount_7d",
+      "name": "直接退款金额(7天)",
+      "type": "float",
+      "description": "直接退款金额(7天)"
+    },
+    {
+      "field": "ad_order_gmv_refund_rate_7d",
+      "name": "直接退款率(7天)",
+      "type": "float",
+      "description": "直接退款率(7天)"
+    },
+    {
+      "field": "ad_order_refund_rate_7d",
+      "name": "直接订单数退货率(7天)",
+      "type": "float",
+      "description": "直接订单数退货率(7天)"
+    },
+    {
+      "field": "ad_all_order_settle_amount_14d",
+      "name": "直接结算金额(14天)",
+      "type": "float",
+      "description": "直接结算金额(14天)"
+    },
+    {
+      "field": "ad_all_order_settle_count_14d",
+      "name": "直接结算订单数(14天)",
+      "type": "float",
+      "description": "直接结算订单数(14天)"
+    },
+    {
+      "field": "ad_all_order_count_settle_rate_14d",
+      "name": "直接订单结算率(14天)",
+      "type": "float",
+      "description": "直接订单结算率(14天)"
+    },
+    {
+      "field": "ad_all_order_settle_roi_14d",
+      "name": "直接结算ROI(14天)",
+      "type": "float",
+      "description": "直接结算ROI(14天)"
+    },
+    {
+      "field": "ad_all_order_settle_cost_14d",
+      "name": "直接结算成本(14天)",
+      "type": "float",
+      "description": "直接结算成本(14天)"
+    },
+    {
+      "field": "all_order_refund_count_14d",
+      "name": "直接退款订单数(14天)",
+      "type": "float",
+      "description": "直接退款订单数(14天)"
+    },
+    {
+      "field": "all_order_refund_amount_14d",
+      "name": "直接退款金额(14天)",
+      "type": "float",
+      "description": "直接退款金额(14天)"
+    },
+    {
+      "field": "ad_order_gmv_refund_rate_14d",
+      "name": "直接退款率(14天)",
+      "type": "float",
+      "description": "直接退款率(14天)"
+    },
+    {
+      "field": "ad_order_refund_rate_14d",
+      "name": "直接订单数退货率(14天)",
+      "type": "float",
+      "description": "直接订单数退货率(14天)"
+    },
+    {
+      "field": "ecp_convert_cnt",
+      "name": "转化数",
+      "type": "float",
+      "description": "转化数"
+    },
+    {
+      "field": "ecp_convert_rate",
+      "name": "转化率",
+      "type": "float",
+      "description": "转化率"
+    },
+    {
+      "field": "ecp_cpa_platform",
+      "name": "转化成本",
+      "type": "float",
+      "description": "转化成本"
+    }
+  ]
+}

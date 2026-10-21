@@ -51,7 +51,6 @@ class VersionTests(unittest.TestCase):
         for version, path, topic in [
             ('巨量营销-智擎版', '/open_api/v3.0/report/custom/get/', 'BASIC_DATA'),
             ('巨量营销-旧版', '/open_api/v3.0/report/custom/get/', 'STD_BASIC_DATA'),
-            ('巨量千川', '/open_api/v1.0/qianchuan/report/custom/get/', 'ECP_BASIC_DATA'),
         ]:
             with self.subTest(version=version):
                 code, out, err = self.run_cli(['report', '--params', str(self.params), '--version', version,
@@ -63,12 +62,12 @@ class VersionTests(unittest.TestCase):
                 self.assertEqual(request['params']['advertiser_id'], '9007199254740993')
 
     def test_fields_can_be_requested_without_params_and_topic_is_overrideable(self):
-        code, out, err = self.run_cli(['fields', '--version', 'qianchuan', '--advertiser-id', '123',
-                                     '--data-topic', 'SITE_PROMOTION_POST_DATA_LIVE', '--dry-run'])
+        code, out, err = self.run_cli(['fields', '--version', 'legacy', '--advertiser-id', '123',
+                                     '--data-topic', 'STD_BASIC_DATA', '--dry-run'])
         self.assertEqual(code, 0, err)
         request = json.loads(out)
-        self.assertTrue(request['url'].endswith('/qianchuan/report/custom/config/get/'))
-        self.assertEqual(request['params'], {'advertiser_id':'123', 'data_topics':['SITE_PROMOTION_POST_DATA_LIVE']})
+        self.assertTrue(request['url'].endswith('/open_api/v3.0/report/custom/config/get/'))
+        self.assertEqual(request['params'], {'advertiser_id':'123', 'data_topics':['STD_BASIC_DATA']})
 
     def test_qianchuan_credentials_never_fall_back_to_marketing(self):
         env = self.root / '.env'
@@ -96,23 +95,6 @@ class VersionTests(unittest.TestCase):
         ])
         self.assertNotIn('room_id', json.loads(out)['params'])
 
-    def test_qianchuan_uses_its_token_config_shape_and_display_id_filter(self):
-        paths=[]
-        def respond(request):
-            paths.append(request.url.path)
-            self.assertEqual(request.headers['Access-Token'],'qc-token')
-            self.assertEqual(request.url.params['advertiser_id'],'111')
-            if request.url.path.endswith('/config/get/'):
-                self.assertEqual(json.loads(request.url.params['data_topics']), ['ECP_BASIC_DATA'])
-                return httpx.Response(200,json=field_config('ECP_BASIC_DATA','anchor_show_id',True))
-            self.assertEqual(json.loads(request.url.params['filters']),[
-                {'field':'anchor_show_id','type':2,'operator':7,'values':['66160988329']}])
-            return httpx.Response(200,json={'code':0,'data':{'rows':[]},'request_id':'report-test'})
-        code,out,err=self.run_cli(['report','--params',str(self.params),'--version','qianchuan',
-            '--aweme-id','66160988329'],respond,{'access_token':'marketing-token','QIANCHUAN_ACCESS_TOKEN':'qc-token'})
-        self.assertEqual(code,0,err)
-        self.assertEqual(paths,['/open_api/v1.0/qianchuan/report/custom/config/get/', '/open_api/v1.0/qianchuan/report/custom/get/'])
-        self.assertEqual(json.loads(out)['request_id'],'report-test')
 
     def test_filter_cannot_silently_expand_scope_on_missing_or_conflicting_metadata(self):
         cases=[]
@@ -129,44 +111,11 @@ class VersionTests(unittest.TestCase):
                 self.assertEqual(code,1,err)
                 self.assertEqual(out,'')
 
-    def test_qianchuan_internal_id_is_resolved_from_all_authorized_aweme_pages(self):
-        calls=[]
-        config=field_config('ECP_BASIC_DATA','anchor_id',True)
-        # A human label saying 抖音号 must not make an internal *_id a display ID.
-        config['data']['custom_config_datas'][0]['dimensions'][1]['name']='抖音号'
-        def respond(request):
-            calls.append(request.url.path)
-            if request.url.path.endswith('/custom/config/get/'):
-                return httpx.Response(200,json=config)
-            if request.url.path.endswith('/aweme/authorized/get/'):
-                page=int(request.url.params['page'])
-                rows=[] if page==1 else [{'aweme_id':9007199254740993,'aweme_show_id':'qc_host'}]
-                return httpx.Response(200,json={'code':0,'data':{'aweme_id_list':rows,'page_info':{'page':page,'total_page':2}}})
-            self.assertEqual(json.loads(request.url.params['filters']),[
-                {'field':'anchor_id','type':2,'operator':7,'values':['9007199254740993']}])
-            return httpx.Response(200,json={'code':0,'data':{'rows':[]}})
-        code,out,err=self.run_cli(['report','--params',str(self.params),'--version','qianchuan','--aweme-id','qc_host'],
-            respond,{'QIANCHUAN_ACCESS_TOKEN':'qc-token'})
-        self.assertEqual(code,0,err)
-        self.assertEqual(calls.count('/open_api/v1.0/qianchuan/aweme/authorized/get/'),2)
 
     def test_prefixed_credentials_are_redacted_in_nested_diagnostics(self):
         result=tool.redact({'QIANCHUAN_ACCESS_TOKEN':'private', 'nested':{'qianchuan_app_secret':'private2'}, 'advertiser_id':'123'})
         self.assertEqual(result,{'QIANCHUAN_ACCESS_TOKEN':'***','nested':{'qianchuan_app_secret':'***'},'advertiser_id':'123'})
 
-    def test_qianchuan_missing_or_ambiguous_authorized_aweme_never_queries_report(self):
-        for rows in [[], [{'aweme_id':'1','aweme_show_id':'host'}, {'aweme_id':'2','aweme_show_id':'host'}]]:
-            calls=[]
-            config=field_config('ECP_BASIC_DATA','anchor_id',True)
-            config['data']['custom_config_datas'][0]['dimensions'][1]['name']='主播ID'
-            def respond(request):
-                calls.append(request.url.path)
-                if request.url.path.endswith('/custom/config/get/'):return httpx.Response(200,json=config)
-                return httpx.Response(200,json={'code':0,'data':{'aweme_id_list':rows,'page_info':{'total_page':1}}})
-            code,out,err=self.run_cli(['report','--params',str(self.params),'--version','qianchuan','--aweme-id','host'],
-                respond,{'QIANCHUAN_ACCESS_TOKEN':'qc-token'})
-            self.assertEqual(code,1,err)
-            self.assertNotIn('/open_api/v1.0/qianchuan/report/custom/get/',calls)
 
     def test_dry_run_with_aweme_requires_metadata_without_network(self):
         code,out,err=self.run_cli(['report','--params',str(self.params),'--aweme-id','abc','--dry-run'])

@@ -67,6 +67,35 @@ uv run python zhongan_collect.py collect --date 2026-10-20 --room-id '实际场�
 
 `--room-id` 可重复传入，不能与 `--all-sessions` 同时使用。`dyNo` 是主播/直播间账号，`roomId` 是一次直播的场次标识，两者不能替代。
 
+## 只读接口采集及四文件快照导出
+
+`collect-api` 复用已经保存的登录态，直接查询上述接口，无需启动浏览器。
+它只运行一次，登录态失效时退出，不自动打开登录窗口。
+`--raw-only` 保留原始分页响应及完整 `batches.json`，不写合并工作簿：
+
+```bash
+uv run python zhongan_collect.py collect-api --raw-only --dy-no 66160988329 --date 2026-10-21 --output output/snapshot/unused.xlsx
+```
+
+终端会给出本次 `raw/<运行时间>/` 目录。`export_snapshot.mjs` 读取其中的
+`batches.json` 和 `manifest.json`，仅接受完整采集，生成四个文件：
+`订单信息.xlsx`、`直播间统计.xlsx`、`订单信息表头字段.xlsx`、`直播间统计表头字段.xlsx`。
+数据表头位于第5行；表头字段表从第1行开始，逐列记录字段中文名、字段英文名、原始字段路径、来源、类型、非空数量及口径说明。
+导出时附加 `--fields-only` 可仅更新两份表头字段表，保留两份数据文件。
+订单一行一单，嵌套对象展开，数组保留完整JSON，不把关联订单重复展开为主订单。
+未知状态码保留原值，未核实字段的业务口径明确标记待确认。
+
+该导出器使用 Codex bundled Node 和 `@oai/artifact-tool`。在一个临时工作目录下
+将 `node_modules` 链接到 `load_workspace_dependencies` 返回的包目录，随后运行：
+
+```bash
+/path/to/bundled/node /absolute/path/to/export_snapshot.mjs /absolute/path/to/raw/run/batches.json /absolute/path/to/output
+```
+
+从临时工作目录启动，导出器会从该目录解析依赖。原始响应和Excel均含业务数据，
+输出目录应加入Git忽略。日期、时间和金额使用Excel原生类型；订单号、场次ID按文本保真。
+这是采集时刻的快照，直播进行中时后续页面数据可能继续变化。
+
 ## 鉴权与短信提醒
 
 保存的登录态包括 Cookie，以及存在时的 `ATLANTIS_SESSION_ID`、`SERVICE_NAME`。查询使用共享 Cookie 的浏览器请求上下文，并在有值时附带 `X-Usercenter-Session` 和 `X-Service-Name`；Chrome 导出中的字面值 `undefined` 不当作有效令牌。

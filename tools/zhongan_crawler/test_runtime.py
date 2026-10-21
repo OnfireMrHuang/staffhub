@@ -131,6 +131,53 @@ class RuntimeTests(unittest.TestCase):
                 api.dispose()
 
 
+class RawSnapshotTests(unittest.TestCase):
+    def test_raw_snapshot_is_complete_without_writing_excel(self):
+        class FakeClient:
+            raw_dir = None
+
+            def post(self, endpoint, payload):
+                return {"rooms": [{"dyNo": "001"}],
+                        "attribute": {"roomId": "9001"},
+                        "aggregate": {"orderCnt": 0}, "orders": []}[endpoint]
+
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(output=Path(directory) / "unused.xlsx", dy_no="001",
+                                   date="2026-10-21", platform="DOUYIN", room_id=None,
+                                   all_sessions=False, max_pages=10, raw_only=True)
+            client = FakeClient()
+            with patch.object(crawler, "export_excel") as exporter:
+                crawler.collect_once(client, args)
+                exporter.assert_not_called()
+            run = next((Path(directory) / "raw").iterdir())
+            manifest = json.loads((run / "manifest.json").read_text())
+            snapshot = json.loads((run / "batches.json").read_text())
+            self.assertTrue(manifest["complete"])
+            self.assertIsNone(manifest["workbook"])
+            self.assertEqual(snapshot["batches"][0][0]["dyNo"], "001")
+            self.assertEqual(snapshot["batches"][0][2], [])
+            self.assertFalse(args.output.exists())
+            self.assertIsNone(client.raw_dir)
+
+    def test_raw_snapshot_failure_is_not_marked_complete(self):
+        class FailedClient:
+            raw_dir = None
+
+            def post(self, endpoint, payload):
+                raise LoginExpired("expired")
+
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(output=Path(directory) / "unused.xlsx", dy_no="001",
+                                   date="2026-10-21", platform="DOUYIN", raw_only=True)
+            client = FailedClient()
+            with self.assertRaises(LoginExpired):
+                crawler.collect_once(client, args)
+            run = next((Path(directory) / "raw").iterdir())
+            self.assertFalse(json.loads((run / "manifest.json").read_text())["complete"])
+            self.assertFalse((run / "batches.json").exists())
+            self.assertIsNone(client.raw_dir)
+
+
 class SessionSelectionTests(unittest.TestCase):
     def test_default_current_all_and_explicit_historical_session(self):
         attr = {"roomId": "current", "attributeOfflineDTOList": [{"roomId": "old"}]}
