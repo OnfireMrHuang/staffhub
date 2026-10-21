@@ -1,0 +1,12 @@
+{
+  "_context": {"version": "巨量营销-旧版", "aweme_id": "REPLACE_WITH_DOUYIN_HANDLE"},
+  "advertiser_id": "REPLACE_WITH_LEGACY_ADVERTISER_ID",
+  "dimensions": ["stat_time_day"],
+  "metrics": ["stat_cost"],
+  "filters": [],
+  "start_time": "2026-10-18 00:00:00",
+  "end_time": "2026-10-18 23:59:59",
+  "order_by": [{"field": "stat_cost", "type": "DESC"}],
+  "page": 1,
+  "page_size": 100
+}

@@ -1,5 +1,4 @@
 import contextlib
-import copy
 import io
 import json
 import os
@@ -129,6 +128,45 @@ class VersionTests(unittest.TestCase):
                     '--fields-config',str(f),'--dry-run'])
                 self.assertEqual(code,1,err)
                 self.assertEqual(out,'')
+
+    def test_qianchuan_internal_id_is_resolved_from_all_authorized_aweme_pages(self):
+        calls=[]
+        config=field_config('ECP_BASIC_DATA','anchor_id',True)
+        # A human label saying 抖音号 must not make an internal *_id a display ID.
+        config['data']['custom_config_datas'][0]['dimensions'][1]['name']='抖音号'
+        def respond(request):
+            calls.append(request.url.path)
+            if request.url.path.endswith('/custom/config/get/'):
+                return httpx.Response(200,json=config)
+            if request.url.path.endswith('/aweme/authorized/get/'):
+                page=int(request.url.params['page'])
+                rows=[] if page==1 else [{'aweme_id':9007199254740993,'aweme_show_id':'qc_host'}]
+                return httpx.Response(200,json={'code':0,'data':{'aweme_id_list':rows,'page_info':{'page':page,'total_page':2}}})
+            self.assertEqual(json.loads(request.url.params['filters']),[
+                {'field':'anchor_id','type':2,'operator':7,'values':['9007199254740993']}])
+            return httpx.Response(200,json={'code':0,'data':{'rows':[]}})
+        code,out,err=self.run_cli(['report','--params',str(self.params),'--version','qianchuan','--aweme-id','qc_host'],
+            respond,{'QIANCHUAN_ACCESS_TOKEN':'qc-token'})
+        self.assertEqual(code,0,err)
+        self.assertEqual(calls.count('/open_api/v1.0/qianchuan/aweme/authorized/get/'),2)
+
+    def test_prefixed_credentials_are_redacted_in_nested_diagnostics(self):
+        result=tool.redact({'QIANCHUAN_ACCESS_TOKEN':'private', 'nested':{'qianchuan_app_secret':'private2'}, 'advertiser_id':'123'})
+        self.assertEqual(result,{'QIANCHUAN_ACCESS_TOKEN':'***','nested':{'qianchuan_app_secret':'***'},'advertiser_id':'123'})
+
+    def test_qianchuan_missing_or_ambiguous_authorized_aweme_never_queries_report(self):
+        for rows in [[], [{'aweme_id':'1','aweme_show_id':'host'}, {'aweme_id':'2','aweme_show_id':'host'}]]:
+            calls=[]
+            config=field_config('ECP_BASIC_DATA','anchor_id',True)
+            config['data']['custom_config_datas'][0]['dimensions'][1]['name']='主播ID'
+            def respond(request):
+                calls.append(request.url.path)
+                if request.url.path.endswith('/custom/config/get/'):return httpx.Response(200,json=config)
+                return httpx.Response(200,json={'code':0,'data':{'aweme_id_list':rows,'page_info':{'total_page':1}}})
+            code,out,err=self.run_cli(['report','--params',str(self.params),'--version','qianchuan','--aweme-id','host'],
+                respond,{'QIANCHUAN_ACCESS_TOKEN':'qc-token'})
+            self.assertEqual(code,1,err)
+            self.assertNotIn('/open_api/v1.0/qianchuan/report/custom/get/',calls)
 
     def test_dry_run_with_aweme_requires_metadata_without_network(self):
         code,out,err=self.run_cli(['report','--params',str(self.params),'--aweme-id','abc','--dry-run'])
