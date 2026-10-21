@@ -45,7 +45,11 @@ qianchuan_auth_code=千川应用新授权码
 
 默认缓存位于 .env 同目录的 `.cache/token.json`（营销）和 `.cache/qianchuan-token.json`（千川），校验应用ID并以0600权限保存。智擎版和旧版共享缓存。可用 `--cache` 指定其他路径，不同应用不要指定同一路径。
 
+缓存是持久化 JSON 文件，包含 `access_token`、`refresh_token`、`app_id`、`expires_in`、绝对过期时间 `expires_at`，以及平台返回的其他 token 信息。退出终端或重启程序不会清空；下次执行 token / fields / report 时会自动读取同一文件，有效时直接复用，不再申请新 token。首次执行正常查询即可自动创建缓存，无需单独执行 token 命令。
+
 两类应用都支持自动刷新：首次使用授权码换取 token，缓存到期前60秒内刷新并保存轮换后的 refresh token。直接设置 access_token / qianchuan_access_token 时手动 token 优先，工具不会刷新它；删除该配置后恢复缓存机制。
+
+缓存生成后不再依赖旧 auth_code，保留 app_id、app_secret 即可继续复用和刷新。仅在首次授权、缓存丢失或 refresh token 失效时需要新授权码；`token --force` 用于主动重新授权，日常请求不要加它。刷新失败会保留原缓存并报告错误，不自动重用已经消费过的授权码。缓存目录已被 Git 忽略。
 
 ```bash
 uv run report_tool.py token --version smart

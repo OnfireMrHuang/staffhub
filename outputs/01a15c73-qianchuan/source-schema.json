@@ -1,0 +1,525 @@
+{
+  "title": "获取今日直播数据",
+  "method": "GET",
+  "path": "/open_api/v1.0/qianchuan/report/live/get/",
+  "header": {
+    "data": []
+  },
+  "request": {
+    "data": [
+      {
+        "type": "number",
+        "description": "客户id",
+        "required": true,
+        "format": "int64",
+        "name": "advertiser_id",
+        "label": [
+          "必填"
+        ]
+      },
+      {
+        "type": "number",
+        "description": "抖音号ID",
+        "required": true,
+        "format": "int64",
+        "name": "aweme_id",
+        "label": [
+          "必填"
+        ]
+      },
+      {
+        "type": "string",
+        "description": "直播开始时间，格式 2021-04-05 00:00:00 ，开播时间在筛选日期内的直播间，会被统计",
+        "required": true,
+        "name": "start_time",
+        "label": [
+          "必填"
+        ]
+      },
+      {
+        "type": "string",
+        "description": "直播结束时间，格式 2021-04-05 23:59:59 ，开始时间同一天的23:59:59\n即：查询的是一天0点～24点的直播数据",
+        "required": true,
+        "name": "end_time",
+        "label": [
+          "必填"
+        ]
+      },
+      {
+        "type": "array",
+        "description": "需要查询的消耗指标，具体可参考返回值",
+        "required": true,
+        "name": "fields",
+        "label": [
+          "必填"
+        ],
+        "children": [
+          {
+            "type": "string",
+            "description": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": "string",
+        "description": "需要查询的投放账户维度，直客账户支持查看官方抖音号下同主体全部投放账户的数据表现\n同主体账户： QUALIFICATION ，仅直客账户支持\n当前账户： CURRENT ，默认",
+        "required": false,
+        "name": "stats_authority",
+        "enum": [
+          {
+            "key": "CURRENT",
+            "description": "当前账户"
+          },
+          {
+            "key": "QUALIFICATION",
+            "description": "同主体账户，仅直客账户支持"
+          }
+        ]
+      }
+    ]
+  },
+  "response": {
+    "data": [
+      {
+        "type": "number",
+        "description": "返回码,详见 【附录-返回码】",
+        "required": false,
+        "name": "code"
+      },
+      {
+        "type": "string",
+        "description": "返回信息,详见 【附录-返回码】",
+        "required": false,
+        "name": "message"
+      },
+      {
+        "type": "json",
+        "description": "返回数据，金额相关指标的单位为「 千分之一分 」",
+        "required": false,
+        "name": "data",
+        "children": [
+          {
+            "type": "number",
+            "description": "消耗",
+            "required": false,
+            "format": "float",
+            "name": "stat_cost"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "qualification_stat_cost"
+          },
+          {
+            "type": "number",
+            "description": "平均千次展现费用",
+            "required": false,
+            "format": "float",
+            "name": "cpm_platform"
+          },
+          {
+            "type": "number",
+            "description": "营销点击次数",
+            "required": false,
+            "format": "int64",
+            "name": "click_cnt"
+          },
+          {
+            "type": "number",
+            "description": "营销点击率",
+            "required": false,
+            "format": "float",
+            "name": "ctr"
+          },
+          {
+            "type": "number",
+            "description": "GPM",
+            "required": false,
+            "format": "float",
+            "name": "total_live_pay_order_gpm"
+          },
+          {
+            "type": "number",
+            "description": "营销GPM",
+            "required": false,
+            "format": "float",
+            "name": "luban_live_pay_order_gpm"
+          },
+          {
+            "type": "number",
+            "description": "营销点击单价",
+            "required": false,
+            "format": "float",
+            "name": "cpc_platform"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "int64",
+            "name": "convert_cnt"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "convert_rate"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "cpa_platform"
+          },
+          {
+            "type": "number",
+            "description": "累计成交金额",
+            "required": false,
+            "format": "float",
+            "name": "live_pay_order_gmv_alias"
+          },
+          {
+            "type": "number",
+            "description": "营销成交金额",
+            "required": false,
+            "format": "float",
+            "name": "luban_live_pay_order_gmv"
+          },
+          {
+            "type": "number",
+            "description": "整体ROI，仅支持直客客户的官方/自运营抖音号",
+            "required": false,
+            "format": "float",
+            "name": "live_pay_order_gmv_roi"
+          },
+          {
+            "type": "number",
+            "description": "营销ROI",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_prepay_and_pay_order_gmv_roi"
+          },
+          {
+            "type": "number",
+            "description": "整体下单数",
+            "required": false,
+            "format": "int64",
+            "name": "live_create_order_count_alias"
+          },
+          {
+            "type": "number",
+            "description": "整体下单率，仅支持直客客户的官方/自运营抖音号",
+            "required": false,
+            "format": "float",
+            "name": "live_create_order_rate"
+          },
+          {
+            "type": "number",
+            "description": "营销下单数",
+            "required": false,
+            "format": "int64",
+            "name": "luban_live_order_count"
+          },
+          {
+            "type": "number",
+            "description": "营销下单率",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_create_order_rate"
+          },
+          {
+            "type": "number",
+            "description": "整体成单数",
+            "required": false,
+            "format": "int64",
+            "name": "live_pay_order_count_alias"
+          },
+          {
+            "type": "number",
+            "description": "整体成单率，仅支持直客客户的官方/自运营抖音号",
+            "required": false,
+            "format": "float",
+            "name": "live_pay_order_rate"
+          },
+          {
+            "type": "number",
+            "description": "营销成单数",
+            "required": false,
+            "format": "int64",
+            "name": "luban_live_pay_order_count"
+          },
+          {
+            "type": "number",
+            "description": "营销成单率",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_pay_order_rate"
+          },
+          {
+            "type": "number",
+            "description": "直播间平均成单金额",
+            "required": false,
+            "format": "float",
+            "name": "live_pay_order_gmv_avg"
+          },
+          {
+            "type": "number",
+            "description": "营销平均成单金额",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_pay_order_gmv_avg"
+          },
+          {
+            "type": "number",
+            "description": "营销预售订单数",
+            "required": false,
+            "format": "int64",
+            "name": "luban_live_prepay_order_count"
+          },
+          {
+            "type": "number",
+            "description": "营销预售订单金额",
+            "required": false,
+            "format": "float",
+            "name": "luban_live_prepay_order_gmv"
+          },
+          {
+            "type": "number",
+            "description": "整体预售订单数",
+            "required": false,
+            "format": "float",
+            "name": "live_prepay_order_count_alias"
+          },
+          {
+            "type": "number",
+            "description": "整体预售订单金额",
+            "required": false,
+            "format": "float",
+            "name": "live_prepay_order_gmv_alias"
+          },
+          {
+            "type": "number",
+            "description": "成交智能优惠券金额",
+            "required": false,
+            "format": "float",
+            "name": "live_order_pay_coupon_amount"
+          },
+          {
+            "type": "number",
+            "description": "直播间观看人次",
+            "required": false,
+            "format": "int64",
+            "name": "total_live_watch_cnt"
+          },
+          {
+            "type": "number",
+            "description": "新增粉丝数",
+            "required": false,
+            "format": "int64",
+            "name": "total_live_follow_cnt"
+          },
+          {
+            "type": "number",
+            "description": "营销引导超1分钟观看人数",
+            "required": false,
+            "format": "int64",
+            "name": "live_watch_one_minute_count"
+          },
+          {
+            "type": "number",
+            "description": "直播间新加团人数",
+            "required": false,
+            "format": "int64",
+            "name": "total_live_fans_club_join_cnt"
+          },
+          {
+            "type": "number",
+            "description": "直播间查看购物车次数",
+            "required": false,
+            "format": "int64",
+            "name": "live_click_cart_count_alias"
+          },
+          {
+            "type": "number",
+            "description": "直播间商品点击次数",
+            "required": false,
+            "format": "int64",
+            "name": "live_click_product_count_alias"
+          },
+          {
+            "type": "number",
+            "description": "直播间评论次数",
+            "required": false,
+            "format": "int64",
+            "name": "total_live_comment_cnt"
+          },
+          {
+            "type": "number",
+            "description": "直播间分享次数",
+            "required": false,
+            "format": "int64",
+            "name": "total_live_share_cnt"
+          },
+          {
+            "type": "number",
+            "description": "直播间打赏次数",
+            "required": false,
+            "format": "int64",
+            "name": "total_live_gift_cnt"
+          },
+          {
+            "type": "number",
+            "description": "直播间音浪收入",
+            "required": false,
+            "format": "float",
+            "name": "total_live_gift_amount"
+          },
+          {
+            "type": "number",
+            "description": "转化率",
+            "required": false,
+            "format": "float",
+            "name": "ecp_convert_rate"
+          },
+          {
+            "type": "number",
+            "description": "转化数",
+            "required": false,
+            "format": "float",
+            "name": "ecp_convert_cnt"
+          },
+          {
+            "type": "number",
+            "description": "转化成本",
+            "required": false,
+            "format": "float",
+            "name": "ecp_cpa_platform"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "live_order_settle_amount_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "int64",
+            "name": "live_order_settle_count_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "live_order_settle_count_rate_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_order_settle_roi_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_order_settle_cost_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "int64",
+            "name": "live_order_refund_count_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "live_order_refund_amount_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "live_order_settle_amount_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "int64",
+            "name": "live_order_settle_count_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "live_order_settle_count_rate_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_order_settle_roi_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "ad_live_order_settle_cost_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "int64",
+            "name": "live_order_refund_count_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "live_order_refund_amount_14d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "ad_all_order_gmv_settle_rate_7d"
+          },
+          {
+            "type": "number",
+            "description": "",
+            "required": false,
+            "format": "float",
+            "name": "ad_all_order_gmv_settle_rate_14d"
+          }
+        ]
+      },
+      {
+        "type": "string",
+        "description": "请求的日志id，唯一标识一个请求",
+        "required": false,
+        "name": "request_id"
+      }
+    ]
+  }
+}

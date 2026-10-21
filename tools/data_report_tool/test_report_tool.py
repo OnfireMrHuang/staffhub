@@ -92,6 +92,58 @@ class ReportToolTests(unittest.TestCase):
         with self.assertRaises(tool.ToolError):
             manager.get()
 
+    def test_separate_cli_runs_reuse_disk_tokens_and_refresh_without_auth_code(self):
+        # Catches re-exchanging on startup or losing rotated tokens between runs.
+        for version, prefix, filename in [('smart', '', 'token.json'),
+                                          ('qianchuan', 'qianchuan_', 'qianchuan-token.json')]:
+            with self.subTest(version=version):
+                env = self.root / version / '.env'
+                env.parent.mkdir()
+                env.write_text(f'{prefix}app_id=123\n{prefix}app_secret=s\n{prefix}auth_code=once\n')
+                args = ['token', '--version', version, '--env', str(env)]
+
+                def run(handler, now):
+                    output = io.StringIO()
+                    with patch.dict(os.environ, {}, clear=True), \
+                         patch.object(tool, 'create_client', return_value=self.client(handler)), \
+                         patch.object(tool.time, 'time', return_value=now), \
+                         contextlib.redirect_stdout(output):
+                        self.assertEqual(tool.main(args), 0)
+                    for secret in ('private-access', 'private-refresh', 'private-new-access', 'private-new-refresh'):
+                        self.assertNotIn(secret, output.getvalue())
+
+                def exchange(request):
+                    self.assertEqual(request.url.path, '/open_api/oauth2/access_token/')
+                    self.assertEqual(json.loads(request.content)['auth_code'], 'once')
+                    return httpx.Response(200, json={'code': 0, 'data': {
+                        'access_token': 'private-access', 'refresh_token': 'private-refresh',
+                        'expires_in': 7200, 'refresh_token_expires_in': 2592000}})
+
+                run(exchange, 1000)
+                cache = env.parent / '.cache' / filename
+                saved = json.loads(cache.read_text())
+                self.assertEqual(saved['access_token'], 'private-access')
+                self.assertEqual(saved['refresh_token'], 'private-refresh')
+                self.assertEqual(saved['expires_at'], 8200)
+                # Restart with no authorization code: only persisted state can work.
+                env.write_text(f'{prefix}app_id=123\n{prefix}app_secret=s\n')
+                run(lambda r: self.fail('valid disk token must not request authorization'), 1100)
+
+                def refresh(request):
+                    self.assertEqual(request.url.path, '/open_api/oauth2/refresh_token/')
+                    self.assertEqual(json.loads(request.content), {
+                        'app_id': 123, 'secret': 's', 'refresh_token': 'private-refresh'})
+                    return httpx.Response(200, json={'code': 0, 'data': {
+                        'access_token': 'private-new-access', 'refresh_token': 'private-new-refresh',
+                        'expires_in': 7200, 'refresh_token_expires_in': 2592000}})
+
+                run(refresh, 8200)
+                saved = json.loads(cache.read_text())
+                self.assertEqual(saved['access_token'], 'private-new-access')
+                self.assertEqual(saved['refresh_token'], 'private-new-refresh')
+                self.assertEqual(cache.stat().st_mode & 0o777, 0o600)
+                run(lambda r: self.fail('refreshed disk token must survive restart'), 8300)
+
     def test_business_error_preserves_request_id(self):
         client = self.client(lambda r: httpx.Response(200, json={
             'code': 40000, 'message': 'invalid metrics', 'request_id': 'trace-123'}))
