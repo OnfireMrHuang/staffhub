@@ -1,0 +1,10 @@
+# 模板：替换绝对路径，并由受限权限启动脚本/服务环境注入凭据。
+# 仅支持单一采集节点；浏览器授权需要当前用户的图形桌面会话。
+SHELL=/bin/sh
+# Cron 实现须支持 CRON_TZ；不支持时按操作系统时区调整唤醒时间。
+CRON_TZ=Asia/Shanghai
+# 第5分钟先同步原表，成功后才采集；同步失败保留旧快照并跳过本轮采集。
+# 授权在第2/7/12/...分钟，使用每凭据锁，可与采集独立运行。
+5 * * * * cd /ABSOLUTE/PATH/staffhub/live_data_design && ( .venv/bin/python -m scripts.manage sync-sources --config config/local.toml && .venv/bin/python -m live_data schedule --config config/local.toml ) >> runtime/collection.log 2>&1
+2,7,12,17,22,27,32,37,42,47,52,57 * * * * cd /ABSOLUTE/PATH/staffhub/live_data_design && .venv/bin/python -m live_data auth-maintain --config config/local.toml >> runtime/auth.log 2>&1
+# 使用前 mkdir -p runtime && chmod 700 runtime；配置日志轮转。

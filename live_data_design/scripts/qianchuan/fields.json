@@ -1,0 +1,2435 @@
+{
+  "version": 1,
+  "workbook": "第一期试点直播间产品.xlsx",
+  "notes": [
+    "本契约只包含六张来源字段字典，不含账户/应用/后台配置或登录值。",
+    "requestable 表示字典及已有接口目录支持；账户授权和营销版本字段须运行时验证，未声称已完成生产采集。",
+    "decimal 使用 DECIMAL(65,30) 安全投影；非数值、超过35位整数或30位小数为 NULL，原 JSON 保留；不换算金额单位。",
+    "平安派生百分率使用28位有效数字算术精度，不做展示用2位小数舍入；缺失、非法或零分母为 NULL。",
+    "本阶段按小时保存广告事实；保单字段为真实观察时刻的日累计/场次累计快照，不能相加当小时新增。",
+    "空文本及非规范数值文本（千分位、百分号、科学计数法）不强制转换，typed视图为 NULL，原 JSON 保留。"
+  ],
+  "datasets": {
+    "qianchuan_hourly": {
+      "view": "v_qianchuan_hourly",
+      "table": "live_ad_hourly",
+      "source": "qianchuan",
+      "raw_column": "metrics",
+      "workbook_sheet": "【巨量千川】数据源表头字段",
+      "fields": [
+        {
+          "name": "stat_datetime",
+          "name_zh": "数据起始时间",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 2,
+          "category": "时间维度",
+          "source_type": "string",
+          "description": "时间维度。原生返回 data.list[].stat_datetime；仅传入 time_granularity 时返回，格式 yyyy-MM-dd HH:mm:ss。不传粒度时是查询区间汇总，不伪造此字段。",
+          "status": "mapped",
+          "source_path": "data.list[].stat_datetime",
+          "storage_column": "dimensions",
+          "storage_path": "$.\"stat_datetime\"",
+          "path": [
+            "stat_datetime"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "stat_time_day",
+          "name_zh": "统计日期",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 3,
+          "category": "时间维度",
+          "source_type": "string",
+          "description": "时间维度。派生字段：从请求 start_time 取 YYYY-MM-DD，表示本次查询的开播日期；不是接口返回的时间分组字段，不代表小时数据或单场数据。",
+          "status": "context",
+          "source_path": "context.stat_time_day",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stat_time_day\"",
+          "path": [
+            "_collection",
+            "context",
+            "stat_time_day"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "stat_time_hour",
+          "name_zh": "统计小时",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 4,
+          "category": "时间维度",
+          "source_type": "string",
+          "description": "时间维度。派生：仅小时粒度时保留 stat_datetime 对应小时，格式 YYYY-MM-DD HH:00:00；日粒度和区间汇总时留空。",
+          "status": "context",
+          "source_path": "context.stat_time_hour",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stat_time_hour\"",
+          "path": [
+            "_collection",
+            "context",
+            "stat_time_hour"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "start_date",
+          "name_zh": "查询开始日期",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 5,
+          "category": "时间维度",
+          "source_type": "string",
+          "description": "时间维度。来源：必填请求参数 start_date，格式 YYYY-MM-DD；不得早于今日前180天。不是实际开播时间。",
+          "status": "context",
+          "source_path": "context.start_date",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"start_date\"",
+          "path": [
+            "_collection",
+            "context",
+            "start_date"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "end_date",
+          "name_zh": "查询结束日期",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 6,
+          "category": "时间维度",
+          "source_type": "string",
+          "description": "时间维度。来源：必填请求参数 end_date。区间汇总跨度≤180天、按天≤30天、按小时≤7天；不是实际下播时间。",
+          "status": "context",
+          "source_path": "context.end_date",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"end_date\"",
+          "path": [
+            "_collection",
+            "context",
+            "end_date"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "time_granularity",
+          "name_zh": "时间粒度",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 7,
+          "category": "时间维度",
+          "source_type": "string",
+          "description": "时间维度。请求参数：TIME_GRANULARITY_DAILY 按天；TIME_GRANULARITY_HOURLY 按小时；未传时记录为空并按查询区间汇总，不自造API枚举。",
+          "status": "context",
+          "source_path": "context.time_granularity",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"time_granularity\"",
+          "path": [
+            "_collection",
+            "context",
+            "time_granularity"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "advertiser_id",
+          "name_zh": "账户ID",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 8,
+          "category": "账户维度",
+          "source_type": "number",
+          "description": "账户维度。来源：请求参数 advertiser_id，随结果保存；不是返回指标。建议以字符串保存长ID，避免精度丢失。",
+          "status": "context",
+          "source_path": "context.advertiser_id",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"advertiser_id\"",
+          "path": [
+            "_collection",
+            "context",
+            "advertiser_id"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "account_name",
+          "name_zh": "账户名称",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 9,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：账户主数据，按 advertiser_id 关联。统一字段名沿用试点账户清单 account_name；不是本报表接口返回字段。",
+          "status": "context",
+          "source_path": "context.account_name",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"account_name\"",
+          "path": [
+            "_collection",
+            "context",
+            "account_name"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "account_type",
+          "name_zh": "账户类型",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 10,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：试点账户清单/账户配置，如直投、短视频投放。为业务分类，按账户及生效时间关联，不按名称推断。",
+          "status": "context",
+          "source_path": "context.account_type",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"account_type\"",
+          "path": [
+            "_collection",
+            "context",
+            "account_type"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "stat_platform",
+          "name_zh": "统计平台",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 11,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：账户配置/采集上下文。统计平台取值如巨量营销-智擎版、巨量营销-旧版、巨量千川；不是接口返回指标。",
+          "status": "context",
+          "source_path": "context.stat_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stat_platform\"",
+          "path": [
+            "_collection",
+            "context",
+            "stat_platform"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "stats_authority",
+          "name_zh": "投放账户查询范围",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 12,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：请求参数；未传时记录 CURRENT（当前账户）。QUALIFICATION 为同主体账户，仅直客支持。不得将同主体汇总当作单账户数据叠加。",
+          "status": "context",
+          "source_path": "context.stats_authority",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stats_authority\"",
+          "path": [
+            "_collection",
+            "context",
+            "stats_authority"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "aweme_id",
+          "name_zh": "抖音号内部ID",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 13,
+          "category": "抖音号维度",
+          "source_type": "number",
+          "description": "直播间维度。来源：必填请求参数 aweme_id，随结果保存。千川内部ID与手机端可见抖音号区分，按授权抖音号列表映射；不是直播场次 room_id。长ID建议字符串保存。",
+          "status": "context",
+          "source_path": "context.aweme_id",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"aweme_id\"",
+          "path": [
+            "_collection",
+            "context",
+            "aweme_id"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "aweme_show_id",
+          "name_zh": "手机端可见抖音号",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 14,
+          "category": "抖音号维度",
+          "source_type": "string",
+          "description": "直播间维度。来源：授权抖音号列表/已核验的主播映射。项目现有工具按 aweme_show_id 匹配内部 aweme_id；不是本报表接口返回字段。",
+          "status": "context",
+          "source_path": "context.aweme_show_id",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"aweme_show_id\"",
+          "path": [
+            "_collection",
+            "context",
+            "aweme_show_id"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "aweme_nick_name",
+          "name_zh": "抖音昵称",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 15,
+          "category": "抖音号维度",
+          "source_type": "string",
+          "description": "直播间维度。关联补充字段：从已核验的抖音号主数据映射昵称，本表统一命名 aweme_nick_name；不是本接口原生字段。昵称可变，不作为唯一标识。",
+          "status": "unsupported",
+          "source_path": "context.aweme_nick_name",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"aweme_nick_name\"",
+          "path": [
+            "_collection",
+            "context",
+            "aweme_nick_name"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "reason": "字典要求已核验抖音号主数据；当前业务目录和请求上下文未提供昵称映射，暂置 NULL。"
+        },
+        {
+          "name": "room_name",
+          "name_zh": "业务直播间名称",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 16,
+          "category": "抖音号维度",
+          "source_type": "string",
+          "description": "直播间维度。来源：试点账户清单 room_name，按账户、抖音号及生效时间关联。不可用名称替代抖音号ID或直播场次ID；无法唯一归属时留空，不复制总量到多直播间。",
+          "status": "context",
+          "source_path": "context.room_name",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"room_name\"",
+          "path": [
+            "_collection",
+            "context",
+            "room_name"
+          ],
+          "projection_type": "text",
+          "requestable": false
+        },
+        {
+          "name": "stat_cost",
+          "name_zh": "消耗",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 17,
+          "category": "指标",
+          "source_type": "float",
+          "description": "消耗",
+          "status": "mapped",
+          "source_path": "data.list[].stat_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"stat_cost\"",
+          "path": [
+            "stat_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "show_cnt",
+          "name_zh": "展示次数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 18,
+          "category": "指标",
+          "source_type": "float",
+          "description": "展示次数",
+          "status": "mapped",
+          "source_path": "data.list[].show_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"show_cnt\"",
+          "path": [
+            "show_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ctr",
+          "name_zh": "点击率",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 19,
+          "category": "指标",
+          "source_type": "float",
+          "description": "点击率",
+          "status": "mapped",
+          "source_path": "data.list[].ctr",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ctr\"",
+          "path": [
+            "ctr"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "cpm_platform",
+          "name_zh": "平均千次展示费用",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 20,
+          "category": "指标",
+          "source_type": "float",
+          "description": "平均千次展示费用",
+          "status": "mapped",
+          "source_path": "data.list[].cpm_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"cpm_platform\"",
+          "path": [
+            "cpm_platform"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "click_cnt",
+          "name_zh": "点击次数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 21,
+          "category": "指标",
+          "source_type": "float",
+          "description": "点击次数",
+          "status": "mapped",
+          "source_path": "data.list[].click_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"click_cnt\"",
+          "path": [
+            "click_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "pay_order_count",
+          "name_zh": "直接成交订单数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 22,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接成交订单数",
+          "status": "mapped",
+          "source_path": "data.list[].pay_order_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"pay_order_count\"",
+          "path": [
+            "pay_order_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "create_order_amount",
+          "name_zh": "直接下单金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 23,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接下单金额",
+          "status": "mapped",
+          "source_path": "data.list[].create_order_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"create_order_amount\"",
+          "path": [
+            "create_order_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "create_order_count",
+          "name_zh": "直接下单订单数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 24,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接下单订单数",
+          "status": "mapped",
+          "source_path": "data.list[].create_order_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"create_order_count\"",
+          "path": [
+            "create_order_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "pay_order_amount",
+          "name_zh": "直接成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 25,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].pay_order_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"pay_order_amount\"",
+          "path": [
+            "pay_order_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "create_order_roi",
+          "name_zh": "直接下单roi",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 26,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接下单roi",
+          "status": "mapped",
+          "source_path": "data.list[].create_order_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"create_order_roi\"",
+          "path": [
+            "create_order_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "dy_follow",
+          "name_zh": "新增粉丝数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 27,
+          "category": "指标",
+          "source_type": "float",
+          "description": "新增粉丝数",
+          "status": "mapped",
+          "source_path": "data.list[].dy_follow",
+          "storage_column": "metrics",
+          "storage_path": "$.\"dy_follow\"",
+          "path": [
+            "dy_follow"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "prepay_and_pay_order_roi",
+          "name_zh": "直接支付roi",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 28,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接支付roi",
+          "status": "mapped",
+          "source_path": "data.list[].prepay_and_pay_order_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"prepay_and_pay_order_roi\"",
+          "path": [
+            "prepay_and_pay_order_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "prepay_order_count",
+          "name_zh": "直接预售订单数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 29,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接预售订单数",
+          "status": "mapped",
+          "source_path": "data.list[].prepay_order_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"prepay_order_count\"",
+          "path": [
+            "prepay_order_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "prepay_order_amount",
+          "name_zh": "直接预售金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 30,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接预售金额",
+          "status": "mapped",
+          "source_path": "data.list[].prepay_order_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"prepay_order_amount\"",
+          "path": [
+            "prepay_order_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "total_play",
+          "name_zh": "播放数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 31,
+          "category": "指标",
+          "source_type": "float",
+          "description": "播放数",
+          "status": "mapped",
+          "source_path": "data.list[].total_play",
+          "storage_column": "metrics",
+          "storage_path": "$.\"total_play\"",
+          "path": [
+            "total_play"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "play_duration_3s",
+          "name_zh": "3s播放数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 32,
+          "category": "指标",
+          "source_type": "float",
+          "description": "3s播放数",
+          "status": "mapped",
+          "source_path": "data.list[].play_duration_3s",
+          "storage_column": "metrics",
+          "storage_path": "$.\"play_duration_3s\"",
+          "path": [
+            "play_duration_3s"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "play_25_feed_break",
+          "name_zh": "25%进度播放数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 33,
+          "category": "指标",
+          "source_type": "float",
+          "description": "25%进度播放数",
+          "status": "mapped",
+          "source_path": "data.list[].play_25_feed_break",
+          "storage_column": "metrics",
+          "storage_path": "$.\"play_25_feed_break\"",
+          "path": [
+            "play_25_feed_break"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "play_50_feed_break",
+          "name_zh": "50%进度播放数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 34,
+          "category": "指标",
+          "source_type": "float",
+          "description": "50%进度播放数",
+          "status": "mapped",
+          "source_path": "data.list[].play_50_feed_break",
+          "storage_column": "metrics",
+          "storage_path": "$.\"play_50_feed_break\"",
+          "path": [
+            "play_50_feed_break"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "play_75_feed_break",
+          "name_zh": "75%进度播放数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 35,
+          "category": "指标",
+          "source_type": "float",
+          "description": "75%进度播放数",
+          "status": "mapped",
+          "source_path": "data.list[].play_75_feed_break",
+          "storage_column": "metrics",
+          "storage_path": "$.\"play_75_feed_break\"",
+          "path": [
+            "play_75_feed_break"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "play_over",
+          "name_zh": "播放完成数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 36,
+          "category": "指标",
+          "source_type": "float",
+          "description": "播放完成数",
+          "status": "mapped",
+          "source_path": "data.list[].play_over",
+          "storage_column": "metrics",
+          "storage_path": "$.\"play_over\"",
+          "path": [
+            "play_over"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "play_over_rate",
+          "name_zh": "完播率",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 37,
+          "category": "指标",
+          "source_type": "float",
+          "description": "完播率",
+          "status": "mapped",
+          "source_path": "data.list[].play_over_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"play_over_rate\"",
+          "path": [
+            "play_over_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "convert_cnt",
+          "name_zh": "转化次数 （即将下线）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 38,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化次数 （即将下线）",
+          "status": "mapped",
+          "source_path": "data.list[].convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"convert_cnt\"",
+          "path": [
+            "convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "convert_cost",
+          "name_zh": "转化成本（即将下线）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 39,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化成本（即将下线）",
+          "status": "mapped",
+          "source_path": "data.list[].convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"convert_cost\"",
+          "path": [
+            "convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "convert_rate",
+          "name_zh": "转化率（即将下线）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 40,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化率（即将下线）",
+          "status": "mapped",
+          "source_path": "data.list[].convert_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"convert_rate\"",
+          "path": [
+            "convert_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "luban_live_click_product_cnt",
+          "name_zh": "直播间商品点击次数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 41,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直播间商品点击次数",
+          "status": "mapped",
+          "source_path": "data.list[].luban_live_click_product_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"luban_live_click_product_cnt\"",
+          "path": [
+            "luban_live_click_product_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "luban_live_enter_cnt",
+          "name_zh": "直播间观看人次",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 42,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直播间观看人次",
+          "status": "mapped",
+          "source_path": "data.list[].luban_live_enter_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"luban_live_enter_cnt\"",
+          "path": [
+            "luban_live_enter_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "cpc_platform",
+          "name_zh": "平均点击单价",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 43,
+          "category": "指标",
+          "source_type": "float",
+          "description": "平均点击单价",
+          "status": "mapped",
+          "source_path": "data.list[].cpc_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"cpc_platform\"",
+          "path": [
+            "cpc_platform"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "deep_convert_cnt",
+          "name_zh": "深度转化次数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 44,
+          "category": "指标",
+          "source_type": "float",
+          "description": "深度转化次数",
+          "status": "mapped",
+          "source_path": "data.list[].deep_convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"deep_convert_cnt\"",
+          "path": [
+            "deep_convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "deep_convert_cost",
+          "name_zh": "深度转化成本",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 45,
+          "category": "指标",
+          "source_type": "float",
+          "description": "深度转化成本",
+          "status": "mapped",
+          "source_path": "data.list[].deep_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"deep_convert_cost\"",
+          "path": [
+            "deep_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "deep_convert_rate",
+          "name_zh": "深度转化率",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 46,
+          "category": "指标",
+          "source_type": "float",
+          "description": "深度转化率",
+          "status": "mapped",
+          "source_path": "data.list[].deep_convert_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"deep_convert_rate\"",
+          "path": [
+            "deep_convert_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "attribution_convert_cnt",
+          "name_zh": "转化数（计费时间）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 47,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化数（计费时间）",
+          "status": "mapped",
+          "source_path": "data.list[].attribution_convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_convert_cnt\"",
+          "path": [
+            "attribution_convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "attribution_convert_rate",
+          "name_zh": "转化率（计费时间）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 48,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化率（计费时间）",
+          "status": "mapped",
+          "source_path": "data.list[].attribution_convert_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_convert_rate\"",
+          "path": [
+            "attribution_convert_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "attribution_convert_cost",
+          "name_zh": "转化成本（计费时间）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 49,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化成本（计费时间）",
+          "status": "mapped",
+          "source_path": "data.list[].attribution_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_convert_cost\"",
+          "path": [
+            "attribution_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "attribution_deep_convert_cnt",
+          "name_zh": "深度转化次数（计费时间）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 50,
+          "category": "指标",
+          "source_type": "float",
+          "description": "深度转化次数（计费时间）",
+          "status": "mapped",
+          "source_path": "data.list[].attribution_deep_convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_deep_convert_cnt\"",
+          "path": [
+            "attribution_deep_convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "attribution_deep_convert_cost",
+          "name_zh": "深度转化成本（计费时间）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 51,
+          "category": "指标",
+          "source_type": "float",
+          "description": "深度转化成本（计费时间）",
+          "status": "mapped",
+          "source_path": "data.list[].attribution_deep_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_deep_convert_cost\"",
+          "path": [
+            "attribution_deep_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "attribution_deep_convert_rate",
+          "name_zh": "深度转化率（计费时间）",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 52,
+          "category": "指标",
+          "source_type": "float",
+          "description": "深度转化率（计费时间）",
+          "status": "mapped",
+          "source_path": "data.list[].attribution_deep_convert_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_deep_convert_rate\"",
+          "path": [
+            "attribution_deep_convert_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_create_roi_7days",
+          "name_zh": "7日总下单ROI",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 53,
+          "category": "指标",
+          "source_type": "float",
+          "description": "7日总下单ROI",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_create_roi_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_create_roi_7days\"",
+          "path": [
+            "all_order_create_roi_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_pay_roi_7days",
+          "name_zh": "7日总支付ROI",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 54,
+          "category": "指标",
+          "source_type": "float",
+          "description": "7日总支付ROI",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_pay_roi_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_pay_roi_7days\"",
+          "path": [
+            "all_order_pay_roi_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_pay_gmv_7days",
+          "name_zh": "7日总成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 55,
+          "category": "指标",
+          "source_type": "float",
+          "description": "7日总成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_pay_gmv_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_pay_gmv_7days\"",
+          "path": [
+            "all_order_pay_gmv_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_pay_count_7days",
+          "name_zh": "7日总成交订单",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 56,
+          "category": "指标",
+          "source_type": "float",
+          "description": "7日总成交订单",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_pay_count_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_pay_count_7days\"",
+          "path": [
+            "all_order_pay_count_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "pay_order_cost_per_order",
+          "name_zh": "直接成交客单价",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 57,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接成交客单价",
+          "status": "mapped",
+          "source_path": "data.list[].pay_order_cost_per_order",
+          "storage_column": "metrics",
+          "storage_path": "$.\"pay_order_cost_per_order\"",
+          "path": [
+            "pay_order_cost_per_order"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "create_order_coupon_amount",
+          "name_zh": "下单智能优惠券金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 58,
+          "category": "指标",
+          "source_type": "float",
+          "description": "下单智能优惠券金额",
+          "status": "mapped",
+          "source_path": "data.list[].create_order_coupon_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"create_order_coupon_amount\"",
+          "path": [
+            "create_order_coupon_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "pay_order_coupon_amount",
+          "name_zh": "成交智能优惠券金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 59,
+          "category": "指标",
+          "source_type": "float",
+          "description": "成交智能优惠券金额",
+          "status": "mapped",
+          "source_path": "data.list[].pay_order_coupon_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"pay_order_coupon_amount\"",
+          "path": [
+            "pay_order_coupon_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_create_count_7days",
+          "name_zh": "间接下单订单数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 60,
+          "category": "指标",
+          "source_type": "float",
+          "description": "间接下单订单数",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_create_count_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_create_count_7days\"",
+          "path": [
+            "indirect_order_create_count_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_create_gmv_7days",
+          "name_zh": "间接下单金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 61,
+          "category": "指标",
+          "source_type": "float",
+          "description": "间接下单金额",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_create_gmv_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_create_gmv_7days\"",
+          "path": [
+            "indirect_order_create_gmv_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_pay_count_7days",
+          "name_zh": "间接成交订单数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 62,
+          "category": "指标",
+          "source_type": "float",
+          "description": "间接成交订单数",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_pay_count_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_pay_count_7days\"",
+          "path": [
+            "indirect_order_pay_count_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_pay_gmv_7days",
+          "name_zh": "间接成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 63,
+          "category": "指标",
+          "source_type": "float",
+          "description": "间接成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_pay_gmv_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_pay_gmv_7days\"",
+          "path": [
+            "indirect_order_pay_gmv_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_prepay_count_7days",
+          "name_zh": "间接预售订单数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 64,
+          "category": "指标",
+          "source_type": "float",
+          "description": "间接预售订单数",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_prepay_count_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_prepay_count_7days\"",
+          "path": [
+            "indirect_order_prepay_count_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_prepay_gmv_7days",
+          "name_zh": "间接预售金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 65,
+          "category": "指标",
+          "source_type": "float",
+          "description": "间接预售金额",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_prepay_gmv_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_prepay_gmv_7days\"",
+          "path": [
+            "indirect_order_prepay_gmv_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_cnt",
+          "name_zh": "店铺首单新客人数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 66,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客人数",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_cnt\"",
+          "path": [
+            "qianchuan_first_order_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_rate",
+          "name_zh": "店铺首单新客订单占比",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 67,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客订单占比",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_rate\"",
+          "path": [
+            "qianchuan_first_order_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_convert_cost",
+          "name_zh": "店铺首单新客转化成本",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 68,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客转化成本",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_convert_cost\"",
+          "path": [
+            "qianchuan_first_order_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_direct_pay_gmv",
+          "name_zh": "店铺首单新客直接成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 69,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客直接成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_direct_pay_gmv",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_direct_pay_gmv\"",
+          "path": [
+            "qianchuan_first_order_direct_pay_gmv"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_direct_pay_order_roi",
+          "name_zh": "店铺首单新客直接支付ROI",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 70,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客直接支付ROI",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_direct_pay_order_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_direct_pay_order_roi\"",
+          "path": [
+            "qianchuan_first_order_direct_pay_order_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_ltv30",
+          "name_zh": "店铺首单新客30天累计成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 71,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客30天累计成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_ltv30",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_ltv30\"",
+          "path": [
+            "qianchuan_first_order_ltv30"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_first_order_roi30",
+          "name_zh": "店铺首单新客30天累计支付ROI",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 72,
+          "category": "指标",
+          "source_type": "float",
+          "description": "店铺首单新客30天累计支付ROI",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_first_order_roi30",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_first_order_roi30\"",
+          "path": [
+            "qianchuan_first_order_roi30"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "live_pay_order_cost_per_order",
+          "name_zh": "成交客单价",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 73,
+          "category": "指标",
+          "source_type": "float",
+          "description": "成交客单价",
+          "status": "mapped",
+          "source_path": "data.list[].live_pay_order_cost_per_order",
+          "storage_column": "metrics",
+          "storage_path": "$.\"live_pay_order_cost_per_order\"",
+          "path": [
+            "live_pay_order_cost_per_order"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_rate",
+          "name_zh": "品牌首单新客订单占比",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 74,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客订单占比",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_rate\"",
+          "path": [
+            "qianchuan_brand_first_order_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_convert_cost",
+          "name_zh": "品牌首单新客转化成本",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 75,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客转化成本",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_convert_cost\"",
+          "path": [
+            "qianchuan_brand_first_order_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_ltv30",
+          "name_zh": "品牌首单新客30天累计成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 76,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客30天累计成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_ltv30",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_ltv30\"",
+          "path": [
+            "qianchuan_brand_first_order_ltv30"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_direct_pay_order_roi",
+          "name_zh": "品牌首单新客直接支付roi",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 77,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客直接支付roi",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_direct_pay_order_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_direct_pay_order_roi\"",
+          "path": [
+            "qianchuan_brand_first_order_direct_pay_order_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_roi30",
+          "name_zh": "品牌首单新客30天累计支付roi",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 78,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客30天累计支付roi",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_roi30",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_roi30\"",
+          "path": [
+            "qianchuan_brand_first_order_roi30"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_cnt",
+          "name_zh": "品牌首单新客数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 79,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客数",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_cnt\"",
+          "path": [
+            "qianchuan_brand_first_order_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_brand_first_order_direct_pay_gmv",
+          "name_zh": "品牌首单新客直接成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 80,
+          "category": "指标",
+          "source_type": "float",
+          "description": "品牌首单新客直接成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_brand_first_order_direct_pay_gmv",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_brand_first_order_direct_pay_gmv\"",
+          "path": [
+            "qianchuan_brand_first_order_direct_pay_gmv"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_rate",
+          "name_zh": "抖音号首单新客订单占比",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 81,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客订单占比",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_rate\"",
+          "path": [
+            "qianchuan_author_first_order_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_roi30",
+          "name_zh": "抖音号首单新客30天累计支付roi",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 82,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客30天累计支付roi",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_roi30",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_roi30\"",
+          "path": [
+            "qianchuan_author_first_order_roi30"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_cnt",
+          "name_zh": "抖音号首单新客数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 83,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客数",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_cnt\"",
+          "path": [
+            "qianchuan_author_first_order_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_convert_cost",
+          "name_zh": "抖音号首单新客转化成本",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 84,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客转化成本",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_convert_cost\"",
+          "path": [
+            "qianchuan_author_first_order_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_direct_pay_gmv",
+          "name_zh": "抖音号首单新客直接成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 85,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客直接成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_direct_pay_gmv",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_direct_pay_gmv\"",
+          "path": [
+            "qianchuan_author_first_order_direct_pay_gmv"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_direct_pay_order_roi",
+          "name_zh": "抖音号首单新客直接支付roi",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 86,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客直接支付roi",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_direct_pay_order_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_direct_pay_order_roi\"",
+          "path": [
+            "qianchuan_author_first_order_direct_pay_order_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "qianchuan_author_first_order_ltv30",
+          "name_zh": "抖音号首单新客30天累计成交金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 87,
+          "category": "指标",
+          "source_type": "float",
+          "description": "抖音号首单新客30天累计成交金额",
+          "status": "mapped",
+          "source_path": "data.list[].qianchuan_author_first_order_ltv30",
+          "storage_column": "metrics",
+          "storage_path": "$.\"qianchuan_author_first_order_ltv30\"",
+          "path": [
+            "qianchuan_author_first_order_ltv30"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_gmv_settle_rate_7d",
+          "name_zh": "直接成交金额结算率(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 88,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接成交金额结算率(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_gmv_settle_rate_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_gmv_settle_rate_7d\"",
+          "path": [
+            "ad_all_order_gmv_settle_rate_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_gmv_settle_rate_14d",
+          "name_zh": "直接成交金额结算率(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 89,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接成交金额结算率(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_gmv_settle_rate_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_gmv_settle_rate_14d\"",
+          "path": [
+            "ad_all_order_gmv_settle_rate_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "unfinished_estimate_order_gmv",
+          "name_zh": "未完结直接预售订单预估金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 90,
+          "category": "指标",
+          "source_type": "number",
+          "description": "未完结直接预售订单预估金额",
+          "status": "mapped",
+          "source_path": "data.list[].unfinished_estimate_order_gmv",
+          "storage_column": "metrics",
+          "storage_path": "$.\"unfinished_estimate_order_gmv\"",
+          "path": [
+            "unfinished_estimate_order_gmv"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "indirect_order_unfinished_estimate_gmv_7days",
+          "name_zh": "未完结间接预售订单预估金额",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 91,
+          "category": "指标",
+          "source_type": "number",
+          "description": "未完结间接预售订单预估金额",
+          "status": "mapped",
+          "source_path": "data.list[].indirect_order_unfinished_estimate_gmv_7days",
+          "storage_column": "metrics",
+          "storage_path": "$.\"indirect_order_unfinished_estimate_gmv_7days\"",
+          "path": [
+            "indirect_order_unfinished_estimate_gmv_7days"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_amount_7d",
+          "name_zh": "直接结算金额(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 92,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算金额(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_amount_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_amount_7d\"",
+          "path": [
+            "ad_all_order_settle_amount_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_count_7d",
+          "name_zh": "直接结算订单数(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 93,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算订单数(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_count_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_count_7d\"",
+          "path": [
+            "ad_all_order_settle_count_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_count_settle_rate_7d",
+          "name_zh": "直接订单结算率(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 94,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接订单结算率(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_count_settle_rate_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_count_settle_rate_7d\"",
+          "path": [
+            "ad_all_order_count_settle_rate_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_roi_7d",
+          "name_zh": "直接结算ROI(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 95,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算ROI(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_roi_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_roi_7d\"",
+          "path": [
+            "ad_all_order_settle_roi_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_cost_7d",
+          "name_zh": "直接结算成本(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 96,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算成本(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_cost_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_cost_7d\"",
+          "path": [
+            "ad_all_order_settle_cost_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_refund_count_7d",
+          "name_zh": "直接退款订单数(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 97,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接退款订单数(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_refund_count_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_refund_count_7d\"",
+          "path": [
+            "all_order_refund_count_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_refund_amount_7d",
+          "name_zh": "直接退款金额(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 98,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接退款金额(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_refund_amount_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_refund_amount_7d\"",
+          "path": [
+            "all_order_refund_amount_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_order_gmv_refund_rate_7d",
+          "name_zh": "直接退款率(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 99,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接退款率(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_order_gmv_refund_rate_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_order_gmv_refund_rate_7d\"",
+          "path": [
+            "ad_order_gmv_refund_rate_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_order_refund_rate_7d",
+          "name_zh": "直接订单数退货率(7天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 100,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接订单数退货率(7天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_order_refund_rate_7d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_order_refund_rate_7d\"",
+          "path": [
+            "ad_order_refund_rate_7d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_amount_14d",
+          "name_zh": "直接结算金额(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 101,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算金额(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_amount_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_amount_14d\"",
+          "path": [
+            "ad_all_order_settle_amount_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_count_14d",
+          "name_zh": "直接结算订单数(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 102,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算订单数(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_count_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_count_14d\"",
+          "path": [
+            "ad_all_order_settle_count_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_count_settle_rate_14d",
+          "name_zh": "直接订单结算率(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 103,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接订单结算率(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_count_settle_rate_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_count_settle_rate_14d\"",
+          "path": [
+            "ad_all_order_count_settle_rate_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_roi_14d",
+          "name_zh": "直接结算ROI(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 104,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算ROI(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_roi_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_roi_14d\"",
+          "path": [
+            "ad_all_order_settle_roi_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_all_order_settle_cost_14d",
+          "name_zh": "直接结算成本(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 105,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接结算成本(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_all_order_settle_cost_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_all_order_settle_cost_14d\"",
+          "path": [
+            "ad_all_order_settle_cost_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_refund_count_14d",
+          "name_zh": "直接退款订单数(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 106,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接退款订单数(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_refund_count_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_refund_count_14d\"",
+          "path": [
+            "all_order_refund_count_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "all_order_refund_amount_14d",
+          "name_zh": "直接退款金额(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 107,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接退款金额(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].all_order_refund_amount_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"all_order_refund_amount_14d\"",
+          "path": [
+            "all_order_refund_amount_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_order_gmv_refund_rate_14d",
+          "name_zh": "直接退款率(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 108,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接退款率(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_order_gmv_refund_rate_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_order_gmv_refund_rate_14d\"",
+          "path": [
+            "ad_order_gmv_refund_rate_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ad_order_refund_rate_14d",
+          "name_zh": "直接订单数退货率(14天)",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 109,
+          "category": "指标",
+          "source_type": "float",
+          "description": "直接订单数退货率(14天)",
+          "status": "mapped",
+          "source_path": "data.list[].ad_order_refund_rate_14d",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ad_order_refund_rate_14d\"",
+          "path": [
+            "ad_order_refund_rate_14d"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ecp_convert_cnt",
+          "name_zh": "转化数",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 110,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化数",
+          "status": "mapped",
+          "source_path": "data.list[].ecp_convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ecp_convert_cnt\"",
+          "path": [
+            "ecp_convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ecp_convert_rate",
+          "name_zh": "转化率",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 111,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化率",
+          "status": "mapped",
+          "source_path": "data.list[].ecp_convert_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ecp_convert_rate\"",
+          "path": [
+            "ecp_convert_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        },
+        {
+          "name": "ecp_cpa_platform",
+          "name_zh": "转化成本",
+          "workbook_sheet": "【巨量千川】数据源表头字段",
+          "workbook_row": 112,
+          "category": "指标",
+          "source_type": "float",
+          "description": "转化成本",
+          "status": "mapped",
+          "source_path": "data.list[].ecp_cpa_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ecp_cpa_platform\"",
+          "path": [
+            "ecp_cpa_platform"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "qianchuan"
+          ],
+          "availability": "official_catalog_not_account_verified"
+        }
+      ],
+      "row_wrapped": true
+    }
+  }
+}
