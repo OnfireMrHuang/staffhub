@@ -18,7 +18,7 @@ uv run qianchuan collect --advertise-id 456 --start 2026-10-20T09:00:00 --end 20
 
 MySQL 库需事先创建；模板密码环境变量为 `QIANCHUAN_MYSQL_PASSWORD`。授权检查/授权不使用 MySQL；dry-run 不访问网络。真实 collect 要求授权有效及本源表已创建。默认配置为当前工作目录的 config/local.toml，从其他目录运行请传 `--config` 绝对路径；配置内相对路径以 TOML 目录为基准。
 
-也可使用 `uv run python -m scripts.qianchuan`。不需要产品、业务直播间、主数据导入或 live_data 包。查看本源实际参数：
+也可使用 `uv run python -m scripts.qianchuan`。不需要产品、业务直播间、主数据导入或 schdule 包。查看本源实际参数：
 
 ```bash
 uv run qianchuan collect --help

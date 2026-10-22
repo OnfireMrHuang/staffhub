@@ -1,0 +1,11 @@
+# Offline demo only; source examples contain no valid production credentials.
+[runtime]
+directory = '../runtime'
+[sources.marketing]
+config = '../../scripts/marketing/config/example.toml'
+[sources.qianchuan]
+config = '../../scripts/qianchuan/config/example.toml'
+[sources.pingan]
+config = '../../scripts/pingan/config/example.toml'
+[sources.zhongan]
+config = '../../scripts/zhongan/config/example.toml'

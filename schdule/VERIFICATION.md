@@ -1,0 +1,38 @@
+# 调度层重建验证
+
+日期：2026-10-22。
+
+## 已验证
+
+| 项目 | 结果 |
+| --- | --- |
+| 新调度行为与入口测试 | 31 项通过 |
+| 独立来源回归测试 | 51 项通过；来源相关测试归入 scripts/tests |
+| 两个安装入口 | schdule-auth、schdule-collect 可运行，离线示例去重为5个目标 |
+| 正式执行路径 | 使用模拟 MySQL 计划及模拟来源API，验证入口组装、逐项运行记录及最终 JSON 一致 |
+| 授权分组 | 同凭据仅维护一次，每个账户逐一探测；首目标失败仍检查其余目标 |
+| 采集策略 | continue / skip-room / abort；存储失败强制停止；剩余任务明确标为 skipped |
+| 午夜时间适配 | 众安按窗口涉及日期逐日调用；00点结束的窗口仅包含前一天 |
+| 锁和记录 | 两类锁独立，同类互斥；记录0600，异常状态持久化，日志不可写停止后续任务 |
+| MySQL读取 | 模拟只读事务、最大行数、连接关闭、异常脱敏；拒绝非查询SQL、空计划及超限结果 |
+| 通知 | 模拟逐号码结果、失败重试、成功后冷却、SDK异常脱敏；本机SDK构造和请求模型可加载 |
+| 依赖边界 | 来源包在阻断 schdule 和旧调度模块导入时仍可加载 |
+| 旧目录 | live_data_design 已删除，包括旧代码、规格、配置、测试和虚拟环境 |
+| 原始资料 | Excel 移至 schdule/data，目录已忽略；不属于新调度执行逻辑 |
+
+执行命令：
+
+```bash
+# 在 schdule/ 下
+uv sync --locked --offline
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s ../scripts/tests -v
+.venv/bin/schdule-auth --config config/preview.toml --plan-file config/plan.example.json --dry-run
+.venv/bin/schdule-collect --config config/preview.toml --plan-file config/plan.example.json --dry-run
+```
+
+## 接入边界
+
+未连接真实 MySQL 或业务API、未执行真实授权、未发短信、未安装 cron。正式运行要求已同步的原表、真实只读连接，以及根据最终表结构编写的 config/plan.sql；plan.example.sql 仅展示投影契约，故意返回空结果。
+
+模拟数据库检查不等于实际 MySQL 权限、查询计划和关联正确性验证。来源数据汇 DDL 不在本轮修改。真实表接入后先使用两个入口的 --dry-run 核对范围，再执行受控授权和采集。

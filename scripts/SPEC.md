@@ -2,7 +2,7 @@
 
 版本：2026-10-22。本文是四类采集脚本的独立规格；主规格只引用本文。首先定义数据汇 MySQL DDL，然后定义目录与依赖边界，再按来源分别定义配置、参数、功能、用例及验收。
 
-依据：[第一期直播数据管理 Page](https://chatgpt.com/space/page_1b6e05dc95ec81918416244f056f2cd4)、Page 指定的本地工作簿 `live_data_design/第一期试点直播间产品.xlsx` 和用户补充。本版按本地工作簿快照核对六张字段字典，共 266 个字段；未声称在线飞书内容与快照始终一致。真实账户、应用密钥、登录密码和手机号不复制到文档。
+依据：[第一期直播数据管理 Page](https://chatgpt.com/space/page_1b6e05dc95ec81918416244f056f2cd4)、Page 指定的本地工作簿 `schdule/data/第一期试点直播间产品.xlsx` 和用户补充。本版按本地工作簿快照核对六张字段字典，共 266 个字段；未声称在线飞书内容与快照始终一致。真实账户、应用密钥、登录密码和手机号不复制到文档。
 
 ## 1. 数据汇 MySQL DDL
 
@@ -410,15 +410,14 @@ staffhub/
 │   ├── zhongan/                 # 众安保单，独立项目
 │   ├── utils/                   # 声明为依赖的通用 Python 包
 │   └── tests/                   # 跨项目安装/边界验证
-└── live_data_design/
-    ├── SPEC.md                  # 主规格，仅引用本规格
-    ├── catalog/                 # 原表导入、业务关系、任务适配
-    ├── manage.py                # 原表管理命令
-    ├── notifications.py         # 通知适配器，由调度调用
-    └── live_data/               # 调度、失败策略、通知编排
+└── schdule/
+    ├── SPEC.md                  # 调度规格，仅引用本规格
+    ├── src/schdule/             # 授权调度、采集调度及计划/通知适配
+    ├── config/                  # 调度配置与 MySQL 查询投影
+    └── data/                    # 原始 Excel 输入资料，私有且不提交
 ```
 
-每个来源目录都自行维护以下内容，不使用统一的 `live_data.script_cli`：
+每个来源目录都自行维护以下内容，各自提供 CLI：
 
 | 文件 | 本类型的职责 |
 | --- | --- |
@@ -432,9 +431,9 @@ staffhub/
 | `repository.py`、`schema.sql` | 本平台建表、锁范围、SQL、事务和幂等规则 |
 | `runtime/` | 凭据缓存和浏览器状态；权限受限，不提交 |
 
-`utils` 只提供参数错误处理、时间、HTTP 重试、凭据原子文件、OAuth/浏览器授权生命周期、MySQL 连接/事务/锁、字段值转换及共享巨量协议辅助。来源模块自行选择和组合这些能力；utils 不导入任何来源模块、catalog 或 live_data。通用审计表 `collector_run` 的 DDL 在 [utils/audit.sql](utils/audit.sql)，不属于上述 266 个汇表字段。
+`utils` 只提供参数错误处理、时间、HTTP 重试、凭据原子文件、OAuth/浏览器授权生命周期、MySQL 连接/事务/锁、字段值转换及共享巨量协议辅助。来源模块自行选择和组合这些能力；utils 不导入任何来源模块、schdule。通用审计表 `collector_run` 的 DDL 在 [utils/audit.sql](utils/audit.sql)，不属于上述 266 个汇表字段。
 
-依赖方向：`live_data → 来源公开接口 → utils`。每来源使用 PEP 420 的 `scripts.<type>` 包，各自 pyproject 声明本地 `../utils` 依赖。安装不依赖 PYTHONPATH、工作目录碰巧可导入或仓库 `tools/`；共享巨量协议辅助已放在 utils/oceanengine。打包部署需同时提供所需来源目录和 utils，或分别构建并安装对应发行包。不同来源可用不同 .venv、不同 MySQL 库和不同运行用户。
+依赖方向：`schdule → 来源公开接口 → utils`。每来源使用 PEP 420 的 `scripts.<type>` 包，各自 pyproject 声明本地 `../utils` 依赖。安装不依赖 PYTHONPATH、工作目录碰巧可导入或仓库 `tools/`；共享巨量协议辅助已放在 utils/oceanengine。打包部署需同时提供所需来源目录和 utils，或分别构建并安装对应发行包。不同来源可用不同 .venv、不同 MySQL 库和不同运行用户。
 
 ### 2.1 统一的功能名称与执行结果
 
@@ -480,7 +479,7 @@ staffhub/
 | 平安看板链接 merchantChannel | 平安 --channel |
 | 众安看板链接 dyNo/livePlatform | 众安 --dy-no / --platform |
 | 看板账号、密码、手机号 | 本类型私有登录资料；操作者在浏览器输入，不作为 CLI 参数 |
-| 产品、业务直播间和关系表格式 | catalog/调用方使用；不进入来源脚本参数或 Task |
+| 产品、业务直播间和关系表格式 | 调度计划/调用方使用；不进入来源脚本参数或 Task |
 | 腾讯云短信配置 | 调度通知层 |
 
 删除旧参数 `--product-id`、`--room-id`、`--app-id`、`--task-file`、`--metrics`。不暴露重复的 `--account-scope`：未选主播时即账户全量。授权应用 ID 由配置提供；固定汇表指标不可用自定义 metrics 缩减。广告不暴露无用途的浏览器等待参数；众安不暴露上游未使用的小时起止参数。
@@ -756,7 +755,7 @@ Task 仅含 task_id/source/credential/account_id/options；account_id 只供广�
 
 ### 7.2 迁移边界
 
-- 本次根目录 scripts 是独立项目集合，原 live_data_design/scripts 不再是执行目录；catalog、manage、registry 属于业务编排侧。
+- 根目录 scripts 是独立项目集合；调度位于 schdule，读取已同步 MySQL 的关联查询投影。
 - 旧产品/房间参数、JSON 任务文件及旧共享事实表接口停止作为新脚本协议。主规格和操作文档统一引用本文。
 - init-db 只创建新表，不自动删除旧表、不自动从 live_ad_hourly/live_policy_snapshot/live_policy_order 回填；CREATE IF NOT EXISTS 不负责升级已经存在的同名异构表。迁移旧数据需单独制定映射并验证范围去重。
 - 尚未确认的字段映射明确留空或 JSON；列定义不因此删减。映射完成应升级本类型字段契约和测试，维护对应 schema 迁移。
@@ -765,11 +764,11 @@ Task 仅含 task_id/source/credential/account_id/options；account_id 只供广�
 ## 8. 验收清单与证据
 
 1. 六张源汇表逐列覆盖 266 个原字典字段，列名/顺序一致；来源未知字段不丢弃，原始 JSON 可追溯。
-2. 四个目录分别从自己的 uv.lock 安装，在各自 .venv 执行入口；移除/阻断 live_data 导入仍能 dry-run。
+2. 四个目录分别从自己的 uv.lock 安装，在各自 .venv 执行入口；移除/阻断 schdule 导入仍能 dry-run。
 3. 每个类型的 check-auth、authorize、collect 独立可调用；auth/dry-run 不要求 MySQL；init-db 不要求业务查询参数。
 4. 营销只传 advertise_id 即可生成账户任务；传 product-id/room-id 等无用途参数明确报错。千川、平安、众安只接受本节列明的 CLI 参数。
 5. 授权缺失/到期、应用不匹配、Cookie 缺少、分页缺页/重复、数量变化、字段不支持都不能报告采集成功。
 6. 重跑不重复，同源范围串行；失败事务回滚；来源时间与观察时间分开；订单首次时间不被更新覆盖。
 7. 主规格只维护整体业务关系和调度，不复制本规格中的 DDL、参数或平台内部流程。
 
-本地验证和仍需真实环境验证的事项见 [VERIFICATION.md](../live_data_design/VERIFICATION.md)。
+本地验证和仍需真实环境验证的事项见 [VERIFICATION.md](../schdule/VERIFICATION.md)。

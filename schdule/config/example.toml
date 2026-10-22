@@ -1,0 +1,44 @@
+[runtime]
+directory = '../runtime'
+
+[plan]
+# Replace this with a read-only SELECT/JOIN over the synchronized original tables.
+query_file = 'plan.sql'
+max_rows = 10000
+
+[mysql]
+host = '127.0.0.1'
+port = 3306
+database = 'source_data'
+user = 'schedule_reader'
+password_env = 'SCHDULE_MYSQL_PASSWORD'
+
+# These are each collector's private settings, not a merged scheduler credential file.
+[sources.marketing]
+config = '../../scripts/marketing/config/local.toml'
+[sources.qianchuan]
+config = '../../scripts/qianchuan/config/local.toml'
+[sources.pingan]
+config = '../../scripts/pingan/config/local.toml'
+[sources.zhongan]
+config = '../../scripts/zhongan/config/local.toml'
+
+[authorization]
+refresh_before_seconds = 1800
+wait_seconds = 15
+
+[collection]
+on_error = 'continue' # continue | skip-room | abort; storage failures always abort
+notify_on_error = false
+
+[sms]
+enabled = false
+region = 'ap-guangzhou'
+cooldown_seconds = 1800
+sdk_app_id = 'REPLACE'
+sign_name = 'REPLACE'
+template_id = 'REPLACE'
+phone_numbers = []
+template_params = ['{source}', '{reason}']
+secret_id_env = 'TENCENTCLOUD_SECRET_ID'
+secret_key_env = 'TENCENTCLOUD_SECRET_KEY'

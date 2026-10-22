@@ -1,0 +1,8 @@
+[
+  {"product_id":"product-a","room_id":"room-a","source":"marketing","credential":"default","advertise_id":"123","options":{"version":"smart"}},
+  {"product_id":"product-a","room_id":"room-a","source":"marketing","credential":"default","advertise_id":"124","options":{"version":"smart"}},
+  {"product_id":"product-a","room_id":"room-a","source":"pingan","credential":"default","options":{"channel":"DEMO_CHANNEL"}},
+  {"product_id":"product-a","room_id":"room-a","source":"pingan","credential":"default","options":{"channel":"DEMO_CHANNEL"}},
+  {"product_id":"product-b","room_id":"room-b","source":"qianchuan","credential":"default","advertise_id":"456","options":{}},
+  {"product_id":"product-b","room_id":"room-b","source":"zhongan","credential":"default","options":{"dy_no":"DEMO_DY","platform":"DOUYIN"}}
+]

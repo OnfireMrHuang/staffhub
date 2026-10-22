@@ -1,0 +1,10 @@
+# 按机器实际路径替换；凭据由私有服务环境或启动脚本注入，不写在 crontab。
+# 单节点部署。浏览器恢复需要该运行用户的图形桌面与系统 Chrome。
+SHELL=/bin/sh
+# 确认所用 cron 实现支持 CRON_TZ；否则将操作系统时区设置为 Asia/Shanghai。
+CRON_TZ=Asia/Shanghai
+# 首次执行前创建 runtime 并设置权限，配置进程日志轮转。
+# 授权每5分钟独立唤醒；每个来源仍使用自己的状态目录。
+2,7,12,17,22,27,32,37,42,47,52,57 * * * * cd /ABSOLUTE/PATH/staffhub/schdule && .venv/bin/schdule-auth --config config/local.toml >> runtime/auth.log 2>&1
+# 采集上一完整小时。原表同步应由上游在此之前完成发布。
+5 * * * * cd /ABSOLUTE/PATH/staffhub/schdule && .venv/bin/schdule-collect --config config/local.toml >> runtime/collect.log 2>&1

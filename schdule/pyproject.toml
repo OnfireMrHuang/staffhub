@@ -1,0 +1,32 @@
+[project]
+name = "staffhub-schdule"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "live-collector-marketing==0.2.0",
+  "live-collector-qianchuan==0.2.0",
+  "live-collector-pingan==0.2.0",
+  "live-collector-zhongan==0.2.0",
+  "live-collector-utils==0.2.0",
+  "filelock>=3.16,<4",
+  "PyMySQL[rsa]>=1.1,<2",
+  "tencentcloud-sdk-python-sms>=3.0,<4",
+]
+
+[project.scripts]
+schdule-auth = "schdule.cli:auth_main"
+schdule-collect = "schdule.cli:collect_main"
+
+[tool.uv.sources]
+live-collector-marketing = { path = "../scripts/marketing", editable = true }
+live-collector-qianchuan = { path = "../scripts/qianchuan", editable = true }
+live-collector-pingan = { path = "../scripts/pingan", editable = true }
+live-collector-zhongan = { path = "../scripts/zhongan", editable = true }
+live-collector-utils = { path = "../scripts/utils", editable = true }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
