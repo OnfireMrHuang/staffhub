@@ -53,7 +53,6 @@ CREATE TABLE IF NOT EXISTS `zhongan_stats` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `observed_hour` DATETIME NOT NULL COMMENT '实际观察时刻所属小时，非历史回补小时',
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_platform_dy_session_observation` (`livePlatform`,`dyNo`,`roomId`,`startDate`,`observed_hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
@@ -94,7 +93,6 @@ CREATE TABLE IF NOT EXISTS `zhongan_orders` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `first_seen_at` DATETIME(6) NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_platform_dy_order` (`livePlatform`,`dyNo`,`orderNo`),
   KEY `idx_platform_dy_date` (`livePlatform`,`dyNo`,`startDate`)

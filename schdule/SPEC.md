@@ -85,7 +85,7 @@ schdule/
 | advertise_id | 字符串；保单为空或 NULL | 广告账户；SQL 使用 CAST 保证不会以数值返回 |
 | options | JSON对象或对象文本 | 本类型真正使用的查询条件和汇表上下文；可省略为 {} |
 
-广告 options 可含营销 version、实际主播范围及固定输出元数据；平安使用 channel；众安使用 dy_no/platform。完整白名单由来源 task.py 校验，调度不复制来源参数规格。产品/业务房间只保留在 Binding 和运行记录中，不传入来源 Task。
+广告 options 可含营销 version、千川主播范围及固定输出元数据；平安使用 channel；众安使用 dy_no/platform。完整白名单由来源 task.py 校验，调度不复制来源参数规格。产品/业务房间只保留在 Binding 和运行记录中，不传入来源 Task。
 
 SQL 应过滤停用的产品、房间、账户和后台绑定。推荐账户投影与后台投影使用 UNION ALL，每个后台范围返回一次，避免账户数量放大后台任务。SQL 模板 [plan.example.sql](config/plan.example.sql) 只展示列形状，故意返回空结果；它不是已完成的业务关联 SQL。
 

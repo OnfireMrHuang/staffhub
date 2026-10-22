@@ -28,7 +28,7 @@ def decimal_value(value):
 
     Noncanonical number text (commas, percent signs, scientific notation), bools,
     nonfinite values and values outside the SQL decimal envelope return None.
-    The original input remains present in raw JSON.
+    The input is left unchanged in memory; only projected fields are persisted.
     """
     if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
         return None

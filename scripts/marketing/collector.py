@@ -44,9 +44,6 @@ class Collector:
             if missing:
                 raise DataError('营销账户/版本缺少请求字段：' + ', '.join(sorted(missing)) +
                                 '；请显式配置已确认的 metrics，不自动删减')
-        if options.get('aweme_id'):
-            params = tool.scoped_report(params, fields, options['aweme_id'], version,
-                                        self.transport.client, token)
         return version, params
 
     def _pages(self, params, token, version):
@@ -125,12 +122,12 @@ class Collector:
                         'account_type': options.get('account_type'),
                         'stat_platform': '巨量营销-旧版' if version == 'legacy' else '巨量营销-智擎版',
                         'stat_time_hour': timestamp(instant), 'stat_time_day': instant.date().isoformat(),
-                        'stat_time_month': instant.strftime('%Y-%m'), 'aweme_show_id': options.get('aweme_id'),
+                        'stat_time_month': instant.strftime('%Y-%m'),
                     }
                     metrics = with_collection(metrics, context, raw_row=row,
                                               source_context={'request': {**params, 'page': page}})
                     batch.ads.append({'hour': timestamp(instant), 'dimensions': dimensions,
                                       'metrics': metrics, 'cost': cost})
         except tool.ToolError as exc:
-            raise DataError('营销请求配置或主播筛选失败，请核对账户字段及授权范围') from exc
+            raise DataError('营销请求配置失败，请核对账户字段及授权范围') from exc
         return batch

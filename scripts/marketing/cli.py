@@ -21,7 +21,6 @@ def parser():
         p.add_argument('--credential', default='default')
         p.add_argument('--advertise-id', required=True, help='投放账户ID；映射上游 advertiser_id')
         p.add_argument('--version', choices=('smart','legacy'), default='smart')
-        if name == 'collect': p.add_argument('--aweme-id', help='可选抖音显示号；不传则账户全量')
         if name == 'collect':
             p.add_argument('--start')
             p.add_argument('--end')
@@ -35,7 +34,6 @@ def read_task(args, config):
     options = accounts.get(str(int(args.advertise_id)) if args.advertise_id.isdigit() else args.advertise_id, {})
     if not isinstance(options, dict): raise ConfigError('账户展示配置必须为对象')
     options = dict(options)
-    if getattr(args, 'aweme_id', None): options['aweme_id'] = args.aweme_id
     options['version'] = args.version
     return make_task(args.credential, args.advertise_id, options)
 

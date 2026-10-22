@@ -9,7 +9,7 @@ from scripts.utils.model import ConfigError
 PATH = Path(__file__).with_name('fields.json')
 
 
-def contract(dataset='marketing_hourly'):
+def contract(dataset='marketing_stats'):
     try:
         return deepcopy(load_contracts(PATH)['datasets'][dataset])
     except KeyError as exc:

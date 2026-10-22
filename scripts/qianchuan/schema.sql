@@ -1,6 +1,6 @@
 -- MySQL 8.0.16+; source-owned typed data tables. No business-directory foreign keys.
 
-CREATE TABLE IF NOT EXISTS `qianchuan_hourly` (
+CREATE TABLE IF NOT EXISTS `qianchuan_stats` (
   `stat_datetime` DATETIME NOT NULL COMMENT '数据起始时间；来源汇表字段',
   `stat_time_day` DATE NULL COMMENT '统计日期；来源汇表字段',
   `stat_time_hour` DATETIME NULL COMMENT '统计小时；来源汇表字段',
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `qianchuan_hourly` (
   `account_type` VARCHAR(512) NULL COMMENT '账户类型；来源汇表字段',
   `stat_platform` VARCHAR(512) NULL COMMENT '统计平台；来源汇表字段',
   `stats_authority` VARCHAR(512) NULL COMMENT '投放账户查询范围；来源汇表字段',
-  `aweme_id` VARCHAR(128) NULL COMMENT '抖音号内部ID；来源汇表字段',
+  `aweme_id` VARCHAR(128) NOT NULL DEFAULT '' COMMENT '抖音号内部ID；空字符串表示账户全量',
   `aweme_show_id` VARCHAR(128) NULL COMMENT '手机端可见抖音号；来源汇表字段',
   `aweme_nick_name` VARCHAR(512) NULL COMMENT '抖音昵称；来源汇表字段',
   `room_name` VARCHAR(512) NULL COMMENT '业务直播间名称；来源汇表字段',
@@ -113,12 +113,8 @@ CREATE TABLE IF NOT EXISTS `qianchuan_hourly` (
   `ecp_convert_rate` DECIMAL(65,30) NULL COMMENT '转化率；来源汇表字段',
   `ecp_cpa_platform` DECIMAL(65,30) NULL COMMENT '转化成本；来源汇表字段',
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `scope_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '来源查询范围摘要，不含产品/业务直播间',
-  `scope_json` JSON NOT NULL,
-  `dimension_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_scope_hour_dimension` (`scope_key`,`stat_datetime`,`dimension_key`),
+  UNIQUE KEY `uk_account_hour_aweme` (`advertiser_id`,`stat_datetime`,`aweme_id`),
   KEY `idx_account_hour` (`advertiser_id`,`stat_datetime`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;

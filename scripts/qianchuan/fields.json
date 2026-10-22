@@ -1,17 +1,17 @@
 {
-  "version": 2,
+  "version": 3,
   "workbook": "第一期试点直播间产品.xlsx",
   "notes": [
     "本契约只包含六张来源字段字典，不含账户/应用/后台配置或登录值。",
     "requestable 表示字典及已有接口目录支持；账户授权和营销版本字段须运行时验证，未声称已完成生产采集。",
-    "decimal 使用 DECIMAL(65,30) 安全投影；非数值、超过35位整数或30位小数为 NULL，原 JSON 保留；不换算金额单位。",
+    "decimal 使用 DECIMAL(65,30) 安全投影；非数值、超过35位整数或30位小数为 NULL；不换算金额单位。",
     "平安派生百分率使用28位有效数字算术精度，原始派生结果不舍入；写入数据汇字符串保留2位小数；缺失、非法或零分母为 NULL。",
     "本阶段按小时保存广告事实；保单字段为真实观察时刻的日累计/场次累计快照，不能相加当小时新增。",
-    "空文本及非规范数值文本（千分位、百分号、科学计数法）不强制转换，类型列为 NULL，原 JSON 保留。"
+    "空文本及非规范数值文本（千分位、百分号、科学计数法）不强制转换，类型列为 NULL。"
   ],
   "datasets": {
-    "qianchuan_hourly": {
-      "table": "qianchuan_hourly",
+    "qianchuan_stats": {
+      "table": "qianchuan_stats",
       "source": "qianchuan",
       "raw_column": "metrics",
       "workbook_sheet": "【巨量千川】数据源表头字段",
@@ -276,7 +276,8 @@
           "projection_type": "text",
           "requestable": false,
           "sql_type": "VARCHAR(128)",
-          "sql_nullable": true
+          "sql_nullable": false,
+          "reason": "筛选时使用已解析的主播内部 ID；账户全量写空字符串，与统计小时、账户共同构成业务唯一键。"
         },
         {
           "name": "aweme_show_id",
@@ -2653,5 +2654,5 @@
       "row_wrapped": true
     }
   },
-  "storage_model": "typed_columns_with_raw_payload"
+  "storage_model": "typed_columns"
 }

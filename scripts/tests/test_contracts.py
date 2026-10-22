@@ -48,7 +48,7 @@ class FieldContractTests(unittest.TestCase):
         self.assertIn('all_order_pay_gmv_7days', default_metrics('qianchuan'))
 
     def test_every_field_has_workbook_trace_and_explicit_mapping_status(self):
-        counts = {'marketing_hourly': 42, 'qianchuan_hourly': 111,
+        counts = {'marketing_stats': 42, 'qianchuan_stats': 111,
                   'pingan_stats': 20, 'pingan_orders': 12,
                   'zhongan_stats': 49, 'zhongan_orders': 32}
         for dataset, count in counts.items():
@@ -100,7 +100,7 @@ class FieldContractTests(unittest.TestCase):
         self.assertIsNone(result['validPolicyCnt'])
         self.assertIsNone(result['adSpend'])
         self.assertIsNone(project_fields('pingan_orders', {'applicant': {'ageGroup': '30-40'}})['applicant_age_group'])
-        self.assertIsNone(project_fields('qianchuan_hourly', {}, {'aweme_nick_name': 'unverified'})['aweme_nick_name'])
+        self.assertIsNone(project_fields('qianchuan_stats', {}, {'aweme_nick_name': 'unverified'})['aweme_nick_name'])
 
     def test_blank_text_and_lossy_numeric_values_are_null_without_raw_changes(self):
         raw = {'orderNo': '', 'orderAmount': '1.1234567890123456789012345678901',
@@ -152,7 +152,13 @@ class FieldContractTests(unittest.TestCase):
                 for field in definition['fields']:
                     self.assertIn('`'+field['name']+'` '+field['sql_type'],sql)
             self.assertNotIn('CREATE OR REPLACE VIEW',sql)
-            self.assertIn('`raw_payload` JSON NOT NULL',sql)
+            for removed in ('raw_payload','scope_key','scope_json','dimension_key'):
+                self.assertNotIn('`'+removed+'`',sql)
+            if source == 'marketing':
+                self.assertIn('UNIQUE KEY `uk_account_hour` (`advertiser_id`,`stat_time_hour`)',sql)
+            if source == 'qianchuan':
+                self.assertIn("`aweme_id` VARCHAR(128) NOT NULL DEFAULT ''",sql)
+                self.assertIn('UNIQUE KEY `uk_account_hour_aweme` (`advertiser_id`,`stat_datetime`,`aweme_id`)',sql)
 
     def test_collectors_request_full_defaults_and_keep_request_context(self):
         for source in ('marketing', 'qianchuan'):

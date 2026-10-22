@@ -3,7 +3,8 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from scripts.utils.legacy import reports
-from scripts.utils.model import AuthError, Batch, DataError, parse_time, timestamp
+from scripts.utils.model import AuthError, DataError, parse_time, timestamp
+from .models import ReportBatch
 from .contracts import default_metrics, with_collection
 from .task import validate
 
@@ -25,7 +26,7 @@ class Collector:
         tool = reports()
         options = route.options
         token = session['access_token']
-        batch = Batch()
+        batch = ReportBatch()
         seen_rows = set()
         filtering = {'marketing_goal': 'LIVE_PROM_GOODS', 'order_platform': 'QIANCHUAN'}
         if options.get('aweme_ids'):
@@ -42,6 +43,16 @@ class Collector:
                     # The legacy adapter resolves the user-facing Douyin ID to Qianchuan's internal ID.
                     params = tool.scoped_report(params, None, str(options['aweme_id']), 'qianchuan',
                                                 self.transport.client, token)
+                ids = params.get('filtering', {}).get('aweme_ids', [])
+                if options.get('aweme_id') or options.get('aweme_ids'):
+                    if len(ids) != 1 or not str(ids[0]).isascii() or not str(ids[0]).isdigit() or int(ids[0]) <= 0:
+                        raise DataError('千川主播筛选必须解析为一个有效内部 ID')
+                    aweme_id = str(int(ids[0]))
+                else:
+                    aweme_id = ''
+                if batch.aweme_id is not None and batch.aweme_id != aweme_id:
+                    raise DataError('采集期间主播内部 ID 发生变化')
+                batch.aweme_id = aweme_id
                 self._collect_day(route, window, params, token, batch, seen_rows)
         except tool.ToolError as exc:
             raise DataError('千川请求配置或主播筛选失败，请核对账户字段及授权范围') from exc
@@ -123,7 +134,7 @@ class Collector:
             'stat_time_month': dt.strftime('%Y-%m'), 'start_date': params.get('start_date'),
             'end_date': params.get('end_date'), 'time_granularity': params.get('time_granularity'),
             'stats_authority': 'CURRENT',
-            'aweme_id': str(internal_ids[0]) if len(internal_ids) == 1 else None,
+            'aweme_id': str(int(internal_ids[0])) if len(internal_ids) == 1 else '',
             'aweme_show_id': options.get('aweme_id'),
             'room_name': options.get('room_name'),
         }

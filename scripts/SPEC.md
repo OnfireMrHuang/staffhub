@@ -1,4 +1,4 @@
-# 四类独立采集脚本规格 v2
+# 四类独立采集脚本规格 v3
 
 版本：2026-10-22。本文是四类采集脚本的独立规格；主规格只引用本文。首先定义数据汇 MySQL DDL，然后定义目录与依赖边界，再按来源分别定义配置、参数、功能、用例及验收。
 
@@ -12,25 +12,25 @@
 
 | 类型 | MySQL 表 | 汇表字段数 | 一行含义 | 幂等边界 |
 | --- | --- | ---: | --- | --- |
-| 巨量营销 | `marketing_hourly` | 42 | 一个账户/可选主播范围、一个来源小时与维度组合 | 范围摘要＋来源小时＋维度摘要 |
-| 巨量千川 | `qianchuan_hourly` | 111 | 一个账户/可选主播范围、一个来源小时与维度组合 | 范围摘要＋来源小时＋维度摘要 |
+| 巨量营销 | `marketing_stats` | 42 | 一个账户、一个来源小时的统计 | advertiser_id＋stat_time_hour |
+| 巨量千川 | `qianchuan_stats` | 111 | 一个账户、一个主播或账户全量、一个来源小时的统计 | advertiser_id＋stat_datetime＋aweme_id |
 | 平安保单 | `pingan_stats` | 20 | 一个渠道、统计日期在实际观察小时的累计快照 | channel＋startDate＋observed_hour |
 | 平安保单 | `pingan_orders` | 12 | 一个渠道下 postId 对应的最新订单记录 | channel＋postId |
 | 众安保单 | `zhongan_stats` | 49 | 一个平台、dyNo、来源场次、统计日期在观察小时的累计快照 | livePlatform＋dyNo＋roomId＋startDate＋observed_hour |
 | 众安保单 | `zhongan_orders` | 32 | 一个平台、dyNo 下 orderNo 对应的最新订单记录 | livePlatform＋dyNo＋orderNo |
 
-字段来源：[营销](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=LLrZfS)、[千川](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=nagTnM)、[平安统计](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=Odg2IZ)、[平安订单](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=CdhaN0)、[众安统计](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=wxKX4N)、[众安订单](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=svfN0A)。每列保留原英文名、中文注释和原始顺序；技术列追加在末尾。
+字段来源：[营销](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=LLrZfS)、[千川](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=nagTnM)、[平安统计](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=Odg2IZ)、[平安订单](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=CdhaN0)、[众安统计](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=wxKX4N)、[众安订单](https://meimeiwangluo.feishu.cn/sheets/Chk0sVIOIh8OyjtOyiHceWxKnnb?sheet=svfN0A)。每列保留原英文名、中文注释和原始顺序；记录 ID、观察时间等必要列追加在末尾；不保存整份原始响应、查询条件 JSON 或范围/维度摘要。
 
 ### 1.2 类型、空值与写入约定
 
 - 目标 MySQL 8.0.16+，InnoDB、utf8mb4_bin、DYNAMIC 行格式。数据库由部署方先创建；以下 SQL 可按来源独立执行。建表能力依据 [MySQL CREATE TABLE](https://dev.mysql.com/doc/refman/8.0/en/create-table.html)。
 - 账户、订单、场次等 ID 使用字符串，避免丢失大整数精度；订单/场次原 ID 保留前导零，广告正整数 ID 规范化去除前导零。CLI 中用户术语 `advertise_id` 写为 `--advertise-id`；请求和汇表保留原字段 `advertiser_id`，两者是同一个账户 ID。
-- 金额、比率等已确认数值使用 DECIMAL(65,30)，来源明确为 integer 的计数使用 BIGINT；仅标明 number 的指标保留 DECIMAL。数值保留来源单位，不把元和分混用，不用二进制浮点作为金额存储。缺失、非规范或超精度数值投影为 NULL，原值仍在 raw_payload；BIGINT 非整数/溢出和必需键缺失使整个批次失败。
-- 来源未明确类型的字段和数组使用独立 JSON 列；这仍然是逐字段物理列，不是把整张汇表塞进一个 JSON。原始响应额外保存在 raw_payload，供核对和后续映射。JSON 能力依据 [MySQL JSON](https://dev.mysql.com/doc/refman/8.0/en/json.html)。
+- 金额、比率等已确认数值使用 DECIMAL(65,30)，来源明确为 integer 的计数使用 BIGINT；仅标明 number 的指标保留 DECIMAL。数值保留来源单位，不把元和分混用，不用二进制浮点作为金额存储。缺失、非规范或超精度数值投影为 NULL；BIGINT 非整数/溢出和必需键缺失使整个批次失败。
+- 来源未明确类型的字段和数组使用独立 JSON 列；这仍然是逐字段物理列，不是把整张汇表塞进一个 JSON。只存储字段字典定义的值。JSON 能力依据 [MySQL JSON](https://dev.mysql.com/doc/refman/8.0/en/json.html)。
 - 时间统一按 Asia/Shanghai 写 DATETIME，不依赖服务器自动时区转换。来源小时/日期与 observed_at 分开；保单回补只能保存本次实际观察的累计值，不能伪造历史小时状态。
-- 平安三项固定展示字段 gmvSimpleRoi/performanceRoi/adSpend 写 `-`；四项本地派生率按百分比字符串保留两位小数。漏斗百分率按字段表显示百分号，缺失为 `/`；原始缺失及精确派生值保留在 raw_payload。其他缺失默认 NULL，不用 0 补齐。
-- `scope_key` 是来源、账户及实际查询条件的 SHA-256，不包含产品、业务直播间或凭据别名；scope_json 记录查询条件。账户全量与主播筛选是不同范围，查询时必须选择一个范围，不能把重叠范围相加。批量调度负责拒绝重叠归属。
-- 广告仅在全部分页完整且字段校验通过后，在一个事务中按 scope_key 删除指定小时区间并插入完整新结果；允许成功空结果清空该范围旧值。失败回滚，保留旧数据。
+- 平安三项固定展示字段 gmvSimpleRoi/performanceRoi/adSpend 写 `-`；四项本地派生率按百分比字符串保留两位小数。漏斗百分率按字段表显示百分号，缺失为 `/`。其他缺失默认 NULL，不用 0 补齐。
+- 营销唯一键为账户 ID＋统计小时，仅支持账户级采集；smart/legacy 为接口查询版本，同账户同小时重采会替换已有值，不分别存储版本副本。千川唯一键为账户 ID＋统计小时＋已有业务字段 aweme_id；筛选时保存规范化内部 ID，账户全量用空字符串表示。查询千川全量时必须限定 aweme_id=''，不能与主播结果相加。
+- 广告仅在全部分页完整、账户/主播身份一致且字段校验通过后，在一个事务中按上述账户、主播业务键删除指定小时区间并插入完整新结果；成功空结果清空该业务键的旧值。千川的主播内部 ID 随内存批次传递，空结果也使用同一业务键；失败回滚，保留旧数据。
 - 保单按唯一键 upsert；订单保留首次 first_seen_at，更新 observed_at 和字段；同观察小时快照更新，新观察小时追加。无场次、响应结构异常、分页不全属于失败，不覆盖已有快照。
 - 表之间不建立产品/业务直播间外键。众安 `roomId` 是接口要求的来源场次 ID；千川 `room_name` 是固定汇表展示列，均不等于内部业务 `room_id` 参数。
 
@@ -43,7 +43,7 @@
 ```sql
 -- MySQL 8.0.16+; source-owned typed data tables. No business-directory foreign keys.
 
-CREATE TABLE IF NOT EXISTS `marketing_hourly` (
+CREATE TABLE IF NOT EXISTS `marketing_stats` (
   `stat_time_hour` DATETIME NOT NULL COMMENT '时间-小时；来源汇表字段',
   `stat_time_day` DATE NULL COMMENT '时间-天；来源汇表字段',
   `stat_time_month` CHAR(7) NULL COMMENT '时间-月；来源汇表字段',
@@ -87,14 +87,9 @@ CREATE TABLE IF NOT EXISTS `marketing_hourly` (
   `deep_convert_cost` DECIMAL(65,30) NULL COMMENT '深度转化成本(元)；来源汇表字段',
   `deep_convert_rate` DECIMAL(65,30) NULL COMMENT '深度转化率；来源汇表字段',
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `scope_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '来源查询范围摘要，不含产品/业务直播间',
-  `scope_json` JSON NOT NULL,
-  `dimension_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_scope_hour_dimension` (`scope_key`,`stat_time_hour`,`dimension_key`),
-  KEY `idx_account_hour` (`advertiser_id`,`stat_time_hour`)
+  UNIQUE KEY `uk_account_hour` (`advertiser_id`,`stat_time_hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
 ```
 
@@ -105,7 +100,7 @@ CREATE TABLE IF NOT EXISTS `marketing_hourly` (
 ```sql
 -- MySQL 8.0.16+; source-owned typed data tables. No business-directory foreign keys.
 
-CREATE TABLE IF NOT EXISTS `qianchuan_hourly` (
+CREATE TABLE IF NOT EXISTS `qianchuan_stats` (
   `stat_datetime` DATETIME NOT NULL COMMENT '数据起始时间；来源汇表字段',
   `stat_time_day` DATE NULL COMMENT '统计日期；来源汇表字段',
   `stat_time_hour` DATETIME NULL COMMENT '统计小时；来源汇表字段',
@@ -117,7 +112,7 @@ CREATE TABLE IF NOT EXISTS `qianchuan_hourly` (
   `account_type` VARCHAR(512) NULL COMMENT '账户类型；来源汇表字段',
   `stat_platform` VARCHAR(512) NULL COMMENT '统计平台；来源汇表字段',
   `stats_authority` VARCHAR(512) NULL COMMENT '投放账户查询范围；来源汇表字段',
-  `aweme_id` VARCHAR(128) NULL COMMENT '抖音号内部ID；来源汇表字段',
+  `aweme_id` VARCHAR(128) NOT NULL DEFAULT '' COMMENT '抖音号内部ID；空字符串表示账户全量',
   `aweme_show_id` VARCHAR(128) NULL COMMENT '手机端可见抖音号；来源汇表字段',
   `aweme_nick_name` VARCHAR(512) NULL COMMENT '抖音昵称；来源汇表字段',
   `room_name` VARCHAR(512) NULL COMMENT '业务直播间名称；来源汇表字段',
@@ -218,13 +213,9 @@ CREATE TABLE IF NOT EXISTS `qianchuan_hourly` (
   `ecp_convert_rate` DECIMAL(65,30) NULL COMMENT '转化率；来源汇表字段',
   `ecp_cpa_platform` DECIMAL(65,30) NULL COMMENT '转化成本；来源汇表字段',
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `scope_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '来源查询范围摘要，不含产品/业务直播间',
-  `scope_json` JSON NOT NULL,
-  `dimension_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_scope_hour_dimension` (`scope_key`,`stat_datetime`,`dimension_key`),
+  UNIQUE KEY `uk_account_hour_aweme` (`advertiser_id`,`stat_datetime`,`aweme_id`),
   KEY `idx_account_hour` (`advertiser_id`,`stat_datetime`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
 ```
@@ -261,7 +252,6 @@ CREATE TABLE IF NOT EXISTS `pingan_stats` (
   `channel` VARCHAR(128) NOT NULL COMMENT 'merchantChannel' ,
   `observed_hour` DATETIME NOT NULL COMMENT '实际观察时刻所属小时，非历史回补小时',
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_day_observation` (`channel`,`startDate`,`observed_hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
@@ -283,7 +273,6 @@ CREATE TABLE IF NOT EXISTS `pingan_orders` (
   `channel` VARCHAR(128) NOT NULL COMMENT 'merchantChannel' ,
   `first_seen_at` DATETIME(6) NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_order` (`channel`,`postId`),
   KEY `idx_channel_date` (`channel`,`startDate`)
@@ -350,7 +339,6 @@ CREATE TABLE IF NOT EXISTS `zhongan_stats` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `observed_hour` DATETIME NOT NULL COMMENT '实际观察时刻所属小时，非历史回补小时',
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_platform_dy_session_observation` (`livePlatform`,`dyNo`,`roomId`,`startDate`,`observed_hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
@@ -391,7 +379,6 @@ CREATE TABLE IF NOT EXISTS `zhongan_orders` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `first_seen_at` DATETIME(6) NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_platform_dy_order` (`livePlatform`,`dyNo`,`orderNo`),
   KEY `idx_platform_dy_date` (`livePlatform`,`dyNo`,`startDate`)
@@ -488,9 +475,9 @@ staffhub/
 
 ### 3.1 目标、数据汇和依赖
 
-目录 [marketing/](marketing/)，发行包 `live-collector-marketing`，命令 `marketing`，Python 3.11+。依赖本目录锁定的 HTTP、MySQL 和 utils 包，不安装浏览器或短信 SDK。只采集指定投放账户，可选择一个实际主播查询范围；产品和业务直播间不参与身份、请求或写入。
+目录 [marketing/](marketing/)，发行包 `live-collector-marketing`，命令 `marketing`，Python 3.11+。依赖本目录锁定的 HTTP、MySQL 和 utils 包，不安装浏览器或短信 SDK。只采集指定投放账户的账户级统计；不提供主播筛选参数。产品和业务直播间不参与身份、请求或写入。
 
-输出 [marketing_hourly](marketing/schema.sql)，42 列；字段映射见 [fields.json](marketing/fields.json)。根据 smart/legacy 查询可用字段元数据，再请求对应契约指标；不支持必需字段时失败，不静默降级为部分汇表。
+输出 [marketing_stats](marketing/schema.sql)，42 列；字段映射见 [fields.json](marketing/fields.json)。根据 smart/legacy 查询可用字段元数据，再请求对应契约指标；不支持必需字段时失败，不静默降级为部分汇表。
 
 ### 3.2 配置
 
@@ -518,7 +505,6 @@ staffhub/
 | --credential | check-auth / authorize / collect | default | 选择本应用别名 |
 | --advertise-id | check-auth / authorize / collect | 必填，正整数文本 | 实际账户权限探测、报表查询及输出 |
 | --version | check-auth / authorize / collect | smart；可选 legacy | 选择营销数据主题与权限探测方式 |
-| --aweme-id | collect | 可选 | 实际抖音显示号筛选；省略为账户全量 |
 | --start / --end | collect | 成对可选，默认上一完整小时 | 北京时间整小时半开区间，最多 7 天，结束不晚于当前整点 |
 | --dry-run | collect | false | 只输出计划 |
 
@@ -550,7 +536,7 @@ uv run marketing collect --advertise-id 123 --version smart \
 
 ### 4.1 目标、数据汇和依赖
 
-目录 [qianchuan/](qianchuan/)，发行包 `live-collector-qianchuan`，命令 `qianchuan`，独立 pyproject/uv.lock/.venv。输出 [qianchuan_hourly](qianchuan/schema.sql)，111 列；字段定义见 [fields.json](qianchuan/fields.json)。按账户查询千川小时报表，平台接口按日请求，本源根据 stat_datetime 裁剪回指定小时范围。
+目录 [qianchuan/](qianchuan/)，发行包 `live-collector-qianchuan`，命令 `qianchuan`，独立 pyproject/uv.lock/.venv。输出 [qianchuan_stats](qianchuan/schema.sql)，111 列；字段定义见 [fields.json](qianchuan/fields.json)。按账户查询千川小时报表，平台接口按日请求，本源根据 stat_datetime 裁剪回指定小时范围。
 
 ### 4.2 配置
 
@@ -758,15 +744,16 @@ Task 仅含 task_id/source/credential/account_id/options；account_id 只供广�
 - 根目录 scripts 是独立项目集合；调度位于 schdule，读取已同步 MySQL 的关联查询投影。
 - 旧产品/房间参数、JSON 任务文件及旧共享事实表接口停止作为新脚本协议。主规格和操作文档统一引用本文。
 - init-db 只创建新表，不自动删除旧表、不自动从 live_ad_hourly/live_policy_snapshot/live_policy_order 回填；CREATE IF NOT EXISTS 不负责升级已经存在的同名异构表。迁移旧数据需单独制定映射并验证范围去重。
+- 本版广告新表统一使用 stats 后缀。已有数据库的改名、删除旧列及唯一键迁移需要单独执行；init-db 不会迁移历史数据。历史广告数据可能有重叠范围或不同版本，需先确定保留口径，不能直接删列后机械添加唯一键。
 - 尚未确认的字段映射明确留空或 JSON；列定义不因此删减。映射完成应升级本类型字段契约和测试，维护对应 schema 迁移。
 - 本版的离线检查不代表已经完成生产授权、真实平台字段覆盖或 MySQL 执行验收。
 
 ## 8. 验收清单与证据
 
-1. 六张源汇表逐列覆盖 266 个原字典字段，列名/顺序一致；来源未知字段不丢弃，原始 JSON 可追溯。
+1. 六张源汇表逐列覆盖 266 个原字典字段，列名/顺序一致；只写入已定义的业务列及必要记录/观察时间列；不保存完整原始响应和查询摘要。
 2. 四个目录分别从自己的 uv.lock 安装，在各自 .venv 执行入口；移除/阻断 schdule 导入仍能 dry-run。
 3. 每个类型的 check-auth、authorize、collect 独立可调用；auth/dry-run 不要求 MySQL；init-db 不要求业务查询参数。
-4. 营销只传 advertise_id 即可生成账户任务；传 product-id/room-id 等无用途参数明确报错。千川、平安、众安只接受本节列明的 CLI 参数。
+4. 营销只传 advertise_id 即可生成账户任务；传 product-id/room-id/aweme-id 等无用途参数明确报错。千川、平安、众安只接受本节列明的 CLI 参数。
 5. 授权缺失/到期、应用不匹配、Cookie 缺少、分页缺页/重复、数量变化、字段不支持都不能报告采集成功。
 6. 重跑不重复，同源范围串行；失败事务回滚；来源时间与观察时间分开；订单首次时间不被更新覆盖。
 7. 主规格只维护整体业务关系和调度，不复制本规格中的 DDL、参数或平台内部流程。

@@ -1,6 +1,6 @@
 -- MySQL 8.0.16+; source-owned typed data tables. No business-directory foreign keys.
 
-CREATE TABLE IF NOT EXISTS `marketing_hourly` (
+CREATE TABLE IF NOT EXISTS `marketing_stats` (
   `stat_time_hour` DATETIME NOT NULL COMMENT '时间-小时；来源汇表字段',
   `stat_time_day` DATE NULL COMMENT '时间-天；来源汇表字段',
   `stat_time_month` CHAR(7) NULL COMMENT '时间-月；来源汇表字段',
@@ -44,12 +44,7 @@ CREATE TABLE IF NOT EXISTS `marketing_hourly` (
   `deep_convert_cost` DECIMAL(65,30) NULL COMMENT '深度转化成本(元)；来源汇表字段',
   `deep_convert_rate` DECIMAL(65,30) NULL COMMENT '深度转化率；来源汇表字段',
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `scope_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '来源查询范围摘要，不含产品/业务直播间',
-  `scope_json` JSON NOT NULL,
-  `dimension_key` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_scope_hour_dimension` (`scope_key`,`stat_time_hour`,`dimension_key`),
-  KEY `idx_account_hour` (`advertiser_id`,`stat_time_hour`)
+  UNIQUE KEY `uk_account_hour` (`advertiser_id`,`stat_time_hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;

@@ -52,7 +52,7 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(ScheduleError):build_plan([binding,replace(binding,room_id='other')],adapter)
 
     def test_full_and_filtered_account_scopes_are_rejected(self):
-        targets,adapter=plan();binding=targets[0].binding
+        targets,adapter=plan();binding=targets[3].binding
         with self.assertRaises(ScheduleError):
             build_plan([binding,replace(binding,options={'aweme_id':'demo'})],adapter)
 

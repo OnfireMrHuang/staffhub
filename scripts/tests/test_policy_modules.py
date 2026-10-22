@@ -119,6 +119,11 @@ class PolicyModules(unittest.TestCase):
             self.assertEqual(connection.rollbacks, 0)
             self.assertIn('collector_run', connection.statements[-1][0])
             self.assertNotIn('first_seen_at=VALUES', connection.statements[0][0])
+            sql, params = connection.statements[0]
+            self.assertEqual(sql.count('%s'), len(params))
+            for removed in ('raw_payload', 'scope_key', 'scope_json', 'dimension_key'):
+                self.assertNotIn('`'+removed+'`', sql)
+            self.assertFalse(any(isinstance(value, str) and '"raw":' in value for value in params))
             failed = Connection(fail=True)
             with self.assertRaises(StorageError): module.Repository(failed).write(route, window, batch)
             self.assertEqual((failed.commits, failed.rollbacks), (0, 1))

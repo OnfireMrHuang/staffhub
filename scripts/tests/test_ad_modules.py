@@ -19,7 +19,7 @@ class AdModuleTests(unittest.TestCase):
                 self.assertEqual(contract['source'], source)
                 self.assertTrue(contract['fields'])
                 code = (ROOT.parent / 'scripts' / source / 'repository.py').read_text()
-                self.assertIn('DELETE FROM `'+source+'_hourly`', code)
+                self.assertIn('DELETE FROM `'+source+'_stats`', code)
                 self.assertIn('INSERT INTO `', code)
 
     def test_ad_packages_have_no_live_data_dependency(self):
@@ -128,8 +128,8 @@ class AdBehaviorTests(unittest.TestCase):
                         repository.write(route, window, batch)
                         statements = [call.args[0] for call in cursor.execute.call_args_list]
                         self.assertEqual(len(statements), 3)
-                        self.assertTrue(statements[0].startswith('DELETE FROM `'+source+'_hourly`'))
-                        self.assertTrue(statements[1].startswith('INSERT INTO `'+source+'_hourly`'))
+                        self.assertTrue(statements[0].startswith('DELETE FROM `'+source+'_stats`'))
+                        self.assertTrue(statements[1].startswith('INSERT INTO `'+source+'_stats`'))
                         self.assertTrue(statements[2].startswith('INSERT INTO collector_run'))
                         self.assertIn('123', cursor.execute.call_args_list[1].args[1])
                         connection.commit.assert_called_once()

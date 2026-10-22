@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS `pingan_stats` (
   `channel` VARCHAR(128) NOT NULL COMMENT 'merchantChannel' ,
   `observed_hour` DATETIME NOT NULL COMMENT '实际观察时刻所属小时，非历史回补小时',
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_day_observation` (`channel`,`startDate`,`observed_hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
@@ -47,7 +46,6 @@ CREATE TABLE IF NOT EXISTS `pingan_orders` (
   `channel` VARCHAR(128) NOT NULL COMMENT 'merchantChannel' ,
   `first_seen_at` DATETIME(6) NOT NULL,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
-  `raw_payload` JSON NOT NULL COMMENT '保留原始响应及采集上下文',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_order` (`channel`,`postId`),
   KEY `idx_channel_date` (`channel`,`startDate`)

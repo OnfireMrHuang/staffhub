@@ -1,8 +1,8 @@
 """Source-owned typed facts, idempotency, transaction and DDL."""
 from pathlib import Path
-from scripts.utils.database import Database, encode, digest
+from scripts.utils.database import Database, digest
 from scripts.utils.columns import values
-from scripts.utils.model import DataError, timestamp, parse_time
+from scripts.utils.model import DataError, timestamp
 from .task import validate
 from .contracts import contract, project_fields
 from scripts.utils import database
@@ -30,15 +30,21 @@ class Repository(Database):
         validate(task)
         if batch.snapshots or batch.orders: raise DataError('广告采集器不能写保单记录')
         definition=contract()
-        extras=('scope_key','scope_json','dimension_key','observed_at','raw_payload')
-        statement=insert_sql(definition,extras)
-        scope={k:v for k,v in task.options.items() if k in ('version','account_scope','aweme_id','aweme_ids')}
+        statement=insert_sql(definition,('observed_at',))
+        records=[]
+        hours=set()
+        for row in batch.ads:
+            record=project_fields({'dimensions':row['dimensions'],'metrics':row['metrics']})
+            if record['advertiser_id'] != task.account_id:
+                raise DataError('写入账户与任务不一致')
+            hour=record['stat_time_hour']
+            if not window.contains(hour): raise DataError('写入小时超出任务窗口')
+            if hour in hours: raise DataError('营销账户小时记录重复')
+            hours.add(hour)
+            records.append(values(definition,record)+(batch.observed_at,))
         with self.transaction() as cur:
-            cur.execute('DELETE FROM `marketing_hourly` WHERE `scope_key`=%s AND `stat_time_hour` >= %s AND `stat_time_hour` < %s',
-                        (task.task_id.removeprefix('task-'),timestamp(window.start),timestamp(window.end)))
-            for row in batch.ads:
-                raw={'dimensions':row['dimensions'],'metrics':row['metrics']}
-                record=project_fields(raw)
-                if not window.contains(record['stat_time_hour']): raise DataError('写入小时超出任务窗口')
-                cur.execute(statement,values(definition,record)+(task.task_id.removeprefix('task-'),encode(scope),digest(row['dimensions']),batch.observed_at,encode(raw)))
+            cur.execute('DELETE FROM `marketing_stats` WHERE `advertiser_id`=%s AND `stat_time_hour` >= %s AND `stat_time_hour` < %s',
+                        (task.account_id,timestamp(window.start),timestamp(window.end)))
+            for record in records:
+                cur.execute(statement,record)
             self.audit(cur,task,window,0,batch.count,'采集完整')
