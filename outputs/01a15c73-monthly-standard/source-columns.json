@@ -1,0 +1,114 @@
+[
+  {
+    "key": "employeeId",
+    "label": "员工ID"
+  },
+  {
+    "key": "employeeName",
+    "label": "员工名称"
+  },
+  {
+    "key": "departmentId",
+    "label": "部门ID"
+  },
+  {
+    "key": "departmentName",
+    "label": "部门名称"
+  },
+  {
+    "key": "employeeJoinedOn",
+    "label": "入职日期"
+  },
+  {
+    "key": "nonCompeteSigned",
+    "label": "是否签约竞业协议"
+  },
+  {
+    "key": "productId",
+    "label": "产品ID"
+  },
+  {
+    "key": "productName",
+    "label": "产品名称"
+  },
+  {
+    "key": "roomId",
+    "label": "直播间ID"
+  },
+  {
+    "key": "roomName",
+    "label": "直播间名称"
+  },
+  {
+    "key": "roomOpenedOn",
+    "label": "直播间开播时间"
+  },
+  {
+    "key": "year",
+    "label": "年份"
+  },
+  {
+    "key": "month",
+    "label": "月份"
+  },
+  {
+    "key": "hours",
+    "label": "总直播时长"
+  },
+  {
+    "key": "nightHours",
+    "label": "夜班直播时长"
+  },
+  {
+    "key": "nightSessions",
+    "label": "夜班场次"
+  },
+  {
+    "key": "spend",
+    "label": "总消耗"
+  },
+  {
+    "key": "nightSpend",
+    "label": "夜班消耗"
+  },
+  {
+    "key": "premium",
+    "label": "总保费"
+  },
+  {
+    "key": "nightPremium",
+    "label": "夜班保费"
+  },
+  {
+    "key": "roi",
+    "label": "ROI"
+  },
+  {
+    "key": "hourlySpend",
+    "label": "时耗"
+  },
+  {
+    "key": "adCost",
+    "label": "AD成本"
+  },
+  {
+    "key": "policyCost",
+    "label": "保单成本"
+  },
+  {
+    "key": "roiRank",
+    "label": "ROI排名"
+  },
+  {
+    "key": "spendRank",
+    "label": "消耗排名"
+  },
+  {
+    "key": "waitingSalaryDays",
+    "label": "等待薪资天数"
+  },
+  {
+    "key": "past3MonthsAvgHourlyRate",
+    "label": "过去3个月的平均时薪"
+  }
+]

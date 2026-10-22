@@ -2,7 +2,7 @@
 
 从产品和直播间的业务关系出发，采集巨量营销、巨量千川、平安、众安数据。四个来源分别由 `scripts/marketing/`、`qianchuan/`、`pingan/`、`zhongan/` 独立维护，直接接收业务参数并完成鉴权、采集和入库。`scripts/utils/` 提供共用基础能力；`live_data/` 只从 MySQL 业务目录生成计划、调度来源模块及处理失败策略。
 
-先读 [技术规格与架构图](SPEC.md)，再按本说明运行。[主数据模型](MASTER_DATA.md) 说明 Excel 怎样转为业务表；[验证记录](VERIFICATION.md) 区分离线验证与生产联调。
+四类脚本的固定需求、参数、配置与完整数据汇格式见 [独立脚本规格](SCRIPTS_SPEC.md)；整体架构及调度方向见 [主规格](SPEC.md)。业务与物理数据模型尚未定稿，下文建表及目录命令描述当前实现。[主数据模型](MASTER_DATA.md) 说明 Excel 怎样转为业务表；[验证记录](VERIFICATION.md) 区分离线验证与生产联调。
 
 ## 1. 安装和配置
 

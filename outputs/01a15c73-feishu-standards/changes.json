@@ -1,0 +1,1172 @@
+[
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E2",
+    "before": null,
+    "after": "以文本保存 ID，避免长数字精度丢失。新增 SQL 类型为建议的标准层存储类型，不代表源 API 返回类型。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E3",
+    "before": "\n",
+    "after": "名称仅作显示快照，关联与汇总使用 product_id。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E4",
+    "before": "\n",
+    "after": "业务直播间主键，不等同抖音账号 aweme_id 或单场直播 ID。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E5",
+    "before": null,
+    "after": "名称仅作显示快照，关联与汇总使用 room_id。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E6",
+    "before": "\n",
+    "after": "时区 Asia/Shanghai。跨零点直播拆分为两条业务日期记录。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E7",
+    "before": "\n",
+    "after": "沿用原表整点规则。小时内换主播或停播时，需另行确认如何记录不足一小时区间。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E8",
+    "before": "\n",
+    "after": "结束时间为区间右边界，相邻小时不重复计数。24:00 对应次日 00:00。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E9",
+    "before": null,
+    "after": "使用员工主键，不使用抖音号或广告账户 ID。姓名匹配无结果或多结果时待人工确认。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E10",
+    "before": "\n",
+    "after": "匹配后的 host_id 是统计关联键，保留当时姓名用于历史展示。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E11",
+    "before": null,
+    "after": "使用员工主键。姓名匹配无结果或多结果时待人工确认。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E12",
+    "before": "\n",
+    "after": "匹配后的 buyer_id 是统计关联键，保留当时姓名用于历史展示。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E13",
+    "before": null,
+    "after": "使用员工主键。姓名匹配无结果或多结果时待人工确认。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E14",
+    "before": "\n",
+    "after": "匹配后的 control_id 是统计关联键，保留当时姓名用于历史展示。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B15",
+    "before": null,
+    "after": "operator_id"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C15",
+    "before": null,
+    "after": "VARCHAR(64)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "D15",
+    "before": null,
+    "after": "系统关联字段。由运营姓名精确匹配唯一员工，关联 employees.id。保存稳定员工 ID。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E15",
+    "before": null,
+    "after": "建议与其他岗位使用相同姓名规范化规则。是否必填沿用排班配置，未明确前不默认强制。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B16",
+    "before": null,
+    "after": "operator_name"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C16",
+    "before": null,
+    "after": "VARCHAR(100)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "D16",
+    "before": null,
+    "after": "业务字段。保存运营姓名快照，与 operator_id 对应。员工改名不回写已归档记录。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E16",
+    "before": null,
+    "after": "不得将同一员工兼任不同岗位的记录重复累计。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B17",
+    "before": null,
+    "after": "ad_spend"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C17",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E17",
+    "before": "\n",
+    "after": "单位：元。汇总同直播间、同统计时段内互斥的投放账户消耗。以平台原始精度入库，展示可保留两位。缺失不填 0。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B18",
+    "before": null,
+    "after": "video_ad_spend"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C18",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E18",
+    "before": "\n",
+    "after": "单位：元。按账户主数据中有效期内的账户类型筛选短视频投放，属于总消耗分项。可能与智擎版消耗重叠，不可直接相加。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B19",
+    "before": null,
+    "after": "smart_ad_spend"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C19",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E19",
+    "before": null,
+    "after": "单位：元。按 stat_platform（统计平台）筛选巨量营销-智擎版。属于总消耗分项；统计平台与账户类型是不同维度。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B20",
+    "before": null,
+    "after": "abnormal_submitted_orders"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C20",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E20",
+    "before": null,
+    "after": "单位：单。仅记录甲方已判定的注水／异常提交订单。待确认：识别规则、订单去重键、是否已包含在后台订单提交数中。不得自行推算。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B21",
+    "before": null,
+    "after": "subproduct_1_policies"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C21",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E21",
+    "before": null,
+    "after": "单位：份。按产品配置中 1 号链接对应的业务范围统计保单。链接标识及生效期须可追溯；不与总保单量重复累计。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B22",
+    "before": null,
+    "after": "subproduct_1_premium"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C22",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E22",
+    "before": null,
+    "after": "单位：元。与 1 号链接保单量采用相同范围和截止时间。仅接收已确认年化的金额，不把首期实缴保费当成年化保费。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B23",
+    "before": null,
+    "after": "subproduct_2_policies"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C23",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E23",
+    "before": null,
+    "after": "单位：份。按产品配置中 2 号链接对应的业务范围统计保单。链接标识及生效期须可追溯；不与总保单量重复累计。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B24",
+    "before": null,
+    "after": "subproduct_2_premium"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C24",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E24",
+    "before": null,
+    "after": "单位：元。与 2 号链接保单量采用相同范围和截止时间。仅接收已确认年化的金额，不把首期实缴保费当成年化保费。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B25",
+    "before": null,
+    "after": "subproduct_3_policies"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C25",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E25",
+    "before": null,
+    "after": "单位：份。按产品配置中 3 号链接对应的业务范围统计保单。链接标识及生效期须可追溯；不与总保单量重复累计。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B26",
+    "before": null,
+    "after": "subproduct_3_premium"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C26",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E26",
+    "before": null,
+    "after": "单位：元。与 3 号链接保单量采用相同范围和截止时间。仅接收已确认年化的金额，不把首期实缴保费当成年化保费。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B27",
+    "before": null,
+    "after": "family_policy_count"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C27",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E27",
+    "before": null,
+    "after": "单位：份。按甲方家庭单分类统计。待确认：家庭订单与保单份数的关系、是否与 1～3 号链接分项重叠。不可额外叠加至总保单量。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B28",
+    "before": null,
+    "after": "policy_count"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C28",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E28",
+    "before": null,
+    "after": "单位：份。甲方保单看板中同直播间、同统计时段的保单总量，非广告保险支付次数。状态与撤单／退保处理沿用该产品已确认口径。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B29",
+    "before": null,
+    "after": "annualized_premium"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C29",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E29",
+    "before": null,
+    "after": "单位：元。与总保单量采用相同范围和截止时间的年化保费。已年化金额不得再次乘 12；不等于现金实收金额。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B30",
+    "before": null,
+    "after": "ad_roi"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C30",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E30",
+    "before": null,
+    "after": "单位：倍。按同范围 annualized_premium ÷ ad_spend 计算。汇总先加总分子分母再计算；分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B31",
+    "before": null,
+    "after": "business_roi"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C31",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E31",
+    "before": "每个甲方的服务费不一样，所有业务roi的数也不一样",
+    "after": "每个甲方的服务费不一样，所有业务roi的数也不一样\n补充：单位：倍。待确认原公式中“小时”是否指服务费单价（元／小时）。建议：年化保费 ÷（直播时长 × 已确认单价 + 总消耗）。按产品及生效期配置，未确认不计算。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B32",
+    "before": null,
+    "after": "premium_per_policy"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C32",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E32",
+    "before": null,
+    "after": "单位拟定：元／份。待确认：原公式“保单÷保单量”未定义分子。现有统一标准建议采用总年化保费 ÷ 总保单量，业务确认后启用；分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B33",
+    "before": null,
+    "after": "cost_per_form"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C33",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E33",
+    "before": null,
+    "after": "单位：元／次。ad_spend ÷ ad_form_count。需先确认表单数是否含附加创意表单；分子分母归因范围一致，分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B34",
+    "before": null,
+    "after": "cost_per_ad_payment"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C34",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E34",
+    "before": null,
+    "after": "单位：元／次。ad_spend ÷ ad_insurance_payments。分母为广告后台保险支付次数，非甲方保单量；分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B35",
+    "before": null,
+    "after": "cost_per_policy"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C35",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E35",
+    "before": null,
+    "after": "单位：元／份。待确认“总花费”是否仅指总消耗。现有统一标准采用 ad_spend ÷ policy_count；含服务费的综合 CAC 应另行定义。分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B36",
+    "before": null,
+    "after": "cost_per_ad_click"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C36",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E36",
+    "before": null,
+    "after": "单位：元／次。ad_spend ÷ ad_clicks，仅使用同一投放范围的点击数。分母为 0 或缺失则留空，汇总后重算。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B37",
+    "before": null,
+    "after": "cost_per_mille"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C37",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E37",
+    "before": null,
+    "after": "单位：元／千次。ad_spend ÷ ad_impressions × 1000。分母为 0 或缺失则留空，汇总后重算。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B38",
+    "before": null,
+    "after": "cost_per_view"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C38",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E38",
+    "before": null,
+    "after": "单位：元／次。待确认原“有效观看次数”是否等于本表竞价观看数，以及有效阈值。确认前不得直接以进房人数或总观看数替代分母。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B39",
+    "before": null,
+    "after": "cost_per_component_click"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C39",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E39",
+    "before": null,
+    "after": "单位：元／次。ad_spend ÷ component_clicks。分母为 0 或缺失则留空，汇总后重算；不混用组件点击人数。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B40",
+    "before": null,
+    "after": "interactions_per_1000_spend"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C40",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E40",
+    "before": null,
+    "after": "按原公式为每千元互动数量，非百分比。待确认互动数按次数还是人数、事件范围及去重规则；若按人数应另用 interaction_users_per_1000_spend。消耗为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B41",
+    "before": null,
+    "after": "form_to_ad_payment_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C41",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E41",
+    "before": null,
+    "after": "ad_insurance_payments ÷ ad_form_count。存小数，显示百分比。原公式与“保单转化率”重复，不能作为两个独立转化指标累计。分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B42",
+    "before": null,
+    "after": "ad_click_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C42",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E42",
+    "before": null,
+    "after": "ad_clicks ÷ ad_impressions。存小数，如 0.125 显示 12.5%，不重复乘 100。分母为 0 或缺失则留空，汇总后重算。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B43",
+    "before": null,
+    "after": "long_view_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C43",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E43",
+    "before": null,
+    "after": "存小数，显示百分比。待确认分母“总有效观看次数”与竞价观看数是否同口径，且分子须为严格超过 1 分钟，不混用满 60 秒人数。分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B44",
+    "before": null,
+    "after": "view_follow_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C44",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E44",
+    "before": null,
+    "after": "new_followers ÷ live_views，存小数、显示百分比。分子分母须同一投放归因范围；分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B45",
+    "before": null,
+    "after": "view_comment_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C45",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E45",
+    "before": null,
+    "after": "comment_count ÷ live_views，存小数、显示百分比。评论次数与评论人数不可互换；分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B46",
+    "before": null,
+    "after": "view_to_component_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C46",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E46",
+    "before": null,
+    "after": "component_clicks ÷ live_views，存小数、显示百分比。原表采用观看数作分母，不可直接套用巨量营销 live_component_click_rate（分母为组件曝光数）。分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B47",
+    "before": null,
+    "after": "component_to_order_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C47",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E47",
+    "before": null,
+    "after": "按原定义为业务提交订单数 ÷ component_clicks。待确认分子是否取“后台订单提交数”及是否排除注水订单。存小数，分母为 0 或缺失则留空。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B48",
+    "before": null,
+    "after": "policy_conversion_rate"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C48",
+    "before": null,
+    "after": "DECIMAL(18,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E48",
+    "before": null,
+    "after": "待确认：原公式实际为保险支付数 ÷ 表单数，与 AD转化率重复，不是甲方保单转化率。暂留独立标识追溯原行，禁止自行替换为保单数 ÷ 订单数或直接映射甲方 policyTransRate。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B49",
+    "before": null,
+    "after": "ad_form_count"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C49",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E49",
+    "before": null,
+    "after": "来源为投放后台。待确认采用 form、form_and_submit_count 还是计费时间 attribution_form，三者不可混用。标准层保留平台数值精度；缺失不填 0。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B50",
+    "before": null,
+    "after": "ad_insurance_payments"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C50",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E50",
+    "before": null,
+    "after": "广告后台保险支付次数。巨量营销候选来源 premium_payment_count；同一归因时间口径下汇总，非业务保单量。千川无同名字段时不得用通用成交或转化指标替代。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B51",
+    "before": null,
+    "after": "ad_impressions"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C51",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E51",
+    "before": null,
+    "after": "广告展示次数。巨量营销来源 show_cnt，千川对应 show_cnt。标准层保留平台数值精度，确认整数后可按整数展示。只汇总互斥账户及时间范围。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B52",
+    "before": null,
+    "after": "ad_clicks"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C52",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E52",
+    "before": null,
+    "after": "广告点击次数。巨量营销来源 click_cnt，千川对应 click_cnt。标准层保留平台数值精度；不混用点击人数或组件点击数。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B53",
+    "before": null,
+    "after": "live_views"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C53",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E53",
+    "before": null,
+    "after": "仅投放后台竞价归因的直播观看量。巨量营销候选来源 luban_live_enter_cnt（进入直播间次数），须核实与原“竞价观看”流量范围一致；不是去重人数或全场总观看量。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B54",
+    "before": null,
+    "after": "long_views"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C54",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E54",
+    "before": null,
+    "after": "巨量营销候选来源 live_watch_one_minute_count，为单次观看时长严格超过 1 分钟的次数。不同平台须校准阈值、人数／次数及归因范围。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B55",
+    "before": null,
+    "after": "component_clicks"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C55",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E55",
+    "before": null,
+    "after": "巨量营销来源 live_component_click_count，小风车与卡片组件点击总次数。千川商品点击须核实是否属于同一种组件，不自动等同。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B56",
+    "before": null,
+    "after": "new_followers"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C56",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E56",
+    "before": null,
+    "after": "巨量营销来源 luban_live_follow_cnt，为投放归因范围内新增关注数。不同平台须核对归因时间和去重规则，不与全场自然流关注混加。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B57",
+    "before": null,
+    "after": "comment_count"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C57",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E57",
+    "before": null,
+    "after": "巨量营销来源 luban_live_comment_cnt，为输入评论并发送的次数。与去重评论人数区分，缺失不填 0。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B58",
+    "before": null,
+    "after": "share_count"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C58",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E58",
+    "before": null,
+    "after": "巨量营销来源 luban_live_share_cnt，为点击分享的次数。与分享人数区分，按同一归因时间和流量范围统计。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B59",
+    "before": null,
+    "after": "submitted_orders"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C59",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E59",
+    "before": null,
+    "after": "单位：单。甲方保单看板的业务订单提交量，非广告表单数。待确认订单唯一键、重复提交及注水订单处理；累计快照不能逐小时直接相加。"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "B60",
+    "before": null,
+    "after": "interaction_count"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "C60",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一时报表头字段",
+    "cell": "E60",
+    "before": null,
+    "after": "来源为企业号大屏。待确认统计对象为次数还是去重人数，以及点赞／评论／分享／关注等事件范围。不可自行把事件求和代替大屏指标，也不可直接将去重人数逐时相加。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B2",
+    "before": null,
+    "after": "ad_spend"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C2",
+    "before": null,
+    "after": "DECIMAL(20,6)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D2",
+    "before": "投放后台",
+    "after": "投放后台。单位：元。汇总同直播间、同统计时段内互斥的投放账户消耗。以平台原始精度入库，展示可保留两位。缺失不填 0。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B3",
+    "before": null,
+    "after": "live_duration_hours"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C3",
+    "before": null,
+    "after": "DECIMAL(10,4)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D3",
+    "before": "时报",
+    "after": "时报。单位：小时。按同一业务日期、直播间的时报开始与结束时间计算实际有效直播区间并集，剔除停播与重叠。多人岗位记录或多个账户不得重复累加时长。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B4",
+    "before": null,
+    "after": "live_time_ranges"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C4",
+    "before": null,
+    "after": "VARCHAR(1000)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D4",
+    "before": "时报",
+    "after": "时报。北京时间 HH:mm-HH:mm，多个区间用中文分号分隔，如 09:00-12:00；14:00-18:00。从时报排序、去重并合并连续区间；跨零点按业务日期拆分，24:00 仅作当日结束标记。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B5",
+    "before": null,
+    "after": "monthly_premium"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C5",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D5",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：元。待确认是月缴首期实缴、月缴年化还是其他后台口径。暂用中性字段名保留原义；确认前不乘 12、不与年缴保费求和替代总年化保费。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B6",
+    "before": null,
+    "after": "annual_payment_premium"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C6",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D6",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：元。甲方看板按年缴方式统计的保费，非年缴保单数。须与总年化保费采用相同状态和截止时间；确认周期口径后再参与分项对账。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B7",
+    "before": null,
+    "after": "subproduct_1_policies"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C7",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D7",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：份。按产品配置中 1 号链接对应的业务范围统计保单。链接标识及生效期须可追溯；不与总保单量重复累计。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B8",
+    "before": null,
+    "after": "subproduct_1_premium"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C8",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D8",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：元。与 1 号链接保单量采用相同范围和截止时间。仅接收已确认年化的金额，不把首期实缴保费当成年化保费。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B9",
+    "before": null,
+    "after": "subproduct_2_policies"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C9",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D9",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：份。按产品配置中 2 号链接对应的业务范围统计保单。链接标识及生效期须可追溯；不与总保单量重复累计。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B10",
+    "before": null,
+    "after": "subproduct_2_premium"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C10",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D10",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：元。与 2 号链接保单量采用相同范围和截止时间。仅接收已确认年化的金额，不把首期实缴保费当成年化保费。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B11",
+    "before": null,
+    "after": "subproduct_3_policies"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C11",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D11",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：份。按产品配置中 3 号链接对应的业务范围统计保单。链接标识及生效期须可追溯；不与总保单量重复累计。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B12",
+    "before": null,
+    "after": "subproduct_3_premium"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C12",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D12",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：元。与 3 号链接保单量采用相同范围和截止时间。仅接收已确认年化的金额，不把首期实缴保费当成年化保费。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B13",
+    "before": null,
+    "after": "family_policy_count"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C13",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D13",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：份。按甲方家庭单分类统计。待确认：家庭订单与保单份数的关系、是否与 1～3 号链接分项重叠。不可额外叠加至总保单量。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B14",
+    "before": null,
+    "after": "policy_count"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C14",
+    "before": null,
+    "after": "BIGINT"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D14",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：份。甲方保单看板中同直播间、同统计时段的保单总量，非广告保险支付次数。状态与撤单／退保处理沿用该产品已确认口径。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "B15",
+    "before": null,
+    "after": "annualized_premium"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "C15",
+    "before": null,
+    "after": "DECIMAL(18,2)"
+  },
+  {
+    "sheet": "统一日报表头字段",
+    "cell": "D15",
+    "before": "甲方保单看板",
+    "after": "甲方保单看板。单位：元。与总保单量采用相同范围和截止时间的年化保费。已年化金额不得再次乘 12；不等于现金实收金额。 日报按同一业务日期、直播间归集；只有互斥小时增量可求和，累计快照需取对应日值或已核实的差分。"
+  }
+]

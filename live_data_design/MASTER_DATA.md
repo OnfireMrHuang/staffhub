@@ -1,6 +1,6 @@
 # 来源导入与业务目录
 
-本说明对应 [SPEC.md](SPEC.md) v3。live_route仅是关系的抽象表达；程序既不创建实体live_route，也不让Excel排版决定业务表结构。
+本说明记录当前候选实现，不是最终数据库设计；整体方向见 [SPEC.md](SPEC.md) v4，四类脚本的固定输入和输出见 [SCRIPTS_SPEC.md](SCRIPTS_SPEC.md)。以下表名、主键算法及布局适配方式待物理模型确认后可调整。live_route仅是关系的抽象表达；程序既不创建实体live_route，也不让Excel排版决定业务表结构。
 
 ## 从Excel到业务模型
 
