@@ -1,0 +1,24 @@
+[project]
+name = "live-collector-utils"
+version = "0.2.0"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.28,<0.29",
+  "filelock>=3.16,<4",
+  "python-dotenv>=1,<2",
+  "PyMySQL[rsa]>=1.1,<2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scripts.utils", "scripts.utils.oceanengine"]
+[tool.setuptools.package-dir]
+"scripts.utils" = "."
+"scripts.utils.oceanengine" = "oceanengine"
+
+[tool.setuptools.package-data]
+"scripts.utils" = ["*.json", "*.sql"]
+"scripts.utils.oceanengine" = ["*.json"]

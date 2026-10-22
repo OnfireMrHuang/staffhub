@@ -5,12 +5,12 @@ import unittest
 
 import httpx
 
-from scripts import registry
+import registry
 from scripts.pingan.contracts import clean_pingan_summary
 from scripts.marketing.collector import Collector as MarketingCollector
 from scripts.pingan.collector import Collector as PinganCollector
 from scripts.zhongan.collector import Collector as ZhonganCollector
-from scripts.utils.model import Route, Window, DataError
+from scripts.utils.model import Task as Route, Window, DataError
 from scripts.utils.transport import Transport
 
 
@@ -118,7 +118,7 @@ class FieldContractTests(unittest.TestCase):
                 'metrics':[{'field':'stat_cost'},{'field':'click_cnt'},{'field':'show_cnt'}]}]}})
         for version in ('smart', 'legacy'):
             transport = Transport(httpx.Client(transport=httpx.MockTransport(respond)), retries=0)
-            task = Route('r','p','room','marketing','cred','123',{'version':version,'account_scope':True})
+            task = Route('r','marketing','cred','123',{'version':version,'account_scope':True})
             with self.assertRaisesRegex(DataError,'缺少请求字段'):
                 MarketingCollector(transport).collect(task, Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),{'access_token':'test'})
         self.assertTrue(all('/config/' in path for path in seen))
@@ -132,32 +132,24 @@ class FieldContractTests(unittest.TestCase):
                   'orderInfo':{'orderInfoList':[],'totalCount':0,'totalPage':0}}[endpoint]
             return httpx.Response(200,json={'code':200,'data':data})
         transport=Transport(httpx.Client(transport=httpx.MockTransport(respond)),retries=0)
-        task=Route('r','p','room','pingan','cred','',{'channel':'test'})
+        task=Route('r','pingan','cred','',{'channel':'test'})
         batch=PinganCollector(transport).collect(task,Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),{})
         metrics=batch.snapshots[0]['metrics']
         self.assertEqual(metrics['summary'][0]['annualPremium'],'153260.28')
         self.assertIsNone(metrics['_collection']['derived']['calcBindCardRate'])
-        self.assertEqual(project_fields('pingan_stats',metrics)['policyTransRate'],Decimal('25.84'))
+        self.assertEqual(project_fields('pingan_stats',metrics)['policyTransRate'],'25.84')
 
-    def test_checked_in_views_match_contract_and_guard_numeric_conversion(self):
-        rendered_sources = []
-        def sql_body(value):
-            return '\n'.join(line for line in value.splitlines() if not line.lstrip().startswith('--')).strip()
-        for source in ('marketing', 'qianchuan', 'pingan', 'zhongan'):
-            path = Path(__file__).resolve().parents[1] / 'scripts' / source
-            sql_part = (path / 'schema.sql').read_text()
-            rendered = registry.get(source).contracts.render_source_views()
-            rendered_sources.append(rendered)
-            self.assertEqual(sql_body(sql_part[sql_part.index('CREATE OR REPLACE VIEW'):]),
-                             sql_body(rendered[rendered.index('CREATE OR REPLACE VIEW'):]))
-        sql = '\n'.join(rendered_sources)
-        self.assertEqual(sql.count('CREATE OR REPLACE VIEW'), 6)
-        self.assertIn("'$.", sql)
-        self.assertIn('REGEXP_LIKE', sql)
-        self.assertIn('DECIMAL(65,30)', sql)
-        self.assertIn('NULL AS `adSpend`', sql)
-        self.assertIn('JSON_LENGTH', sql)
-        self.assertNotIn('COALESCE', sql)
+    def test_checked_in_ddl_contains_every_typed_field(self):
+        for source in ('marketing','qianchuan','pingan','zhongan'):
+            path=Path(__file__).resolve().parents[2]/'scripts'/source
+            sql=(path/'schema.sql').read_text()
+            definitions=json.loads((path/'fields.json').read_text())['datasets']
+            for dataset,definition in definitions.items():
+                self.assertIn('CREATE TABLE IF NOT EXISTS `'+dataset+'`',sql)
+                for field in definition['fields']:
+                    self.assertIn('`'+field['name']+'` '+field['sql_type'],sql)
+            self.assertNotIn('CREATE OR REPLACE VIEW',sql)
+            self.assertIn('`raw_payload` JSON NOT NULL',sql)
 
     def test_collectors_request_full_defaults_and_keep_request_context(self):
         for source in ('marketing', 'qianchuan'):
@@ -171,7 +163,7 @@ class FieldContractTests(unittest.TestCase):
                 row = {'stat_datetime': '2026-10-20 09:00:00', 'stat_cost': '1.23001', 'new_metric': 7} if source == 'qianchuan' else {'dimensions': {'stat_time_hour': '2026-10-20 09:00:00'}, 'metrics': {'stat_cost': '1.23001', 'new_metric': 7}}
                 return httpx.Response(200, json={'code': 0, 'data': {'list' if source == 'qianchuan' else 'rows': [row], 'page_info': {'total_page': 1, 'total_number': 1}}})
             transport = Transport(httpx.Client(transport=httpx.MockTransport(respond)), retries=0)
-            route = Route('r', 'p', 'room', source, 'cred', '123', {'account_scope': True})
+            route = Route('r', source, 'cred', '123', {'account_scope': True})
             batch = registry.get(source).Collector(transport).collect(route, Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00'), {'access_token': 'test'})
             self.assertEqual(requested, default_metrics(source))
             self.assertEqual(batch.ads[0]['metrics']['new_metric'], 7)
@@ -186,7 +178,7 @@ class FieldContractTests(unittest.TestCase):
                     'getOrderList': [{'orderNo': 'o1', 'nextPage': None}]}[endpoint]
             return httpx.Response(200, json={'success': True, 'data': data})
         transport = Transport(httpx.Client(transport=httpx.MockTransport(respond)), retries=0)
-        route = Route('r', 'p', 'room', 'zhongan', 'cred', '', {'dy_no': 'abc'})
+        route = Route('r', 'zhongan', 'cred', '', {'dy_no': 'abc'})
         batch = ZhonganCollector(transport).collect(route, Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00'), {})
         self.assertIn('nextPage', batch.orders[0]['payload'])
         self.assertEqual(batch.snapshots[0]['metrics']['unknown'], {'x': 1})

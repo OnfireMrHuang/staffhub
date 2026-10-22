@@ -12,7 +12,7 @@ import httpx
 from scripts.utils.auth import BrowserAuth, OAuthAuth, private_json
 from scripts.utils.config import Config
 from scripts.utils.database import Database
-from scripts.utils.model import AuthError, Batch, ConfigError, Route, Scope, StorageError, Window
+from scripts.utils.model import AuthError, Batch, ConfigError, Task as Route, Scope, StorageError, Window
 from scripts.utils.runtime import CollectionService
 
 
@@ -37,11 +37,11 @@ class CommonDatabaseTests(unittest.TestCase):
         for source in ('pingan', 'zhongan'):
             with self.subTest(source=source):
                 connection = Connection()
-                Database(connection).init_schema_files(root / 'scripts' / source / 'schema.sql')
+                Database(connection).init_schema_files(root.parent / 'scripts' / source / 'schema.sql')
                 statements = ['\n'.join(line for line in sql.splitlines()
                                         if not line.lstrip().startswith('--')).strip()
                               for sql, _ in connection.cur.statements]
-                self.assertEqual(len(statements), 4, 'two fact tables and two views')
+                self.assertEqual(len(statements), 2, 'two typed source tables')
                 self.assertTrue(all(sql.startswith('CREATE ') for sql in statements), statements)
                 self.assertEqual(connection.events, ['commit'])
 
@@ -53,7 +53,7 @@ class CommonDatabaseTests(unittest.TestCase):
             def rollback(self): raise RuntimeError('driver rollback details')
         with self.assertRaises(StorageError) as caught:
             Database(FailedConnection()).init_schema_files(
-                Path(__file__).resolve().parents[1] / 'scripts/utils/audit.sql')
+                Path(__file__).resolve().parents[2] / 'scripts/utils/audit.sql')
         self.assertNotIn('driver', str(caught.exception))
 
     def test_transaction_commits_only_after_body(self):
@@ -87,11 +87,11 @@ class CommonDatabaseTests(unittest.TestCase):
 
     def test_failure_audit_does_not_write_facts(self):
         connection = Connection()
-        Database(connection).failure(Route('r', 'p', 'room', 'marketing', 'm'),
+        Database(connection).failure(Route('r', 'marketing', 'm'),
                                      Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00'),
                                      AuthError('授权缺失'))
         sql, params = connection.cur.statements[0]
-        self.assertIn('INSERT INTO live_run', sql)
+        self.assertIn('INSERT INTO collector_run', sql)
         self.assertEqual(params[6:8], (3, 0))
         self.assertEqual(connection.events, ['begin', 'commit'])
 
@@ -103,14 +103,14 @@ class GenericAuthTests(unittest.TestCase):
             'settings': {'state_dir': 'runtime'},
             'credentials': {'m': {'source': 'marketing', 'env_prefix': 'TEST_'},
                             'p': {'source': 'pingan'}}}, [])
-        self.route = Route('r', 'p', 'room', 'marketing', 'm', '1', {'account_scope': True})
+        self.route = Route('r', 'marketing', 'm', '1', {'account_scope': True})
         class Auth(OAuthAuth): source = 'marketing'
         self.Auth = Auth
 
     def test_source_subclass_cannot_use_other_profile(self):
-        wrong = Route('r', 'p', 'room', 'pingan', 'p')
+        wrong = Route('r', 'pingan', 'p')
         with self.assertRaises(AuthError): self.Auth(self.config, probe=lambda *_: True).ensure(wrong)
-        wrong = Route('r', 'p', 'room', 'marketing', 'p')
+        wrong = Route('r', 'marketing', 'p')
         with self.assertRaises(AuthError): self.Auth(self.config, probe=lambda *_: True).ensure(wrong)
 
     def test_rotation_is_saved_before_source_probe(self):
@@ -126,7 +126,8 @@ class GenericAuthTests(unittest.TestCase):
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_expected_application_checked_before_probe(self):
-        route = Route('r', 'p', 'room', 'marketing', 'm', '1', {'expected_app_id': '2'})
+        self.config.credentials['m']['app_id']='2'
+        route = self.route
         with patch.dict('os.environ', {'TEST_APP_ID': '1'}), self.assertRaises(AuthError):
             self.Auth(self.config, probe=lambda *_: self.fail('must not probe')).ensure(route)
 
@@ -138,7 +139,7 @@ class GenericAuthTests(unittest.TestCase):
         def capture(config, route, profile, wait, validate):
             state = {'source': 'pingan', 'token': 'opaque', 'expires_at': None}
             validate(state); return state
-        route = Route('r', 'p', 'room', 'pingan', 'p')
+        route = Route('r', 'pingan', 'p')
         state = Auth(self.config, capture=capture, probe=lambda r, s: calls.append(r.source) or 'verified').ensure(route, renew=True)
         self.assertEqual(state['scope_status'], 'verified')
         self.assertEqual(calls, ['pingan', 'pingan'])
@@ -154,20 +155,18 @@ class GenericAuthTests(unittest.TestCase):
 
 class SharedValidationTests(unittest.TestCase):
     def test_scope_conflicts_are_generic(self):
-        from scripts.catalog.validation import validate_routes
-        routes = [Route(str(i), 'p', 'room', 'marketing', 'm', '1', {'selector': selector})
-                  for i, selector in enumerate(('abc', '*'))]
-        task = SimpleNamespace(validate=lambda r: Scope(('marketing', r.account_id), r.options['selector']))
-        with patch('scripts.registry.get', return_value=SimpleNamespace(task=task)), self.assertRaises(ConfigError):
-            validate_routes(routes, {'m': {'source': 'marketing'}})
+        from catalog.validation import validate_routes
+        from catalog.model import Route as Plan
+        routes = [Plan('a','p','r1','marketing','m','1',{'aweme_id':'abc'}),
+                  Plan('b','p','r2','marketing','m','1',{'account_scope':True})]
+        with self.assertRaises(ConfigError): validate_routes(routes, {'m': {'source':'marketing'}})
 
     def test_nonempty_scope_namespaces_cannot_mix(self):
-        from scripts.catalog.validation import validate_routes
-        routes = [Route(str(i), 'p', 'room', 'qianchuan', 'q', '1', {'namespace': namespace})
-                  for i, namespace in enumerate(('internal', 'display'))]
-        task = SimpleNamespace(validate=lambda r: Scope(('qianchuan', '1'), r.route_id, r.options['namespace']))
-        with patch('scripts.registry.get', return_value=SimpleNamespace(task=task)), self.assertRaises(ConfigError):
-            validate_routes(routes, {'q': {'source': 'qianchuan'}})
+        from catalog.validation import validate_routes
+        from catalog.model import Route as Plan
+        routes = [Plan('a','p','r1','qianchuan','q','1',{'aweme_id':'abc'}),
+                  Plan('b','p','r2','qianchuan','q','1',{'aweme_ids':['2']})]
+        with self.assertRaises(ConfigError): validate_routes(routes, {'q': {'source':'qianchuan'}})
 
 
 class RuntimeTests(unittest.TestCase):
@@ -179,7 +178,7 @@ class RuntimeTests(unittest.TestCase):
             def lock(self, name): calls.append(name); yield
             def write(self, *args): calls.append('write')
             def failure(self, *args): calls.append('failure')
-        route = Route('r', 'p', 'room', 'marketing', 'm')
+        route = Route('r', 'marketing', 'm')
         auth = SimpleNamespace(ensure=lambda route: {'token': 'safe'})
         collector = SimpleNamespace(collect=lambda route, window, state: Batch())
         result = CollectionService(Repository(), auth, collector).execute(route, None)

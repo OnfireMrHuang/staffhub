@@ -6,19 +6,19 @@ from pathlib import Path
 from unittest.mock import patch
 import httpx
 from scripts.utils.config import Config
-from scripts.utils.model import Route, AuthError, AlertError
+from scripts.utils.model import Task as Route, AuthError, AlertError
 from scripts.marketing.auth import Auth as MarketingAuth
 from scripts.qianchuan.auth import Auth as QianchuanAuth
 from scripts.utils.auth import private_json
 from scripts.pingan.auth import extract_session as extract_pingan_session
 from scripts.zhongan.auth import extract_session as extract_zhongan_session
-from scripts.utils.notify import Notifier
+from notifications import Notifier
 
 class AuthTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.config=Config(Path(self.tmp.name)/'config.toml',{'settings':{'state_dir':'runtime'},'credentials':{'m':{'source':'marketing','env_prefix':'TEST_M_'},'q':{'source':'qianchuan','env_prefix':'TEST_Q_'}}},[])
-        self.route=Route('r','p','room','marketing','m','123',{'account_scope':True})
+        self.route=Route('r','marketing','m','123',{'account_scope':True})
     def test_refresh_at_exact_threshold_and_preserve_rotated_token(self):
         path=self.config.credential_path('m'); private_json(path,{'app_id':'1','access_token':'old','refresh_token':'refresh','expires_at':2800})
         def handle(req):
@@ -38,7 +38,7 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(json.loads(path.read_text()),old)
     def test_qianchuan_does_not_use_marketing_environment(self):
         manager=QianchuanAuth(self.config,probe=lambda r,s:True)
-        r=Route('q','p','room','qianchuan','q','1',{'account_scope':True})
+        r=Route('q','qianchuan','q','1',{'account_scope':True})
         with patch.dict('os.environ',{'TEST_M_APP_ID':'1','TEST_M_APP_SECRET':'secret'},clear=True), self.assertRaises(AuthError): manager.ensure(r,renew=True)
     def test_browser_only_uses_configured_auth_cookie_and_domain(self):
         state={'cookies':[{'name':'access','value':'bad','domain':'attacker.example','expires':time.time()+8000},{'name':'access','value':'good','domain':'open.health.pingan.com','expires':time.time()+8000},{'name':'tracker','value':'x','domain':'open.health.pingan.com','expires':1}], 'origins':[]}
@@ -73,7 +73,7 @@ class SavedStateTests(unittest.TestCase):
             private_json(cfg.credential_path('m'),{'source':'qianchuan','app_id':'1','access_token':'q','refresh_token':'r','expires_at':time.time()+9000})
             manager=MarketingAuth(cfg,probe=lambda r,s:True)
             with patch.dict('os.environ',{'M_APP_ID':'1'}),self.assertRaises(AuthError):
-                manager.ensure(Route('r','p','room','marketing','m','1',{}))
+                manager.ensure(Route('r','marketing','m','1',{}))
 
 class SourceApplicationTests(unittest.TestCase):
     def test_synced_application_must_match_actual_oauth_environment(self):
@@ -81,5 +81,6 @@ class SourceApplicationTests(unittest.TestCase):
             cfg=Config(Path(tmp)/'c.toml',{'settings':{'state_dir':'runtime'},'credentials':{'m':{'source':'marketing','env_prefix':'M_'}}},[])
             private_json(cfg.credential_path('m'),{'source':'marketing','app_id':'1','access_token':'x','expires_at':time.time()+9000})
             manager=MarketingAuth(cfg,probe=lambda r,s:True)
-            route=Route('r','p','room','marketing','m','123',{'expected_app_id':'2'})
+            cfg.credentials['m']['app_id']='2'
+            route=Route('r','marketing','m','123',{'account_scope':True})
             with patch.dict('os.environ',{'M_APP_ID':'1'}),self.assertRaises(AuthError): manager.ensure(route)

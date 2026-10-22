@@ -5,6 +5,6 @@ SHELL=/bin/sh
 CRON_TZ=Asia/Shanghai
 # 第5分钟先同步原表，成功后才采集；同步失败保留旧快照并跳过本轮采集。
 # 授权在第2/7/12/...分钟，使用每凭据锁，可与采集独立运行。
-5 * * * * cd /ABSOLUTE/PATH/staffhub/live_data_design && ( .venv/bin/python -m scripts.manage sync-sources --config config/local.toml && .venv/bin/python -m live_data schedule --config config/local.toml ) >> runtime/collection.log 2>&1
+5 * * * * cd /ABSOLUTE/PATH/staffhub/live_data_design && ( .venv/bin/python -m manage sync-sources --config config/local.toml && .venv/bin/python -m live_data schedule --config config/local.toml ) >> runtime/collection.log 2>&1
 2,7,12,17,22,27,32,37,42,47,52,57 * * * * cd /ABSOLUTE/PATH/staffhub/live_data_design && .venv/bin/python -m live_data auth-maintain --config config/local.toml >> runtime/auth.log 2>&1
 # 使用前 mkdir -p runtime && chmod 700 runtime；配置日志轮转。

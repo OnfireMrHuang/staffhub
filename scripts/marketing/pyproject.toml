@@ -1,0 +1,27 @@
+[project]
+name = "live-collector-marketing"
+version = "0.2.0"
+requires-python = ">=3.11"
+dependencies = [
+  "live-collector-utils==0.2.0",
+  "httpx>=0.28,<0.29",
+  "PyMySQL[rsa]>=1.1,<2",
+]
+
+[project.scripts]
+marketing = "scripts.marketing.cli:main"
+
+[tool.uv.sources]
+live-collector-utils = { path = "../utils", editable = true }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scripts.marketing"]
+[tool.setuptools.package-dir]
+"scripts.marketing" = "."
+
+[tool.setuptools.package-data]
+"scripts.marketing" = ["*.json", "*.sql"]

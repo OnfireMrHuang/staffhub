@@ -1,6 +1,6 @@
 # 来源导入与业务目录
 
-本说明记录当前候选实现，不是最终数据库设计；整体方向见 [SPEC.md](SPEC.md) v4，四类脚本的固定输入和输出见 [SCRIPTS_SPEC.md](SCRIPTS_SPEC.md)。以下表名、主键算法及布局适配方式待物理模型确认后可调整。live_route仅是关系的抽象表达；程序既不创建实体live_route，也不让Excel排版决定业务表结构。
+本说明记录当前候选实现，不是最终数据库设计；整体方向见 [SPEC.md](SPEC.md) v5，四类脚本的固定输入和输出见 [独立脚本规格](../scripts/SPEC.md)。以下表名、主键算法及布局适配方式待物理模型确认后可调整。live_route仅是关系的抽象表达；程序既不创建实体live_route，也不让Excel排版决定业务表结构。
 
 ## 从Excel到业务模型
 
@@ -48,7 +48,7 @@ sync-sources持导入锁，完整解析与校验后，在同一事务替换三�
 
 `v_live_room_sources`用于展示关系；采集读两个独立任务视图，避免横向账户×后台关系导致保单重复。调度持scheduler锁，单任务持查询范围锁；授权维护仅使用每凭据文件锁。
 
-主数据由 `scripts/catalog/` 维护，建表及同步入口为 `python -m scripts.manage`。`live_data` 仅消费目录并调度。
+主数据由 `catalog/` 维护，建表及同步入口为 `python -m manage`。`live_data` 仅消费目录并调度。
 
 ## 命令边界
 
@@ -58,8 +58,8 @@ sync-sources持导入锁，完整解析与校验后，在同一事务替换三�
 | sync-sources --dry-run | 完整来源解析和关系验证 | 否 |
 | sync-sources | 来源→镜像及业务目录事务发布 | 是 |
 | schedule --dry-run | 业务目录→任务计划 | 是，但不采集 |
-| scripts/*.py collect --dry-run | 明确参数或任务JSON | 否 |
-| scripts/*.py check-auth/authorize | 明确任务+私有认证状态 | 否 |
-| scripts/*.py collect | 明确任务+业务接口→事实表 | 是，不依赖业务目录 |
+| 来源命令 collect --dry-run | 本类型查询参数 | 否 |
+| 来源命令 check-auth/authorize | 明确任务+私有认证状态 | 否 |
+| 来源命令 collect | 明确任务+业务接口→事实表 | 是，不依赖业务目录 |
 
 通用JSON及Feishu普通表头适配仍可用于其他输入，但不会自动解释本工作簿的纵向分组。当前推荐来源是已提供的xlsx，不再要求补充飞书API令牌才能验证这份试点数据。

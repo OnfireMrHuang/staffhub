@@ -1,8 +1,9 @@
+from catalog.model import Route
 import unittest
 from unittest.mock import Mock, patch
 from live_data.runner import Runner
 from live_data.dispatch import Dispatcher
-from scripts.utils.model import Route, Window, AuthError
+from scripts.utils.model import Window, AuthError
 
 WINDOW = Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00')
 
@@ -50,7 +51,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(dispatch.saved, ['y-account-1','z-account-2','a-policy'])
 
     def test_dispatcher_calls_owning_module_public_api(self):
-        route = Route('one','p','r','marketing','c')
+        route = Route('one','p','r','marketing','c','123',{'account_scope':True})
         config = object()
         module = Mock()
         module.cli.collect_task.return_value = {'code': 0}
@@ -60,8 +61,8 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(dispatcher.collect(route, WINDOW), {'code': 0})
             dispatcher.ensure(route, renew=True)
             self.assertEqual(lookup.call_args_list[0].args, ('marketing',))
-        module.cli.collect_task.assert_called_once_with(config, route, WINDOW)
-        module.cli.check_task.assert_called_once_with(config, route, renew=True)
+        module.cli.collect_task.assert_called_once_with(config, route.collector_task, WINDOW)
+        module.cli.check_task.assert_called_once_with(config, route.collector_task, renew=True)
 
     def test_storage_failure_always_stops_remaining_tasks(self):
         dispatch = Dispatch()
@@ -73,7 +74,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result['code'], 5)
 
     def test_authorize_and_maintenance_renew_once_then_check_every_scope(self):
-        routes = [Route('one','p','r','marketing','c'), Route('two','p','r','marketing','c')]
+        routes = [Route('one','p','r','marketing','c','123',{'account_scope':True}), Route('two','p','r','marketing','c')]
         for method in ('maintain', 'check'):
             dispatch = Dispatch()
             runner = Runner(dispatch)
@@ -82,3 +83,14 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual([r for r, _ in dispatch.checks], ['one', 'two'])
             self.assertTrue(dispatch.checks[0][1]['renew'])
             self.assertFalse(dispatch.checks[1][1].get('renew', False))
+
+class DispatchConfigurationTests(unittest.TestCase):
+    def test_application_binding_is_configuration_and_never_a_source_task_option(self):
+        from pathlib import Path
+        from scripts.utils.config import Config
+        cfg=Config(Path('/tmp/test.toml'),{'credentials':{'app':{'source':'marketing','env_prefix':'M_'}}},[])
+        route=Route('plan','product','room','marketing','app','123',{'expected_app_id':'100'})
+        bound=Dispatcher(cfg).task_config(route)
+        self.assertEqual(bound.credentials['app']['app_id'],'100')
+        self.assertNotIn('app_id',cfg.credentials['app'])
+        self.assertNotIn('expected_app_id',route.collector_task.options)

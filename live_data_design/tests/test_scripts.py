@@ -10,7 +10,11 @@ from unittest.mock import Mock, patch
 
 from scripts.utils.model import AuthError, Batch, BusyError, ConfigError, DataError, StorageError, Window
 
-from scripts.registry import get, make_task
+from registry import get
+
+def make_task(source, credential, account_id="", options=None):
+    module=get(source)
+    return module.task.make_task(credential,account_id,options) if source in ("marketing","qianchuan") else module.task.make_task(credential,options)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,22 +25,22 @@ def task_lock_name(route):
 
 class TaskTests(unittest.TestCase):
     def test_business_identity_ignores_metrics_app_and_credentials(self):
-        one = make_task('marketing', 'p', 'r', 'c', '123', {'account_scope': True})
-        two = make_task('marketing', 'p', 'r', 'other', '123', {
-            'account_scope': True, 'version': 'smart', 'metrics': ['stat_cost'], 'expected_app_id': '99',
-            'account_name': '广告账户', 'account_type': '小店', 'room_name': '展示名'})
-        self.assertEqual(one.route_id, two.route_id)
-        scoped = make_task('marketing', 'p', 'r', 'c', '123', {'aweme_id': 'abc'})
-        self.assertNotEqual(one.route_id, scoped.route_id)
+        one = make_task('marketing', 'c', '123', {'account_scope': True})
+        two = make_task('marketing', 'other', '123', {
+            'account_scope': True, 'version': 'smart',
+            'account_name': '广告账户', 'account_type': '小店'})
+        self.assertEqual(one.task_id, two.task_id)
+        scoped = make_task('marketing', 'c', '123', {'aweme_id': 'abc'})
+        self.assertNotEqual(one.task_id, scoped.task_id)
         self.assertEqual(task_lock_name(one), task_lock_name(scoped))
         self.assertLessEqual(len(task_lock_name(one)), 64)
 
     def test_policy_identity_defaults_and_whitespace_are_canonical(self):
-        one = make_task('zhongan', 'p', 'r', 'c', options={'dy_no': '123'})
-        two = make_task('zhongan', 'p', 'r', 'c', options={
-            'dy_no': ' 123 ', 'platform': 'DOUYIN', 'room_name': '展示名'})
-        other = make_task('zhongan', 'other', 'room', 'c', options={'dy_no': '123'})
-        self.assertEqual(one.route_id, two.route_id)
+        one = make_task('zhongan', 'c', options={'dy_no': '123'})
+        two = make_task('zhongan', 'c', options={
+            'dy_no': ' 123 ', 'platform': 'DOUYIN'})
+        other = make_task('zhongan', 'c', options={'dy_no': '123'})
+        self.assertEqual(one.task_id, two.task_id)
         self.assertEqual(task_lock_name(one), task_lock_name(other))
 
     def test_unknown_or_secret_options_and_ambiguous_scope_are_rejected(self):
@@ -45,12 +49,12 @@ class TaskTests(unittest.TestCase):
                         {'account_scope': True, 'metrics': ['stat_cost', 'stat_cost']},
                         {'account_scope': True, 'expected_app_id': 'not-a-number'}):
             with self.subTest(options=options), self.assertRaises(ConfigError):
-                make_task('marketing', 'p', 'r', 'c', '123', options)
+                make_task('marketing', 'c', '123', options)
 
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):
-        self.route = make_task('pingan', 'p', 'r', 'c', options={'channel': 'DEMO'})
+        self.route = make_task('pingan', 'c', options={'channel': 'DEMO'})
         self.window = Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00')
         self.events = []
         events = self.events
@@ -64,7 +68,7 @@ class ServiceTests(unittest.TestCase):
             def failure(self, route, window, error): events.append(('failure', error.code))
         self.store = Database()
         self.auth = Mock()
-        self.auth.ensure.side_effect = lambda route: events.append(('auth', route.route_id)) or {}
+        self.auth.ensure.side_effect = lambda route: events.append(('auth', route.task_id)) or {}
         self.collector = Mock()
         self.collector.collect.side_effect = lambda *args: events.append(('collect',)) or Batch(orders=[{}])
 
@@ -76,7 +80,7 @@ class ServiceTests(unittest.TestCase):
         result = self.service().execute(self.route, self.window)
         self.assertEqual([e[0] for e in self.events], ['lock', 'auth', 'collect', 'write', 'unlock'])
         self.assertEqual(result['rows'], 1)
-        self.assertEqual(result['task_id'], self.route.route_id)
+        self.assertEqual(result['task_id'], self.route.task_id)
         self.assertEqual(result['code'], 0)
 
     def test_failed_source_is_audited_without_writing_partial_results(self):
@@ -127,10 +131,9 @@ source="zhongan"
 ''')
 
     def args(self, source, command='collect'):
-        values = [command, '--config', str(self.config), '--product-id', 'p', '--room-id', 'r',
-                  '--credential', {'marketing': 'ad', 'qianchuan': 'qc', 'pingan': 'pa', 'zhongan': 'za'}[source]]
+        values = [command, '--config', str(self.config), '--credential', {'marketing': 'ad', 'qianchuan': 'qc', 'pingan': 'pa', 'zhongan': 'za'}[source]]
         if source in ('marketing', 'qianchuan'):
-            values += ['--advertiser-id', '123', '--app-id', '99', '--account-scope']
+            values += ['--advertise-id', '123']
         elif source == 'pingan': values += ['--channel', 'PA-DEMO']
         else: values += ['--dy-no', 'ZA-DEMO']
         return values
@@ -161,20 +164,13 @@ source="zhongan"
                 code = get('marketing').cli.main(['collect', '--config', str(self.config), '--dry-run', *args])
             self.assertEqual(code, 2, output.getvalue())
 
-    def test_task_file_and_explicit_task_produce_same_id(self):
-        path = Path(self.temp.name) / 'task.json'
-        path.write_text(json.dumps({'source': 'marketing', 'product_id': 'p', 'room_id': 'r',
-            'credential': 'ad', 'account_id': '123', 'options': {'account_scope': True, 'expected_app_id': '99'}}))
-        outputs = []
-        for args in (self.args('marketing') + ['--dry-run'],
-                     ['collect', '--config', str(self.config), '--task-file', str(path), '--dry-run']):
-            with redirect_stdout(io.StringIO()) as output:
-                self.assertEqual(get('marketing').cli.main(args), 0, output.getvalue())
-            outputs.append(json.loads(output.getvalue()))
-        self.assertEqual(outputs[0]['task_id'], outputs[1]['task_id'])
+    def test_cli_and_source_api_produce_same_scope_id(self):
+        with redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(get('marketing').cli.main(self.args('marketing')+['--dry-run']),0)
+        self.assertEqual(json.loads(output.getvalue())['task_id'],get('marketing').make_task('ad','123').task_id)
 
     def test_script_launch_works_from_unrelated_directory(self):
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/pingan.py'),
+        result = subprocess.run([sys.executable, '-m', 'scripts.pingan',
             *self.args('pingan'), '--dry-run'], cwd=self.temp.name, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)['code'], 0)

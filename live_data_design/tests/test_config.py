@@ -1,7 +1,8 @@
+from catalog.model import Route
 import unittest
 from datetime import datetime
-from scripts.utils.model import Window, ConfigError, Route
-from scripts.catalog.validation import validate_routes
+from scripts.utils.model import Window, ConfigError
+from catalog.validation import validate_routes
 
 class ConfigTests(unittest.TestCase):
     def test_window_midnight_half_open(self):
@@ -21,7 +22,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_shared_ad_account_requires_explicit_scope(self):
         a = Route('a','p1','r1','marketing','c','123',{})
-        with self.assertRaises(ConfigError): validate_routes([a], {'c': {'source':'marketing'}})
+        with self.assertRaises(ConfigError): validate_routes([a, Route('b','p2','r2','marketing','c','123',{})], {'c': {'source':'marketing'}})
 
     def test_boolean_settings_and_sms_schema_are_strict(self):
         import tempfile

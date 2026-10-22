@@ -475,6 +475,97 @@ wheels = [
 ]
 
 [[package]]
+name = "live-collector-marketing"
+version = "0.2.0"
+source = { editable = "../scripts/marketing" }
+dependencies = [
+    { name = "httpx" },
+    { name = "live-collector-utils" },
+    { name = "pymysql", extra = ["rsa"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "live-collector-utils", editable = "../scripts/utils" },
+    { name = "pymysql", extras = ["rsa"], specifier = ">=1.1,<2" },
+]
+
+[[package]]
+name = "live-collector-pingan"
+version = "0.2.0"
+source = { editable = "../scripts/pingan" }
+dependencies = [
+    { name = "httpx" },
+    { name = "live-collector-utils" },
+    { name = "playwright" },
+    { name = "pymysql", extra = ["rsa"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "live-collector-utils", editable = "../scripts/utils" },
+    { name = "playwright", specifier = ">=1.51,<2" },
+    { name = "pymysql", extras = ["rsa"], specifier = ">=1.1,<2" },
+]
+
+[[package]]
+name = "live-collector-qianchuan"
+version = "0.2.0"
+source = { editable = "../scripts/qianchuan" }
+dependencies = [
+    { name = "httpx" },
+    { name = "live-collector-utils" },
+    { name = "pymysql", extra = ["rsa"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "live-collector-utils", editable = "../scripts/utils" },
+    { name = "pymysql", extras = ["rsa"], specifier = ">=1.1,<2" },
+]
+
+[[package]]
+name = "live-collector-utils"
+version = "0.2.0"
+source = { editable = "../scripts/utils" }
+dependencies = [
+    { name = "filelock" },
+    { name = "httpx" },
+    { name = "pymysql", extra = ["rsa"] },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "filelock", specifier = ">=3.16,<4" },
+    { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "pymysql", extras = ["rsa"], specifier = ">=1.1,<2" },
+    { name = "python-dotenv", specifier = ">=1,<2" },
+]
+
+[[package]]
+name = "live-collector-zhongan"
+version = "0.2.0"
+source = { editable = "../scripts/zhongan" }
+dependencies = [
+    { name = "httpx" },
+    { name = "live-collector-utils" },
+    { name = "playwright" },
+    { name = "pymysql", extra = ["rsa"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "live-collector-utils", editable = "../scripts/utils" },
+    { name = "playwright", specifier = ">=1.51,<2" },
+    { name = "pymysql", extras = ["rsa"], specifier = ">=1.1,<2" },
+]
+
+[[package]]
 name = "playwright"
 version = "1.64.0"
 source = { registry = "https://pypi.org/simple" }
@@ -578,6 +669,11 @@ source = { virtual = "." }
 dependencies = [
     { name = "filelock" },
     { name = "httpx" },
+    { name = "live-collector-marketing" },
+    { name = "live-collector-pingan" },
+    { name = "live-collector-qianchuan" },
+    { name = "live-collector-utils" },
+    { name = "live-collector-zhongan" },
     { name = "playwright" },
     { name = "pymysql", extra = ["rsa"] },
     { name = "python-dotenv" },
@@ -588,6 +684,11 @@ dependencies = [
 requires-dist = [
     { name = "filelock", specifier = ">=3.16,<4" },
     { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "live-collector-marketing", editable = "../scripts/marketing" },
+    { name = "live-collector-pingan", editable = "../scripts/pingan" },
+    { name = "live-collector-qianchuan", editable = "../scripts/qianchuan" },
+    { name = "live-collector-utils", editable = "../scripts/utils" },
+    { name = "live-collector-zhongan", editable = "../scripts/zhongan" },
     { name = "playwright", specifier = ">=1.51,<2" },
     { name = "pymysql", extras = ["rsa"], specifier = ">=1.1,<2" },
     { name = "python-dotenv", specifier = ">=1,<2" },

@@ -3,10 +3,10 @@ import json
 import os
 import unittest
 import uuid
-from scripts.utils.model import Batch, Route, Window, StorageError
+from scripts.utils.model import Batch, Task as Route, Window, StorageError
 from scripts.utils.database import Database
-from scripts.catalog.repository import CatalogRepository
-from scripts import registry
+from catalog.repository import CatalogRepository
+import registry
 
 @unittest.skipUnless(os.getenv('LIVE_TEST_MYSQL_SOCKET'),'set LIVE_TEST_MYSQL_SOCKET for an isolated MySQL instance')
 class MySQLTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class MySQLTests(unittest.TestCase):
         self.repositories={source:registry.get(source).Repository(self.conn)
                            for source in ('marketing','qianchuan','pingan','zhongan')}
         for repository in self.repositories.values(): repository.init_schema()
-        self.r=Route('r','p','room','marketing','m','123',{'account_scope':True})
+        self.r=Route('r','marketing','m','123',{'account_scope':True})
         self.w=Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00')
     def tearDown(self):
         self.conn.rollback()
@@ -32,25 +32,42 @@ class MySQLTests(unittest.TestCase):
     def rows(self,table):
         with self.conn.cursor() as c: c.execute('SELECT * FROM '+table); return c.fetchall()
     def test_real_mysql_rerun_updates_and_failed_insert_restores_prior_data(self):
-        b=Batch(ads=[{'hour':'2026-10-20 09:00:00','dimensions':{'stat_time_hour':'2026-10-20 09:00:00'},'metrics':{'stat_cost':'1.25'},'cost':'1.25'}])
-        self.repositories['marketing'].write(self.r,self.w,b); self.repositories['marketing'].write(self.r,self.w,b)
-        self.assertEqual(len(self.rows('live_ad_hourly')),1)
-        bad=Batch(ads=[{**b.ads[0],'cost':'not-money'}])
-        with self.assertRaises(StorageError): self.repositories['marketing'].write(self.r,self.w,bad)
-        self.assertEqual(str(self.rows('live_ad_hourly')[0][7]),'1.250000')
-        self.assertEqual(len(self.rows('live_run')),2)
-        self.repositories['marketing'].write(self.r,self.w,Batch()); self.assertEqual(self.rows('live_ad_hourly'),())
+        row={'hour':'2026-10-20 09:00:00','dimensions':{'stat_time_hour':'2026-10-20 09:00:00'},
+             'metrics':{'stat_cost':'1.25','_collection':{'context':{'advertiser_id':'123'}}},'cost':'1.25'}
+        b=Batch(ads=[row])
+        self.repositories['marketing'].write(self.r,self.w,b)
+        self.repositories['marketing'].write(self.r,self.w,b)
+        self.assertEqual(len(self.rows('marketing_hourly')),1)
+        # Two identical dimension keys cause a real unique constraint failure after DELETE.
+        with self.assertRaises(StorageError):
+            self.repositories['marketing'].write(self.r,self.w,Batch(ads=[row,row]))
+        with self.conn.cursor() as c:
+            c.execute('SELECT stat_cost FROM marketing_hourly')
+            from decimal import Decimal
+            self.assertEqual(c.fetchone()[0],Decimal('1.25'))
+        self.assertEqual(len(self.rows('collector_run')),2)
+        self.repositories['marketing'].write(self.r,self.w,Batch())
+        self.assertEqual(self.rows('marketing_hourly'),())
+
     def test_real_mysql_policy_upsert_preserves_first_seen_and_actual_snapshot_hour(self):
-        r=Route('policy','p','room','zhongan','z','',{'dy_no':'abc'})
-        b=Batch(snapshots=[{'date':'2026-10-20','session_id':'s','grain':'session_cumulative','metrics':{'count':1}}],orders=[{'order_id':'000000123456789012345','session_id':'s','date':'2026-10-20','payload':{'status':1}}],observed_at='2026-10-21 14:05:00')
+        r=Route('policy','zhongan','z','',{'dy_no':'abc'})
+        context={'livePlatform':'DOUYIN','dyNo':'abc','roomId':'s','startDate':'2026-10-20'}
+        b=Batch(snapshots=[{'metrics':{'cost':'1','_collection':{'context':context}}}],
+                orders=[{'payload':{'orderNo':'000000123456789012345','orderStatus':'1',
+                                    '_collection':{'context':context}}}],observed_at='2026-10-21 14:05:00')
         self.repositories['zhongan'].write(r,self.w,b)
-        b.observed_at='2026-10-21 14:45:00'; b.orders[0]['payload']['status']=2
+        b.observed_at='2026-10-21 14:45:00'; b.orders[0]['payload']['orderStatus']='2'
         self.repositories['zhongan'].write(r,self.w,b)
-        snapshots=self.rows('live_policy_snapshot'); orders=self.rows('live_policy_order')
-        self.assertEqual(len(snapshots),1); self.assertEqual(str(snapshots[0][3]),'2026-10-21 14:00:00')
-        self.assertEqual(len(orders),1); self.assertEqual(orders[0][2],'000000123456789012345')
-        self.assertEqual(str(orders[0][9]),'2026-10-21 14:05:00')
-        self.assertEqual(json.loads(orders[0][8])['status'],2)
+        with self.conn.cursor() as c:
+            c.execute('SELECT observed_hour FROM zhongan_stats')
+            rows=c.fetchall(); self.assertEqual(len(rows),1)
+            self.assertEqual(str(rows[0][0]),'2026-10-21 14:00:00')
+            c.execute('SELECT orderNo,first_seen_at,orderStatus FROM zhongan_orders')
+            rows=c.fetchall(); self.assertEqual(len(rows),1)
+            self.assertEqual(rows[0][0],'000000123456789012345')
+            self.assertEqual(str(rows[0][1]),'2026-10-21 14:05:00')
+            self.assertEqual(rows[0][2],'2')
+
     def test_advisory_lock_excludes_another_connection(self):
         import pymysql
         from scripts.utils.model import BusyError
@@ -64,7 +81,7 @@ class MySQLTests(unittest.TestCase):
 
     def test_real_source_mirrors_join_and_full_snapshot_replacement(self):
         from test_master_data import fixtures
-        from scripts.catalog.master_data import map_tables
+        from catalog.master_data import map_tables
         data,cfg=fixtures()
         snapshot=map_tables(data,cfg)
         self.catalog.sync_sources(snapshot)
@@ -83,7 +100,7 @@ class MySQLTests(unittest.TestCase):
     def test_catalog_reads_consistent_generation_during_concurrent_publish(self):
         import pymysql
         from test_master_data import fixtures
-        from scripts.catalog.master_data import map_tables
+        from catalog.master_data import map_tables
         data,cfg=fixtures(); self.catalog.sync_sources(map_tables(data,cfg))
         # Remove the second product and room from the next published generation.
         data['accounts']['values'].pop(3)

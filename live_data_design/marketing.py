@@ -1,5 +1,5 @@
-"""Compatibility entry point for scripts.marketing."""
+"""Compatibility launcher; parameters are owned by the independent source project."""
 from scripts.marketing.cli import main
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

@@ -1,0 +1,1051 @@
+{
+  "version": 2,
+  "workbook": "第一期试点直播间产品.xlsx",
+  "notes": [
+    "本契约只包含六张来源字段字典，不含账户/应用/后台配置或登录值。",
+    "requestable 表示字典及已有接口目录支持；账户授权和营销版本字段须运行时验证，未声称已完成生产采集。",
+    "decimal 使用 DECIMAL(65,30) 安全投影；非数值、超过35位整数或30位小数为 NULL，原 JSON 保留；不换算金额单位。",
+    "平安派生百分率使用28位有效数字算术精度，原始派生结果不舍入；写入数据汇字符串保留2位小数；缺失、非法或零分母为 NULL。",
+    "本阶段按小时保存广告事实；保单字段为真实观察时刻的日累计/场次累计快照，不能相加当小时新增。",
+    "空文本及非规范数值文本（千分位、百分号、科学计数法）不强制转换，类型列为 NULL，原 JSON 保留。"
+  ],
+  "datasets": {
+    "marketing_hourly": {
+      "table": "marketing_hourly",
+      "source": "marketing",
+      "raw_column": "metrics",
+      "workbook_sheet": "【巨量营销】数据源表头字段",
+      "fields": [
+        {
+          "name": "stat_time_hour",
+          "name_zh": "时间-小时",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 3,
+          "category": "时间维度",
+          "source_type": "未提供",
+          "description": "细分到每个小时的数据",
+          "status": "mapped",
+          "source_path": "data.rows[].dimensions.stat_time_hour",
+          "storage_column": "dimensions",
+          "storage_path": "$.\"stat_time_hour\"",
+          "path": [
+            "stat_time_hour"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "DATETIME",
+          "sql_nullable": false
+        },
+        {
+          "name": "stat_time_day",
+          "name_zh": "时间-天",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 4,
+          "category": "时间维度",
+          "source_type": "未提供",
+          "description": "细分到自然天的数据",
+          "status": "context",
+          "source_path": "context.stat_time_day",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stat_time_day\"",
+          "path": [
+            "_collection",
+            "context",
+            "stat_time_day"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "DATE",
+          "sql_nullable": true
+        },
+        {
+          "name": "stat_time_month",
+          "name_zh": "时间-月",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 5,
+          "category": "时间维度",
+          "source_type": "未提供",
+          "description": "细分到自然月的数据，例如2022-3，表示是3月1日到3月31日",
+          "status": "context",
+          "source_path": "context.stat_time_month",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stat_time_month\"",
+          "path": [
+            "_collection",
+            "context",
+            "stat_time_month"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "CHAR(7)",
+          "sql_nullable": true
+        },
+        {
+          "name": "advertiser_id",
+          "name_zh": "账户ID",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 6,
+          "category": "账户维度",
+          "source_type": "number",
+          "description": "账户维度。来源：请求参数 advertiser_id，随结果保存；不是返回指标。建议以字符串保存长ID，避免精度丢失。",
+          "status": "context",
+          "source_path": "context.advertiser_id",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"advertiser_id\"",
+          "path": [
+            "_collection",
+            "context",
+            "advertiser_id"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "VARCHAR(128)",
+          "sql_nullable": false
+        },
+        {
+          "name": "account_name",
+          "name_zh": "账户名称",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 7,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：账户主数据，按 advertiser_id 关联。统一字段名沿用试点账户清单 account_name；不是本报表接口返回字段。",
+          "status": "context",
+          "source_path": "context.account_name",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"account_name\"",
+          "path": [
+            "_collection",
+            "context",
+            "account_name"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "VARCHAR(512)",
+          "sql_nullable": true
+        },
+        {
+          "name": "account_type",
+          "name_zh": "账户类型",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 8,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：试点账户清单/账户配置，如直投、短视频投放。为业务分类，按账户及生效时间关联，不按名称推断。",
+          "status": "context",
+          "source_path": "context.account_type",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"account_type\"",
+          "path": [
+            "_collection",
+            "context",
+            "account_type"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "VARCHAR(512)",
+          "sql_nullable": true
+        },
+        {
+          "name": "stat_platform",
+          "name_zh": "统计平台",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 9,
+          "category": "账户维度",
+          "source_type": "string",
+          "description": "账户维度。来源：账户配置/采集上下文。统计平台取值如巨量营销-智擎版、巨量营销-旧版、巨量千川；不是接口返回指标。",
+          "status": "context",
+          "source_path": "context.stat_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"_collection\".\"context\".\"stat_platform\"",
+          "path": [
+            "_collection",
+            "context",
+            "stat_platform"
+          ],
+          "projection_type": "text",
+          "requestable": false,
+          "sql_type": "VARCHAR(512)",
+          "sql_nullable": true
+        },
+        {
+          "name": "stat_cost",
+          "name_zh": "消耗(元)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 10,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "在投放期内的预估花费金额。当天数据可能会有波动，次日稳定",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.stat_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"stat_cost\"",
+          "path": [
+            "stat_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "show_cnt",
+          "name_zh": "展示数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 11,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "营销内容展示给用户的次数。计算方式：经平台判定有效且被计费的展示次数。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.show_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"show_cnt\"",
+          "path": [
+            "show_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "cpm_platform",
+          "name_zh": "平均千次展现费用(元)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 12,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "营销内容平均每一千次展现所付出的费用，计算公式是：消耗（元）/展示数*1000",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.cpm_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"cpm_platform\"",
+          "path": [
+            "cpm_platform"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "click_cnt",
+          "name_zh": "点击数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 13,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "营销内容被用户点击的次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.click_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"click_cnt\"",
+          "path": [
+            "click_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "ctr",
+          "name_zh": "点击率",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 14,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：点击数/展示数量*100%",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.ctr",
+          "storage_column": "metrics",
+          "storage_path": "$.\"ctr\"",
+          "path": [
+            "ctr"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "cpc_platform",
+          "name_zh": "平均点击单价(元)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 15,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：消耗（元）/点击数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.cpc_platform",
+          "storage_column": "metrics",
+          "storage_path": "$.\"cpc_platform\"",
+          "path": [
+            "cpc_platform"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "attribution_convert_cnt",
+          "name_zh": "转化数(计费时间)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 16,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "在转化行为发生（或回传）之后，将转化行为回记到过去30天内的扣费（消耗产生）时间上。 例如：营销内容在8月20日展示给用户，同时产生10元消耗，用户点击投放内容后于8月23日产生1笔购买，则8月23日这笔购买将会展示在8月20日，8月23日没有转化数。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.attribution_convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_convert_cnt\"",
+          "path": [
+            "attribution_convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "attribution_convert_cost",
+          "name_zh": "转化成本(计费时间)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 17,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：消耗(元) / 转化数(计费时间)。例如：营销内容在8月20日展示给用户，此时产生消耗10元，用户点击投放内容后，于8月23日产生2笔购买，则8月20日的转化成本（计费时间） = 5元（即10元除以2笔）。成本考核和系统赔付以该指标为准。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.attribution_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_convert_cost\"",
+          "path": [
+            "attribution_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "attribution_conversion_rate",
+          "name_zh": "转化率(计费时间)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 18,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "所选时间范围内的点击产生转化的概率，归因到计费时间。  转化率(计费时间) = 转化数(计费时间) / 点击数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.attribution_conversion_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_conversion_rate\"",
+          "path": [
+            "attribution_conversion_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "convert_cnt",
+          "name_zh": "转化数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 19,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "按转化事件发生时间统计的转化数。建议客户考核成本时参考“转化数据(计费时间)”，例如您投放的内容在早上8点进行了展示和点击，用户晚上19点发生了激活行为，我们会把激活数披露在晚上19点。在线索行业中， 表单提交、私信留资、留资咨询、智能电话-确认拨打所对应的事件都会计为转化数。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"convert_cnt\"",
+          "path": [
+            "convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "conversion_cost",
+          "name_zh": "平均转化成本(元)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 20,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：消耗（元）/转化数。当天数据可能会有波动。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.conversion_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"conversion_cost\"",
+          "path": [
+            "conversion_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "conversion_rate",
+          "name_zh": "转化率",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 21,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：转化数/点击数*100%",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.conversion_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"conversion_rate\"",
+          "path": [
+            "conversion_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "form",
+          "name_zh": "表单提交",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 22,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户在门店落地页多线沟通提交表单的次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.form",
+          "storage_column": "metrics",
+          "storage_path": "$.\"form\"",
+          "path": [
+            "form"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "form_submit",
+          "name_zh": "附加创意表单提交",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 23,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户查看附加创意后，提交表单的次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.form_submit",
+          "storage_column": "metrics",
+          "storage_path": "$.\"form_submit\"",
+          "path": [
+            "form_submit"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "consult_effective",
+          "name_zh": "有效咨询",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 24,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户在门店落地页多线沟通的在线咨询中有效咨询的次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.consult_effective",
+          "storage_column": "metrics",
+          "storage_path": "$.\"consult_effective\"",
+          "path": [
+            "consult_effective"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "attribution_form",
+          "name_zh": "表单提交(计费时间)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 25,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "表单提交是指用户在落地页多线沟通提交表单的次数。计费时间是指在行为发生（或回传）后，将对应的行为回记到过去30天内的扣费（消耗产生）时间上。例如：投放在10月1日发生消耗，用户提交表单时间为10月2日，则该表单提交会记为10月1日的表单提交数，而非10月2日。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.attribution_form",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_form\"",
+          "path": [
+            "attribution_form"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "form_and_submit_count",
+          "name_zh": "表单提交数(包含附加创意表单数)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 26,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "表单提交和附加创意表单提交之和",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.form_and_submit_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"form_and_submit_count\"",
+          "path": [
+            "form_and_submit_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "form_and_submit_cost",
+          "name_zh": "表单提交成本(包含附加创意表单数)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 27,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "消耗/表单提交数(包含附加创意表单数)",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.form_and_submit_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"form_and_submit_cost\"",
+          "path": [
+            "form_and_submit_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "premium_payment_count",
+          "name_zh": "保险支付数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 28,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户完成保险支付的总次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.premium_payment_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"premium_payment_count\"",
+          "path": [
+            "premium_payment_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "premium_payment_cost",
+          "name_zh": "保险支付成本(元)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 29,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：消耗（元）/保险支付总次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.premium_payment_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"premium_payment_cost\"",
+          "path": [
+            "premium_payment_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "stat_insurance_payment_pay_amount",
+          "name_zh": "保费成交金额",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 30,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.stat_insurance_payment_pay_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"stat_insurance_payment_pay_amount\"",
+          "path": [
+            "stat_insurance_payment_pay_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "stat_insurance_payment_roi",
+          "name_zh": "保费成交ROI",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 31,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：保费成交金额/消耗",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.stat_insurance_payment_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"stat_insurance_payment_roi\"",
+          "path": [
+            "stat_insurance_payment_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "attribution_insurance_payment_pay_amount",
+          "name_zh": "保费成交金额（计费时间）",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 32,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.attribution_insurance_payment_pay_amount",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_insurance_payment_pay_amount\"",
+          "path": [
+            "attribution_insurance_payment_pay_amount"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "attribution_insurance_payment_roi",
+          "name_zh": "保费成交ROI（计费时间）",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 33,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算口径是：保费成交金额（计费时间）/消耗",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.attribution_insurance_payment_roi",
+          "storage_column": "metrics",
+          "storage_path": "$.\"attribution_insurance_payment_roi\"",
+          "path": [
+            "attribution_insurance_payment_roi"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "luban_live_enter_cnt",
+          "name_zh": "直播间观看数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 34,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户进入您直播间的次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.luban_live_enter_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"luban_live_enter_cnt\"",
+          "path": [
+            "luban_live_enter_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "live_watch_one_minute_count",
+          "name_zh": "直播间超过1分钟观看数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 35,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户在您的直播间单次观看时长超过1分钟的次数，目前仅支持鲁班直播、内容营销直播、品牌Feeds Live直播和品牌TopLive直播",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.live_watch_one_minute_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"live_watch_one_minute_count\"",
+          "path": [
+            "live_watch_one_minute_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "luban_live_follow_cnt",
+          "name_zh": "直播间关注数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 36,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "您的直播间新增的关注数，目前仅支持鲁班直播、内容营销直播、品牌Feeds Live直播和品牌TopLive直播",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.luban_live_follow_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"luban_live_follow_cnt\"",
+          "path": [
+            "luban_live_follow_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "luban_live_share_cnt",
+          "name_zh": "直播间分享数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 37,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户在您的直播间点击分享到其他社交媒体的次数，目前仅支持鲁班直播、内容营销直播、品牌Feeds Live直播和品牌TopLive直播",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.luban_live_share_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"luban_live_share_cnt\"",
+          "path": [
+            "luban_live_share_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "luban_live_comment_cnt",
+          "name_zh": "直播间评论数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 38,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户在您的直播间输入评论并点击发送消息的次数，目前仅支持鲁班直播、内容营销直播、品牌Feeds Live直播和品牌TopLive直播",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.luban_live_comment_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"luban_live_comment_cnt\"",
+          "path": [
+            "luban_live_comment_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "live_component_click_count",
+          "name_zh": "组件点击数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 39,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "用户点击小风车+卡片组件的总次数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.live_component_click_count",
+          "storage_column": "metrics",
+          "storage_path": "$.\"live_component_click_count\"",
+          "path": [
+            "live_component_click_count"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "live_component_click_cost",
+          "name_zh": "组件点击成本",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 40,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "总花费/组件点击数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.live_component_click_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"live_component_click_cost\"",
+          "path": [
+            "live_component_click_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "live_component_click_rate",
+          "name_zh": "组件点击率",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 41,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "组件点击数/组件曝光数",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.live_component_click_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"live_component_click_rate\"",
+          "path": [
+            "live_component_click_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "deep_convert_cnt",
+          "name_zh": "深度转化数",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 42,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "将深度转化数记录在转化事件发生的时间上。建议客户考核深度转化成本时参考“深度转化数（计费时间）”例如您投放的内容在早上8点进行了展示和点击，用户晚上19点发生了激活行为，我们会把激活数披露在晚上19点。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.deep_convert_cnt",
+          "storage_column": "metrics",
+          "storage_path": "$.\"deep_convert_cnt\"",
+          "path": [
+            "deep_convert_cnt"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "deep_convert_cost",
+          "name_zh": "深度转化成本(元)",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 43,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：消耗（元）/深度转化数。当天数据可能会有波动，次日早8点后稳定。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.deep_convert_cost",
+          "storage_column": "metrics",
+          "storage_path": "$.\"deep_convert_cost\"",
+          "path": [
+            "deep_convert_cost"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        },
+        {
+          "name": "deep_convert_rate",
+          "name_zh": "深度转化率",
+          "workbook_sheet": "【巨量营销】数据源表头字段",
+          "workbook_row": 44,
+          "category": "指标",
+          "source_type": "未提供",
+          "description": "计算公式是：深度转化数/转化数*100%。当天数据可能会有波动，次日早8点后稳定。",
+          "status": "mapped",
+          "source_path": "data.rows[].metrics.deep_convert_rate",
+          "storage_column": "metrics",
+          "storage_path": "$.\"deep_convert_rate\"",
+          "path": [
+            "deep_convert_rate"
+          ],
+          "projection_type": "decimal",
+          "requestable": true,
+          "versions": [
+            "smart",
+            "legacy"
+          ],
+          "availability": "account_and_version_config_required",
+          "sql_type": "DECIMAL(65,30)",
+          "sql_nullable": true
+        }
+      ],
+      "row_wrapped": true
+    }
+  },
+  "storage_model": "typed_columns_with_raw_payload"
+}

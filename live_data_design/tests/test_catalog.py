@@ -1,7 +1,7 @@
 import copy
 import unittest
-from scripts.catalog import normalize_catalog, catalog_routes
-from scripts.catalog.master_data import map_tables, build_routes
+from catalog import normalize_catalog, catalog_routes
+from catalog.master_data import map_tables, build_routes
 from scripts.utils.model import ConfigError
 from test_master_data import fixtures
 
@@ -41,8 +41,8 @@ class CatalogTests(unittest.TestCase):
     def test_workbook_catalog_has_twenty_tasks_matching_explicit_identity(self):
         from pathlib import Path
         from scripts.utils.config import Config
-        from scripts.catalog.master_data import read_sources
-        from scripts.registry import make_task
+        from catalog.master_data import read_sources
+        from registry import make_task
         root=Path(__file__).resolve().parents[1]
         cfg=Config.load(root/'config/workbook.example.toml')
         if not cfg.resolve(cfg.data['master_data']['workbook_file']).exists():

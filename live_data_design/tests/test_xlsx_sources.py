@@ -7,7 +7,7 @@ from xml.sax.saxutils import escape
 from zipfile import ZipFile
 
 from scripts.utils.model import ConfigError
-from scripts.catalog.xlsx_sources import read_workbook
+from catalog.xlsx_sources import read_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 

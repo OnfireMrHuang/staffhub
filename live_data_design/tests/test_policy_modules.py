@@ -24,7 +24,7 @@ class Cursor:
     def __exit__(self, *args): pass
     def execute(self, sql, params=None):
         self.connection.statements.append((sql, params))
-        if self.connection.fail and 'live_policy_order' in sql:
+        if self.connection.fail and '_orders`' in sql:
             raise RuntimeError('synthetic failure')
 
 
@@ -42,7 +42,7 @@ class Connection:
 class PolicyModules(unittest.TestCase):
     def module(self, source): return importlib.import_module('scripts.' + source)
     def task(self, source, **options):
-        return self.module(source).task.make_task('product', 'room', 'credential', options=options)
+        return self.module(source).task.make_task('credential', options=options)
 
     def test_each_module_owns_implementation(self):
         for source in ('pingan', 'zhongan'):
@@ -50,26 +50,26 @@ class PolicyModules(unittest.TestCase):
             for cls in (module.Collector, module.Auth, module.Repository):
                 self.assertTrue(cls.__module__.startswith('scripts.' + source + '.'))
             schema = Path(module.__file__).with_name('schema.sql').read_text()
-            self.assertIn('live_policy_snapshot', schema)
-            self.assertIn('live_policy_order', schema)
-            self.assertIn("WHERE source = '" + source + "'", schema)
+            self.assertIn(source+'_stats', schema)
+            self.assertIn(source+'_orders', schema)
+            self.assertNotIn("CREATE OR REPLACE VIEW", schema)
             self.assertNotIn('live_source_account', schema)
 
     def test_policy_tasks_disallow_ads_and_unrelated_parameters(self):
         for source, options in (('pingan', {'channel': ' ch '}), ('zhongan', {'dy_no': 'dy'})):
             module = self.module(source)
             with self.assertRaises(ConfigError):
-                module.task.make_task('p', 'r', 'c', '123', options)
+                module.task.make_task('c', options={**options, 'advertise_id':'123'})
             with self.assertRaises(ConfigError):
-                module.task.make_task('p', 'r', 'c', options={**options, 'account_scope': True})
-            route = module.task.make_task('p', 'r', 'c', options=options)
+                module.task.make_task('c', options={**options, 'account_scope': True})
+            route = module.task.make_task('c', options=options)
             self.assertEqual(module.task.validate(route).selector, '*')
 
     def test_policy_identity_ignores_names_and_credential(self):
         module = self.module('pingan')
-        a = module.task.make_task('p', 'r', 'a', options={'channel': ' channel ', 'room_name': 'old'})
-        b = module.task.make_task('p', 'r', 'b', options={'channel': 'channel', 'room_name': 'new'})
-        self.assertEqual(a.route_id, b.route_id)
+        a = module.task.make_task('a', options={'channel': ' channel '})
+        b = module.task.make_task('b', options={'channel': 'channel'})
+        self.assertEqual(a.task_id, b.task_id)
         self.assertEqual(module.task.validate(a).resource, ('pingan', 'channel'))
 
     def test_pingan_extract_uses_only_named_auth_cookie(self):
@@ -112,12 +112,12 @@ class PolicyModules(unittest.TestCase):
         for source, options in (('pingan', {'channel': 'ch'}), ('zhongan', {'dy_no': 'dy'})):
             module = self.module(source)
             route = self.task(source, **options)
-            batch = Batch(orders=[{'order_id': 'order', 'session_id': '', 'date': '2026-01-01', 'payload': {'raw': 1}}])
+            batch = Batch(orders=[{'order_id': 'order', 'session_id': '', 'date': '2026-01-01', 'payload': {'postId':'order','orderNo':'order','raw':1,'_collection':{'context':{'livePlatform':'DOUYIN','dyNo':'dy'}}}}])
             connection = Connection()
             module.Repository(connection).write(route, window, batch)
             self.assertEqual(connection.commits, 1)
             self.assertEqual(connection.rollbacks, 0)
-            self.assertIn('live_run', connection.statements[-1][0])
+            self.assertIn('collector_run', connection.statements[-1][0])
             self.assertNotIn('first_seen_at=VALUES', connection.statements[0][0])
             failed = Connection(fail=True)
             with self.assertRaises(StorageError): module.Repository(failed).write(route, window, batch)

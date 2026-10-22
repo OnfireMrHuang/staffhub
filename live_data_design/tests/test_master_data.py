@@ -2,7 +2,7 @@ import copy
 import json
 import unittest
 from pathlib import Path
-from scripts.catalog.master_data import map_tables, build_routes, FeishuReader
+from catalog.master_data import map_tables, build_routes, FeishuReader
 from scripts.utils.model import ConfigError, DataError
 import httpx
 
@@ -20,7 +20,7 @@ class MasterDataTests(unittest.TestCase):
         routes=build_routes(snapshot,cfg['credentials'])
         self.assertEqual(sorted(r.source for r in routes),['marketing','marketing','pingan','qianchuan','zhongan'])
         self.assertEqual(len({r.route_id for r in routes}),5)
-        self.assertTrue(all(r.route_id.startswith('task-') for r in routes))
+        self.assertTrue(all(r.route_id.startswith('plan-') for r in routes))
         self.assertNotIn('routes',cfg)
         self.assertNotIn('not-a-real-secret',json.dumps(snapshot))
 
@@ -63,7 +63,7 @@ class MasterDataTests(unittest.TestCase):
 
 class SourceStorageTests(unittest.TestCase):
     def test_sync_failure_rolls_back_all_three_source_tables(self):
-        from scripts.catalog.repository import CatalogRepository as Store
+        from catalog.repository import CatalogRepository as Store
         from scripts.utils.model import StorageError
         class Database:
             commits=0
@@ -82,7 +82,7 @@ class SourceStorageTests(unittest.TestCase):
         self.assertEqual(db.rollbacks,1)
 
     def test_runtime_reads_two_task_views_in_one_consistent_snapshot(self):
-        from scripts.catalog.repository import CatalogRepository as Store
+        from catalog.repository import CatalogRepository as Store
         data,cfg=fixtures(); tasks=build_routes(map_tables(data,cfg),cfg['credentials'])
         class Database:
             def __init__(self): self.calls=[]; self.commits=0
@@ -104,8 +104,8 @@ class SourceStorageTests(unittest.TestCase):
         self.assertEqual(db.commits,1)
 
     def test_sync_publishes_all_eight_entities_with_source_mirrors(self):
-        from scripts.catalog.repository import CatalogRepository as Store
-        from scripts.catalog import CATALOG_TABLES
+        from catalog.repository import CatalogRepository as Store
+        from catalog import CATALOG_TABLES
         data,cfg=fixtures()
         class Database:
             def __init__(self): self.calls=[]; self.commits=0
@@ -155,7 +155,7 @@ class SourceIntegrityTests(unittest.TestCase):
         self.assertEqual(FeishuReader('book','secret',client).values('a',1,4,2),([['p','r']],'1'))
 
     def test_lock_preserves_source_error_classification(self):
-        from scripts.catalog.repository import CatalogRepository as Store
+        from catalog.repository import CatalogRepository as Store
         from scripts.utils.model import AuthError
         class Database:
             def cursor(self): return self

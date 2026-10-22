@@ -6,7 +6,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 class CLITests(unittest.TestCase):
-    def run_cli(self,*args): return subprocess.run([sys.executable,'-m','scripts.manage',*args],cwd=ROOT,capture_output=True,text=True)
+    def run_cli(self,*args): return subprocess.run([sys.executable,'-m','manage',*args],cwd=ROOT,capture_output=True,text=True)
     def test_validate_example_and_dry_run_work_without_secrets_or_database(self):
         for command in [('validate-config',),('sync-sources','--dry-run')]:
             result=self.run_cli(*command,'--config','config/example.toml')
@@ -32,7 +32,7 @@ class CLITests(unittest.TestCase):
         from unittest.mock import patch
         from contextlib import contextmanager
         from live_data.cli import execute, parser
-        from scripts.utils.model import Route
+        from catalog.model import Route
         names=[]
         class Database:
             @contextmanager

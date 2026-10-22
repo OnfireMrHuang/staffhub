@@ -1,0 +1,18 @@
+[settings]
+state_dir = '../runtime'
+refresh_before_seconds = 1800
+timeout_seconds = 30
+max_pages = 10000
+
+[mysql]
+host = '127.0.0.1'
+port = 3306
+database = 'source_data'
+user = 'collector'
+password_env = 'PINGAN_MYSQL_PASSWORD'
+
+[credentials.default]
+source = 'pingan'
+browser_channel = 'chrome'
+token_storage = 'cookie'
+token_key = 'REPLACE_WITH_VERIFIED_TOKEN_KEY'

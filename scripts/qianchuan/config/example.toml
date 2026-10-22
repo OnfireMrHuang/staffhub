@@ -1,0 +1,24 @@
+[settings]
+state_dir = '../runtime'
+refresh_before_seconds = 1800
+timeout_seconds = 30
+max_pages = 10000
+
+[mysql]
+host = '127.0.0.1'
+port = 3306
+database = 'source_data'
+user = 'collector'
+password_env = 'QIANCHUAN_MYSQL_PASSWORD'
+
+[credentials.default]
+source = 'qianchuan'
+env_prefix = 'QIANCHUAN_'
+# app_id = '123'  # Optional binding check against the private APP_ID.
+# env_file = 'private.env'
+
+# Optional values used by output columns; not query filters.
+# [accounts."123"]
+# account_name = 'Demo account'
+# account_type = 'Demo type'
+# room_name = 'Optional output label, not a business room ID'

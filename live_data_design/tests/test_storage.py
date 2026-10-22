@@ -2,8 +2,8 @@ import unittest
 from scripts.utils.database import Database
 from scripts.marketing.repository import Repository as MarketingRepository
 from scripts.zhongan.repository import Repository as ZhonganRepository
-from scripts.catalog.repository import CatalogRepository
-from scripts.utils.model import Batch, Route, Window, StorageError
+from catalog.repository import CatalogRepository
+from scripts.utils.model import Batch, Task as Route, Window, StorageError
 
 class Connection:
     def __init__(self,fail=False): self.calls=[]; self.commits=0; self.rollbacks=0; self.fail=fail
@@ -13,13 +13,13 @@ class Connection:
     def __exit__(self,*args): pass
     def execute(self,sql,args=None):
         self.calls.append((sql,args))
-        if self.fail and 'INSERT INTO live_ad_hourly' in sql: raise RuntimeError('db refused')
+        if self.fail and 'INSERT INTO `marketing_hourly`' in sql: raise RuntimeError('db refused')
     def commit(self): self.commits+=1
     def rollback(self): self.rollbacks+=1
 
 class StoreTests(unittest.TestCase):
     def test_complete_batch_replaces_only_requested_route_window(self):
-        c=Connection(); store=MarketingRepository(c); r=Route('r','p','room','marketing','c','123',{})
+        c=Connection(); store=MarketingRepository(c); r=Route('r','marketing','c','123',{'account_scope':True})
         w=Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00')
         store.write(r,w,Batch())
         delete=next(x for x in c.calls if x[0].startswith('DELETE'))
@@ -27,13 +27,13 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(c.commits,1)
     def test_failed_insert_rolls_back_delete_and_audit(self):
         c=Connection(fail=True); store=MarketingRepository(c)
-        b=Batch(ads=[{'hour':'2026-10-20 09:00:00','dimensions':{},'metrics':{},'cost':None}])
-        with self.assertRaises(StorageError): store.write(Route('r','p','room','marketing','c','1',{}),Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),b)
+        b=Batch(ads=[{'hour':'2026-10-20 09:00:00','dimensions':{'stat_time_hour':'2026-10-20 09:00:00'},'metrics':{'_collection':{'context':{'advertiser_id':'1'}}},'cost':None}])
+        with self.assertRaises(StorageError): store.write(Route('r','marketing','c','1',{'account_scope':True}),Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),b)
         self.assertEqual(c.rollbacks,1); self.assertEqual(c.commits,0)
     def test_policy_snapshot_uses_observation_hour_not_backfill_hour(self):
-        c=Connection(); b=Batch(snapshots=[{'date':'2026-10-20','session_id':'s','grain':'session_cumulative','metrics':{'count':3}}],observed_at='2026-10-21 14:12:00')
-        ZhonganRepository(c).write(Route('r','p','room','zhongan','c','',{'dy_no':'test-room'}),Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),b)
-        sql,args=next(x for x in c.calls if 'INSERT INTO live_policy_snapshot' in x[0])
+        c=Connection(); b=Batch(snapshots=[{'date':'2026-10-20','session_id':'s','grain':'session_cumulative','metrics':{'count':3,'_collection':{'context':{'livePlatform':'DOUYIN','dyNo':'test-room','roomId':'s','startDate':'2026-10-20'}}}}],observed_at='2026-10-21 14:12:00')
+        ZhonganRepository(c).write(Route('r','zhongan','c','',{'dy_no':'test-room'}),Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),b)
+        sql,args=next(x for x in c.calls if 'INSERT INTO `zhongan_stats`' in x[0])
         self.assertIn('2026-10-21 14:00:00',args)
         self.assertIn('2026-10-21 14:12:00',args)
 
@@ -66,7 +66,7 @@ class StoreTests(unittest.TestCase):
         self.assertEqual((c.commits,c.rollbacks),(0,1))
 
     def test_business_directory_insert_failure_rolls_back_the_entire_publication(self):
-        from scripts.catalog.master_data import map_tables
+        from catalog.master_data import map_tables
         from test_master_data import fixtures
         class BrokenCatalog(Connection):
             def execute(self,sql,args=None):

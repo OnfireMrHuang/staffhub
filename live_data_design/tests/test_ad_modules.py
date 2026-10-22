@@ -18,13 +18,13 @@ class AdModuleTests(unittest.TestCase):
                 self.assertEqual(repository.write.__module__, f'scripts.{source}.repository')
                 self.assertEqual(contract['source'], source)
                 self.assertTrue(contract['fields'])
-                code = (ROOT / 'scripts' / source / 'repository.py').read_text()
-                self.assertIn('DELETE FROM live_ad_hourly', code)
-                self.assertIn('INSERT INTO live_ad_hourly', code)
+                code = (ROOT.parent / 'scripts' / source / 'repository.py').read_text()
+                self.assertIn('DELETE FROM `'+source+'_hourly`', code)
+                self.assertIn('INSERT INTO `', code)
 
     def test_ad_packages_have_no_live_data_dependency(self):
         for source in ('marketing', 'qianchuan'):
-            paths = list((ROOT / 'scripts' / source).glob('*.py'))
+            paths = list((ROOT.parent / 'scripts' / source).glob('*.py'))
             self.assertTrue(paths, source)
             for path in paths:
                 tree = ast.parse(path.read_text())
@@ -37,10 +37,10 @@ class AdModuleTests(unittest.TestCase):
     def test_task_identity_is_shared_but_source_scope_rules_are_owned(self):
         for source in ('marketing', 'qianchuan'):
             tasks = importlib.import_module(f'scripts.{source}.task')
-            one = tasks.make_task('p', 'r', 'a', '00123', {'account_scope': True})
-            two = tasks.make_task('p', 'r', 'b', '123', {
-                'account_scope': True, 'metrics': ['stat_cost'], 'expected_app_id': '99'})
-            self.assertEqual(one.route_id, two.route_id)
+            one = tasks.make_task('a', '00123', {'account_scope': True})
+            two = tasks.make_task('b', '123', {
+                'account_scope': True, 'account_name': 'display'})
+            self.assertEqual(one.task_id, two.task_id)
             self.assertEqual(tasks.validate(one).resource, (source, '123'))
 
 class AdBehaviorTests(unittest.TestCase):
@@ -63,7 +63,7 @@ class AdBehaviorTests(unittest.TestCase):
     def test_marketing_field_permission_failure_never_requests_report(self):
         from scripts.marketing import Collector, make_task
         from scripts.utils.model import DataError, Window
-        task = make_task('p', 'r', 'c', '123', {'account_scope': True})
+        task = make_task('c', '123', {'account_scope': True})
         transport = self.transport('marketing', lambda request: self.fail('report must not run'), available=[])
         with self.assertRaises(DataError):
             Collector(transport).collect(task, Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00'),
@@ -82,7 +82,7 @@ class AdBehaviorTests(unittest.TestCase):
                     for hour in ('00', '23')]
             return httpx.Response(200, json={'code': 0, 'data': {'list': rows,
                                                'page_info': {'total_page': 1, 'total_number': 2}}})
-        task = make_task('p', 'r', 'c', '123', {'aweme_ids': ['00987']})
+        task = make_task('c', '123', {'aweme_ids': ['00987']})
         batch = Collector(self.transport('qianchuan', respond)).collect(
             task, Window.parse('2026-10-19T23:00:00', '2026-10-20T01:00:00'), {'access_token': 'test'})
         self.assertEqual(calls, ['2026-10-19', '2026-10-20'])
@@ -96,7 +96,7 @@ class AdBehaviorTests(unittest.TestCase):
         window = Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00')
         for source in ('marketing', 'qianchuan'):
             package = importlib.import_module('scripts.' + source)
-            task = package.make_task('p', 'r', 'c', '123', {'account_scope': True})
+            task = package.make_task('c', '123', {'account_scope': True})
             key = 'rows' if source == 'marketing' else 'list'
             transport = self.transport(source, lambda request, key=key: httpx.Response(
                 200, json={'code': 0, 'data': {key: [], 'page_info': {'total_page': 1}}}))
@@ -109,7 +109,7 @@ class AdBehaviorTests(unittest.TestCase):
         window = Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00')
         for source in ('marketing', 'qianchuan'):
             package = importlib.import_module('scripts.' + source)
-            route = package.make_task('p', 'r', 'c', '123', {'account_scope': True})
+            route = package.make_task('c', '123', {'account_scope': True})
             for fail in (False, True):
                 with self.subTest(source=source, fail=fail):
                     connection, cursor = Mock(), Mock()
@@ -118,7 +118,7 @@ class AdBehaviorTests(unittest.TestCase):
                     if fail:
                         cursor.execute.side_effect = [None, RuntimeError('sql failed')]
                     repository = package.Repository(connection)
-                    batch = Batch(ads=[{'hour': '2026-10-20 09:00:00', 'dimensions': {}, 'metrics': {}, 'cost': None}])
+                    batch = Batch(ads=[{'hour': '2026-10-20 09:00:00', 'dimensions': {'stat_time_hour':'2026-10-20 09:00:00','stat_datetime':'2026-10-20 09:00:00'}, 'metrics': {'_collection':{'context':{'advertiser_id':'123','stat_datetime':'2026-10-20 09:00:00'}}}, 'cost': None}])
                     if fail:
                         with self.assertRaises(StorageError):
                             repository.write(route, window, batch)
@@ -128,10 +128,10 @@ class AdBehaviorTests(unittest.TestCase):
                         repository.write(route, window, batch)
                         statements = [call.args[0] for call in cursor.execute.call_args_list]
                         self.assertEqual(len(statements), 3)
-                        self.assertTrue(statements[0].startswith('DELETE FROM live_ad_hourly'))
-                        self.assertTrue(statements[1].startswith('INSERT INTO live_ad_hourly'))
-                        self.assertTrue(statements[2].startswith('INSERT INTO live_run'))
-                        self.assertIn(source, cursor.execute.call_args_list[1].args[1])
+                        self.assertTrue(statements[0].startswith('DELETE FROM `'+source+'_hourly`'))
+                        self.assertTrue(statements[1].startswith('INSERT INTO `'+source+'_hourly`'))
+                        self.assertTrue(statements[2].startswith('INSERT INTO collector_run'))
+                        self.assertIn('123', cursor.execute.call_args_list[1].args[1])
                         connection.commit.assert_called_once()
                         connection.rollback.assert_not_called()
 
@@ -145,8 +145,8 @@ class AdBehaviorTests(unittest.TestCase):
                                            ('qianchuan', 'qianchuan_app', '200')):
             cli = importlib.import_module('scripts.' + source + '.cli')
             args = ['check-auth', '--config', str(ROOT / 'config/example.toml'),
-                    '--product-id', 'p', '--room-id', 'r', '--credential', credential,
-                    '--advertiser-id', '123', '--app-id', app_id, '--account-scope']
+                    '--credential', credential,
+                    '--advertise-id', '123']
             with (self.subTest(source=source), patch.object(cli, 'check_task', side_effect=AuthError('失效')),
                   redirect_stdout(io.StringIO()) as output):
                 self.assertEqual(cli.main(args), 3)
@@ -163,7 +163,7 @@ class MalformedAdResponseTests(unittest.TestCase):
         window = Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00')
         for source in ('marketing', 'qianchuan'):
             module = importlib.import_module('scripts.' + source)
-            task = module.make_task('p', 'r', 'c', '123', {'account_scope': True})
+            task = module.make_task('c', '123', {'account_scope': True})
             for data in (None, [], {'page_info': None}):
                 transport = self.transport(source, lambda request, data=data: httpx.Response(200, json={'code': 0, 'data': data}))
                 with self.subTest(source=source, data=data), self.assertRaises(DataError):

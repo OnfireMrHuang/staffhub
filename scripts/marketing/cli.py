@@ -1,0 +1,88 @@
+"""Own command arguments, configuration and concrete execution components."""
+import httpx
+from scripts.utils.cli import Parser, preview, run_main, validate_credentials
+from scripts.utils.config import Config
+from scripts.utils.model import ConfigError, Window
+from scripts.utils.runtime import CollectionService, error_result
+from scripts.utils.transport import Transport
+from .task import make_task, validate
+from .auth import Auth
+from .collector import Collector
+from .repository import Repository
+
+
+def parser():
+    root = Parser(description='marketing 独立采集项目')
+    commands = root.add_subparsers(dest='command', required=True, parser_class=Parser)
+    for name in ('check-auth','authorize','collect','init-db'):
+        p = commands.add_parser(name)
+        p.add_argument('--config', default='config/local.toml')
+        if name == 'init-db': continue
+        p.add_argument('--credential', default='default')
+        p.add_argument('--advertise-id', required=True, help='投放账户ID；映射上游 advertiser_id')
+        p.add_argument('--version', choices=('smart','legacy'), default='smart')
+        if name == 'collect': p.add_argument('--aweme-id', help='可选抖音显示号；不传则账户全量')
+        if name == 'collect':
+            p.add_argument('--start')
+            p.add_argument('--end')
+            p.add_argument('--dry-run', action='store_true')
+    return root
+
+
+def read_task(args, config):
+    accounts = config.data.get('accounts', {})
+    if not isinstance(accounts, dict): raise ConfigError('accounts 必须为配置表')
+    options = accounts.get(str(int(args.advertise_id)) if args.advertise_id.isdigit() else args.advertise_id, {})
+    if not isinstance(options, dict): raise ConfigError('账户展示配置必须为对象')
+    options = dict(options)
+    if getattr(args, 'aweme_id', None): options['aweme_id'] = args.aweme_id
+    options['version'] = args.version
+    return make_task(args.credential, args.advertise_id, options)
+
+
+
+def check_task(config, task, renew=False, force=False, wait_seconds=15):
+    validate(task)
+    validate_credentials(config, task)
+    if not 1 <= wait_seconds <= 1800: raise ConfigError('wait-seconds 必须为1至1800秒')
+    with httpx.Client(timeout=config.settings.get('timeout_seconds',30),follow_redirects=False) as client:
+        return Auth(config,client).ensure(task,renew=renew,force=force,wait_seconds=wait_seconds)
+
+
+def collect_task(config, task, window):
+    validate(task)
+    validate_credentials(config, task)
+    with httpx.Client(timeout=config.settings.get('timeout_seconds',30),follow_redirects=False) as client:
+        repository = Repository.connect(config)
+        try:
+            return CollectionService(repository, Auth(config,client),
+                Collector(Transport(client), config.settings.get('max_pages',10000))).execute(task,window)
+        finally:
+            repository.close()
+
+
+def execute(args):
+    config = Config.load(args.config)
+    if args.command == 'init-db':
+        repository = Repository.connect(config)
+        try: repository.init_schema()
+        finally: repository.close()
+        return {'code':0,'source':'marketing','status':'schema_ready'}
+    task = read_task(args,config)
+    validate_credentials(config,task)
+    if args.command == 'collect':
+        window = Window.parse(args.start, args.end)
+        if args.dry_run: return preview(task,window)
+        try: return collect_task(config,task,window)
+        except Exception as error: return error_result(error,task)
+    try:
+        state = check_task(config,task,renew=args.command=='authorize',force=args.command=='authorize',
+                           wait_seconds=getattr(args,'wait_seconds',15))
+        return {'code':0,'source':'marketing','task_id':task.task_id,'status':'session_valid',
+                'scope_status':state.get('scope_status','verified')}
+    except Exception as error:
+        return error_result(error,task)
+
+
+def main(argv=None):
+    return run_main(execute,parser(),argv,'marketing')

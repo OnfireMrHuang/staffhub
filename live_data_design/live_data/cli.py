@@ -1,10 +1,12 @@
 """Batch scheduling CLI; data import and source execution live under scripts."""
 from contextlib import nullcontext
-from scripts.catalog.repository import CatalogRepository
-from scripts.utils.cli import DEFAULT_CONFIG, Parser, run_main
+from catalog.repository import CatalogRepository
+from scripts.utils.cli import Parser, run_main
+from pathlib import Path
+DEFAULT_CONFIG = str(Path(__file__).resolve().parents[1] / "config/local.toml")
 from scripts.utils.config import Config
 from scripts.utils.model import ConfigError, SOURCES, Window, timestamp
-from scripts.utils.notify import Notifier
+from notifications import Notifier
 from .dispatch import Dispatcher
 from .runner import Runner
 

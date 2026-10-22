@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 
 import httpx
-from scripts.utils.model import Route, Window, DataError
+from scripts.utils.model import Task as Route, Window, DataError
 from scripts.marketing.collector import Collector as MarketingCollector
 from scripts.qianchuan.collector import Collector as QianchuanCollector
 from scripts.pingan.collector import Collector as PinganCollector
@@ -13,7 +13,7 @@ from scripts.marketing.contracts import default_metrics
 
 
 def route(source, **options):
-    return Route('r1', 'p1', 'room1', source, 'cred1', '123' if source in ('marketing', 'qianchuan') else '', options)
+    return Route('r1', source, 'cred1', '123' if source in ('marketing', 'qianchuan') else '', options)
 
 
 class CollectorTests(unittest.TestCase):
