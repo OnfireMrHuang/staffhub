@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "workbook": "第一期试点直播间产品.xlsx",
   "notes": [
     "本契约只包含六张来源字段字典，不含账户/应用/后台配置或登录值。",
@@ -78,7 +78,8 @@
           "projection_type": "text",
           "requestable": false,
           "sql_type": "DATETIME",
-          "sql_nullable": true
+          "sql_nullable": true,
+          "reason": "小时粒度为来源 stat_datetime；天粒度为 NULL，避免将日累计误标为小时数据。"
         },
         {
           "name": "start_date",
@@ -143,8 +144,8 @@
           ],
           "projection_type": "text",
           "requestable": false,
-          "sql_type": "VARCHAR(512)",
-          "sql_nullable": true
+          "sql_type": "VARCHAR(32)",
+          "sql_nullable": false
         },
         {
           "name": "advertiser_id",

@@ -1,4 +1,4 @@
-"""Private credential state and reusable OAuth/browser renewal lifecycles."""
+"""Single-source authorization state and reusable OAuth/browser renewal lifecycles."""
 import json
 import math
 import os
@@ -62,7 +62,7 @@ class BaseAuth:
         raise NotImplementedError('认证类型必须实现续期')
 
     def ensure(self, route, renew=False, wait_seconds=15, force=False):
-        profile = self.config.credentials.get(route.credential)
+        profile = self.config.auth
         if (route.source != self.source or not isinstance(profile, dict)
                 or profile.get('source') != self.source):
             raise AuthError('采集器来源、任务来源与凭据来源不匹配')
@@ -70,13 +70,13 @@ class BaseAuth:
         if self.oauth and profile.get('app_id'):
             if self.env(profile)['app_id'] != str(profile['app_id']):
                 raise AuthError('环境变量 APP_ID 与同步原表关联的应用不一致')
-        path = self.config.credential_path(route.credential)
+        path = self.config.state_path
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
             with FileLock(str(path) + '.lock', timeout=0):
                 old = read_state(path)
                 if old.get('source') is not None and old['source'] != self.source:
-                    raise AuthError('缓存来源与当前凭据来源不一致，请使用独立凭据别名')
+                    raise AuthError('缓存来源与脚本不一致，请核对本脚本授权缓存')
                 if self.oauth and old and old.get('app_id') != self.env(profile)['app_id']:
                     raise AuthError('缓存 app_id 与当前应用不一致')
                 threshold = self.config.settings.get('refresh_before_seconds', 1800) if renew else 0
@@ -126,9 +126,9 @@ class OAuthAuth(BaseAuth):
         body = {'app_id': int(env['app_id']), 'secret': env['app_secret']}
         if old:
             if old.get('app_id') != env['app_id']:
-                raise AuthError('缓存应用 ID 不匹配，请核对配置或使用新的凭据别名')
+                raise AuthError('缓存应用 ID 不匹配，请核对本脚本应用配置及授权缓存')
             if not old.get('refresh_token'):
-                raise AuthError('缓存缺少 refresh_token；需要重新授权并更换凭据别名')
+                raise AuthError('缓存缺少 refresh_token；需要清理失效缓存后重新授权')
             body['refresh_token'] = old['refresh_token']
             action = 'refresh_token'
         else:

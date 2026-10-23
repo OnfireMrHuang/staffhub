@@ -9,16 +9,16 @@ class Parser(argparse.ArgumentParser):
         raise ConfigError('命令行参数无效，请使用 --help 检查必需字段和选项')
 
 
-def validate_credentials(config, task):
-    profile = config.credentials.get(task.credential)
+def validate_auth_config(config, task):
+    profile = config.auth
     if not profile or profile.get('source') != task.source:
-        raise ConfigError('凭据别名不存在或来源不匹配')
+        raise ConfigError('授权配置来源与脚本不匹配')
 
 
 def preview(task, window):
     return {'code':0,'source':task.source,'task_id':task.task_id,'status':'planned','dry_run':True,
             'start':timestamp(window.start),'end':timestamp(window.end),
-            'task':{'credential':task.credential,'account_id':task.account_id,'options':task.options}}
+            'task':{'account_id':task.account_id,'options':task.options}}
 
 
 def run_main(execute, parser, argv, source):

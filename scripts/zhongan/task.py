@@ -6,7 +6,7 @@ CONTEXT = set()
 ALLOWED = {'dy_no', 'platform'} | CONTEXT
 
 
-def make_task(credential, options=None):
+def make_task(options=None):
     if options is None:
         options = {}
     if not isinstance(options, dict):
@@ -20,7 +20,7 @@ def make_task(credential, options=None):
     options['dy_no'] = text(options.get('dy_no'), 'dy_no')
     options['platform'] = text(options.get('platform', 'DOUYIN'), 'platform')
     scope = {name: value for name, value in options.items() if name not in CONTEXT}
-    route = build_task('zhongan', credential, '', options, scope)
+    route = build_task('zhongan', '', options, scope)
     validate(route)
     return route
 

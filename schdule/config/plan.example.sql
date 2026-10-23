@@ -6,7 +6,6 @@ SELECT
   CAST(NULL AS CHAR(128)) AS product_id,
   CAST(NULL AS CHAR(128)) AS room_id,
   CAST(NULL AS CHAR(16)) AS source,
-  CAST(NULL AS CHAR(128)) AS credential,
   CAST(NULL AS CHAR(128)) AS advertise_id,
   JSON_OBJECT() AS options
 WHERE 1 = 0;

@@ -1,12 +1,19 @@
 """Qianchuan task normalization and non-overlapping account/anchor scope."""
-import re
 
 from scripts.utils.model import ConfigError, Scope
 from scripts.utils.tasks import build_task, positive_id, text
+from .parameters import granularity
 
 SOURCE = 'qianchuan'
 CONTEXT = {'account_name', 'account_type', 'room_name'}
-OPTIONS = CONTEXT | {'account_scope', 'aweme_id', 'aweme_ids'}
+OPTIONS = CONTEXT | {'account_scope', 'aweme_ids', 'time_granularity'}
+
+
+def configured_options(config, options):
+    report = config.data.get('report', {})
+    if not isinstance(report, dict) or set(report)-{'time_granularity'}:
+        raise ConfigError('report 配置仅支持 time_granularity')
+    return {**report, **options}
 
 
 def _options(options):
@@ -20,34 +27,31 @@ def _options(options):
             options[field] = text(options[field], field)
     if 'account_scope' in options and not isinstance(options['account_scope'], bool):
         raise ConfigError('account_scope 必须为布尔值')
-    if 'aweme_id' in options:
-        options['aweme_id'] = text(options['aweme_id'], 'aweme_id')
     if 'aweme_ids' in options:
         values = options['aweme_ids']
         if (not isinstance(values, list) or len(values) != 1 or isinstance(values[0], bool)
                 or not isinstance(values[0], (str, int))):
             raise ConfigError('aweme_ids 必须只包含一个已核实的内部ID')
         options['aweme_ids'] = [int(positive_id(str(values[0]), 'aweme_ids'))]
-    if options.get('aweme_id') and options.get('aweme_ids'):
-        raise ConfigError('手机端和内部 aweme ID 不能同时配置')
-    selected = bool(options.get('aweme_id') or options.get('aweme_ids'))
+    selected = bool(options.get('aweme_ids'))
     if not selected and options.get('account_scope') is not True:
-        raise ConfigError('千川任务必须指定抖音号、内部ID或明确 account_scope=true')
+        raise ConfigError('千川任务必须指定内部主播 ID 或明确 account_scope=true')
     if selected and options.get('account_scope'):
         raise ConfigError('账户全量与主播过滤不能同时配置')
+    options['time_granularity'] = granularity(options)
     return options
 
 
-def make_task(credential, account_id, options=None):
+def make_task(account_id, options=None):
     account_id = positive_id(account_id, 'account_id')
     options = dict(options or {})
-    if not options.get('aweme_id') and not options.get('aweme_ids'):
+    if not options.get('aweme_ids'):
         options.setdefault('account_scope', True)
     options = _options(options)
-    scope = {key: options[key] for key in ('account_scope', 'aweme_id', 'aweme_ids') if key in options}
+    scope = {key: options[key] for key in ('account_scope', 'aweme_ids', 'time_granularity') if key in options}
     if not scope.get('account_scope'):
         scope.pop('account_scope', None)
-    return build_task(SOURCE, credential, account_id, options, scope)
+    return build_task(SOURCE, account_id, options, scope)
 
 
 def validate(route):
@@ -58,5 +62,5 @@ def validate(route):
         raise ConfigError('广告 account_id 必须是规范的正整数文本')
     options = _options(route.options)
     if options.get('aweme_ids'):
-        return Scope((SOURCE, account), str(options['aweme_ids'][0]), 'internal')
-    return Scope((SOURCE, account), options.get('aweme_id', '*'), 'display')
+        return Scope((SOURCE, account, options['time_granularity']), str(options['aweme_ids'][0]), 'internal')
+    return Scope((SOURCE, account, options['time_granularity']), '*', 'internal')

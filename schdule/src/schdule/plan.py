@@ -65,7 +65,7 @@ def build_plan(bindings,collectors):
             old=by_task[key]
             if (old.binding.room_key!=binding.room_key or old.auth_key!=target.auth_key
                     or old.task.options!=target.task.options):
-                raise ScheduleError('相同来源范围存在冲突归属、凭据或参数')
+                raise ScheduleError('相同来源范围存在冲突归属或参数')
             continue  # A SQL account/backend join may repeat an identical backend row.
         if binding.source in ('pingan','zhongan'):
             if binding.room_key in policy_rooms:

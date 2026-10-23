@@ -13,9 +13,10 @@ class IndependentProjects(unittest.TestCase):
         for source in SOURCES:
             module = importlib.import_module('scripts.' + source)
             kwargs = {'account_id':'123'} if source in SOURCES[:2] else {'options': {'channel':'demo'} if source=='pingan' else {'dy_no':'demo'}}
-            task = module.task.make_task('default', **kwargs)
+            task = module.task.make_task(**kwargs)
             self.assertFalse(hasattr(task,'product_id'))
             self.assertFalse(hasattr(task,'room_id'))
+            self.assertFalse(hasattr(task,'credential'))
 
     def test_command_arguments_only_expose_used_inputs(self):
         for source in SOURCES:
@@ -24,7 +25,7 @@ class IndependentProjects(unittest.TestCase):
             for command in ('collect','check-auth','authorize'):
                 result = subprocess.run([sys.executable,'-m','scripts.'+source,command,'--help'],cwd=ROOT.parent,capture_output=True,text=True)
                 self.assertEqual(result.returncode,0,result.stderr)
-                for unused in ('--product-id','--room-id','--app-id','--account-scope','--metrics','--task-file'):
+                for unused in ('--product-id','--room-id','--app-id','--account-scope','--metrics','--task-file','--credential'):
                     self.assertNotIn(unused,result.stdout)
                 if command!='collect':
                     self.assertNotIn('--start',result.stdout)

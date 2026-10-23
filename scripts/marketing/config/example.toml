@@ -11,7 +11,7 @@ database = 'source_data'
 user = 'collector'
 password_env = 'MARKETING_MYSQL_PASSWORD'
 
-[credentials.default]
+[auth]
 source = 'marketing'
 env_prefix = 'MARKETING_'
 # app_id = '123'  # Optional binding check against the private APP_ID.

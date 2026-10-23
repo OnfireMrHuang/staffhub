@@ -7,14 +7,14 @@
 ```bash
 uv sync --locked
 cp -n config/example.toml config/local.toml
-uv run qianchuan check-auth --advertise-id 456
-uv run qianchuan authorize --advertise-id 456
+uv run qianchuan check-auth --advertiser-id 456
+uv run qianchuan authorize --advertiser-id 456
 uv run qianchuan init-db
-uv run qianchuan collect --advertise-id 456 --dry-run
-uv run qianchuan collect --advertise-id 456 --start 2026-10-20T09:00:00 --end 2026-10-20T10:00:00
+uv run qianchuan collect --advertiser-id 456 --dry-run
+uv run qianchuan collect --advertiser-id 456 --start-date 2026-10-20 --end-date 2026-10-20 --time-granularity TIME_GRANULARITY_DAILY
 ```
 
-私有环境使用 `QIANCHUAN_APP_ID`、`QIANCHUAN_APP_SECRET`；首次授权另需 `QIANCHUAN_AUTH_CODE`。可配置 credentials.default.env_file，进程环境优先。
+私有环境使用 `QIANCHUAN_APP_ID`、`QIANCHUAN_APP_SECRET`；首次授权另需 `QIANCHUAN_AUTH_CODE`。可配置 auth.env_file，进程环境优先。
 
 MySQL 库需事先创建；模板密码环境变量为 `QIANCHUAN_MYSQL_PASSWORD`。授权检查/授权不使用 MySQL；dry-run 不访问网络。真实 collect 要求授权有效及本源表已创建。默认配置为当前工作目录的 config/local.toml，从其他目录运行请传 `--config` 绝对路径；配置内相对路径以 TOML 目录为基准。
 
@@ -26,3 +26,5 @@ uv run qianchuan authorize --help
 ```
 
 本项目只依赖自有锁定包和本地 `../utils`；.venv、config/local.toml、private.env、runtime 不提交。发布或复制本项目时同时分发 utils，或将两者分别打包安装。
+
+本类型只使用一套 `[auth]` 授权。状态缓存为 `state_dir/qianchuan/auth.json`，不使用 credential 参数或别名。

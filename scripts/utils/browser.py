@@ -22,7 +22,7 @@ def domain_matches(domain, host):
 
 def capture_session(config, route, profile, wait_seconds, validate, *, url, extract):
     from playwright.sync_api import sync_playwright, Error as BrowserError
-    directory = config.state_dir / 'browser' / config.credential_path(route.credential).stem
+    directory = config.browser_dir
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         with sync_playwright() as playwright:

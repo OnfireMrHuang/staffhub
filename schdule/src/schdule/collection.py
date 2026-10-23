@@ -1,8 +1,10 @@
-"""Room ordering and failure policy, with date-only adaptation for ZhongAn."""
+"""Room ordering and failure policy, using source-owned date/granularity rules."""
 from scripts.utils.model import DayWindow
 
 
 def windows(target,window):
+    if target.binding.source=='qianchuan':
+        return [target.api.collection_window(target.task,window)]
     return [DayWindow.parse(day) for day in window.dates()] if target.binding.source=='zhongan' else [window]
 
 

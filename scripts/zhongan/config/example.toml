@@ -11,7 +11,7 @@ database = 'source_data'
 user = 'collector'
 password_env = 'ZHONGAN_MYSQL_PASSWORD'
 
-[credentials.default]
+[auth]
 source = 'zhongan'
 browser_channel = 'chrome'
 auth_cookie_names = ['REPLACE_WITH_VERIFIED_AUTH_COOKIE_NAME']

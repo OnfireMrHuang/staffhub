@@ -1,4 +1,4 @@
-"""One renewal attempt per credential, followed by target-specific checks."""
+"""One renewal attempt per source, followed by target-specific checks."""
 from collections import OrderedDict
 
 

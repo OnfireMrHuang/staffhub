@@ -42,7 +42,7 @@ class Connection:
 class PolicyModules(unittest.TestCase):
     def module(self, source): return importlib.import_module('scripts.' + source)
     def task(self, source, **options):
-        return self.module(source).task.make_task('credential', options=options)
+        return self.module(source).task.make_task(options=options)
 
     def test_each_module_owns_implementation(self):
         for source in ('pingan', 'zhongan'):
@@ -59,16 +59,16 @@ class PolicyModules(unittest.TestCase):
         for source, options in (('pingan', {'channel': ' ch '}), ('zhongan', {'dy_no': 'dy'})):
             module = self.module(source)
             with self.assertRaises(ConfigError):
-                module.task.make_task('c', options={**options, 'advertise_id':'123'})
+                module.task.make_task(options={**options, 'advertise_id':'123'})
             with self.assertRaises(ConfigError):
-                module.task.make_task('c', options={**options, 'account_scope': True})
-            route = module.task.make_task('c', options=options)
+                module.task.make_task(options={**options, 'account_scope': True})
+            route = module.task.make_task(options=options)
             self.assertEqual(module.task.validate(route).selector, '*')
 
-    def test_policy_identity_ignores_names_and_credential(self):
+    def test_policy_identity_normalizes_channel(self):
         module = self.module('pingan')
-        a = module.task.make_task('a', options={'channel': ' channel '})
-        b = module.task.make_task('b', options={'channel': 'channel'})
+        a = module.task.make_task(options={'channel': ' channel '})
+        b = module.task.make_task(options={'channel': 'channel'})
         self.assertEqual(a.task_id, b.task_id)
         self.assertEqual(module.task.validate(a).resource, ('pingan', 'channel'))
 

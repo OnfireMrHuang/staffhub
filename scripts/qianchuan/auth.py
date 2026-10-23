@@ -3,6 +3,7 @@ from scripts.utils.auth import OAuthAuth
 from scripts.utils.model import now
 from scripts.utils.transport import Transport
 from .collector import Collector
+from .parameters import request_params
 
 
 class Auth(OAuthAuth):
@@ -10,9 +11,6 @@ class Auth(OAuthAuth):
 
     def _probe(self, route, state):
         day = now().date().isoformat()
-        Collector(Transport(self.client)).query('report', {
-            'advertiser_id': route.account_id, 'fields': ['stat_cost'],
-            'filtering': {'marketing_goal': 'LIVE_PROM_GOODS'},
-            'start_date': day, 'end_date': day, 'page': 1, 'page_size': 1,
-        }, state['access_token'])
+        Collector(Transport(self.client)).query(
+            request_params(route, day, fields=['stat_cost'], page_size=1), state['access_token'])
         return True

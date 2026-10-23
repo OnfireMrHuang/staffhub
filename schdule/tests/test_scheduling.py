@@ -1,5 +1,6 @@
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime
 import io
 import json
 import os
@@ -20,7 +21,8 @@ from schdule.models import Binding
 from schdule.plan import build_plan, load_fixture, load_mysql
 from schdule.runtime import Run
 from schdule.notify import Notifier
-from scripts.utils.model import AuthError, Window
+from scripts.utils.model import AuthError, CHINA, Window
+from scripts.qianchuan.parameters import DAILY, HOURLY
 
 ROOT=Path(__file__).resolve().parents[1]
 WINDOW=Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00')
@@ -54,7 +56,21 @@ class PlanTests(unittest.TestCase):
     def test_full_and_filtered_account_scopes_are_rejected(self):
         targets,adapter=plan();binding=targets[3].binding
         with self.assertRaises(ScheduleError):
-            build_plan([binding,replace(binding,options={'aweme_id':'demo'})],adapter)
+            build_plan([binding,replace(binding,options={'aweme_ids':[987]})],adapter)
+
+    def test_qianchuan_config_and_plan_granularity_are_distinct_targets_with_one_auth(self):
+        targets,adapter=plan();binding=targets[3].binding
+        config=deepcopy(adapter.configs['qianchuan'])
+        config.data['report']={'time_granularity':DAILY}
+        adapter.configs['qianchuan']=config
+        self.assertEqual(adapter.prepare(binding).task.options['time_granularity'],DAILY)
+        targets=build_plan([binding,replace(binding,options={'time_granularity':HOURLY})],adapter)
+        self.assertEqual(len(targets),2)
+        self.assertEqual({t.task.options['time_granularity'] for t in targets},{HOURLY,DAILY})
+        self.assertEqual({t.auth_key for t in targets},{'qianchuan'})
+        checks=Mock();checks.check.return_value={'code':0,'status':'session_valid'}
+        authorization.execute(targets,checks,Journal(),Mock())
+        self.assertEqual([call.kwargs['renew'] for call in checks.check.call_args_list],[True,False])
 
     def test_two_distinct_policy_ranges_in_one_room_are_rejected(self):
         targets,adapter=plan();binding=targets[2].binding
@@ -67,13 +83,14 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(Exception):adapter.prepare(replace(targets[0].binding,options={'product_id':'irrelevant'}))
 
     def test_json_projection_is_strict(self):
-        raw={'product_id':'p','room_id':'r','source':'marketing','credential':'default','advertise_id':'123','options':'{}'}
+        raw={'product_id':'p','room_id':'r','source':'marketing','advertise_id':'123','options':'{}'}
         self.assertEqual(Binding.parse(raw).options,{})
-        for change in ({'advertise_id':123},{'options':'[]'},{'source':'bad'},{'secret':'do-not-accept'},{'product_id':''}):
+        for change in ({'advertise_id':123},{'options':'[]'},{'source':'bad'},{'secret':'do-not-accept'},
+                       {'credential':'default'},{'product_id':''}):
             with self.subTest(change=change),self.assertRaises(ScheduleError):Binding.parse({**raw,**change})
 
     def test_sql_reader_is_read_only_bounded_and_closes_before_execution(self):
-        rows=[{'product_id':'p','room_id':'r','source':'marketing','credential':'default','advertise_id':'123','options':{}}]
+        rows=[{'product_id':'p','room_id':'r','source':'marketing','advertise_id':'123','options':{}}]
         connection=Mock();cursor=Mock()
         connection.cursor.return_value.__enter__=Mock(return_value=cursor)
         connection.cursor.return_value.__exit__=Mock(return_value=False)
@@ -154,6 +171,10 @@ class AuthorizationTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def setUp(self):
+        clock=patch('scripts.qianchuan.parameters.now',return_value=datetime(2026,10,23,tzinfo=CHINA))
+        clock.start();self.addCleanup(clock.stop)
+
     def invoke(self,policy='continue',code=4):
         targets,_=plan();adapter=Mock();notifier=Mock();journal=Journal()
         adapter.collect.side_effect=[{'code':code,'status':'failed'},*({'code':0,'status':'success','rows':1} for _ in range(8))]
@@ -182,6 +203,18 @@ class CollectionTests(unittest.TestCase):
         self.assertTrue(all(p.start.hour==p.end.hour==0 for p in periods))
         midnight=Window.parse('2026-10-20T23:00:00','2026-10-21T00:00:00')
         self.assertEqual(collection.windows(target,midnight)[0].dates(),['2026-10-20'])
+
+    def test_qianchuan_daily_preview_and_journal_use_actual_full_date_window(self):
+        targets,adapter=plan()
+        target=adapter.prepare(replace(targets[3].binding,options={'time_granularity':DAILY}))
+        period=collection.windows(target,WINDOW)[0]
+        self.assertEqual(period.start.isoformat(),'2026-10-20T00:00:00+08:00')
+        self.assertEqual(period.end.isoformat(),'2026-10-21T00:00:00+08:00')
+        execution=Mock();execution.collect.return_value={'code':0,'status':'success','rows':1}
+        result=collection.execute([target],execution,Journal(),Mock(),WINDOW)
+        execution.collect.assert_called_once_with(target,period)
+        self.assertEqual(result['results'][0]['start'],period.start.isoformat())
+        self.assertEqual(result['results'][0]['end'],period.end.isoformat())
 
     def test_journal_failure_prevents_next_source(self):
         targets,_=plan();adapter=Mock();adapter.collect.return_value={'code':0,'status':'success'}

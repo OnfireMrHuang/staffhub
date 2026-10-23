@@ -1,4 +1,4 @@
-"""Tencent SMS adapter with per-credential cooldown, independent of the collectors."""
+"""Tencent SMS adapter with per-source cooldown, independent of the collectors."""
 from hashlib import sha256
 import json
 import os
@@ -33,8 +33,8 @@ class Notifier:
             params=self.options.get('template_params',['{source}','{reason}'])
             if not isinstance(params,list) or any(not isinstance(p,str) for p in params):
                 raise ScheduleError('短信模板参数必须为字符串数组')
-            try:[p.format(source='',reason='',credential='') for p in params]
-            except (KeyError,ValueError,IndexError) as error:raise ScheduleError('短信参数仅支持 source/reason/credential') from error
+            try:[p.format(source='',reason='') for p in params]
+            except (KeyError,ValueError,IndexError) as error:raise ScheduleError('短信参数仅支持 source/reason') from error
             integer(self.options.get('cooldown_seconds',1800),'sms.cooldown_seconds')
 
     def _send(self,body):
@@ -60,7 +60,7 @@ class Notifier:
                 old=json.loads(path.read_text()) if path.exists() else {}
                 if old.get('sent_at',0)>time.time()-self.options.get('cooldown_seconds',1800):
                     return {'code':0,'status':'notification_cooldown'}
-                values={'source':LABELS[target.binding.source],'credential':target.binding.credential,'reason':REASONS[reason]}
+                values={'source':LABELS[target.binding.source],'reason':REASONS[reason]}
                 body={'PhoneNumberSet':self.options['phone_numbers'],'SmsSdkAppId':self.options['sdk_app_id'],
                       'SignName':self.options['sign_name'],'TemplateId':self.options['template_id'],
                       'TemplateParamSet':[p.format_map(values) for p in self.options.get('template_params',['{source}','{reason}'])]}

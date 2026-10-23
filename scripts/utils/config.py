@@ -22,15 +22,11 @@ class Config:
         if 'routes' in data:
             raise ConfigError('routes 清单已移除，请配置 master_data 并使用 sync-sources 同步原表')
         routes = []
-        creds = data.get('credentials',{})
-        if not isinstance(creds,dict) or not creds:
-            raise ConfigError('至少配置一个凭据别名')
-        for name,c in creds.items():
-            if not isinstance(c,dict) or c.get('source') not in SOURCES:
-                raise ConfigError('凭据 source 无效')
-        prefixes = [c['env_prefix'] for c in creds.values() if 'env_prefix' in c]
-        if len(prefixes)!=len(set(prefixes)):
-            raise ConfigError('OAuth env_prefix 不得复用')
+        if 'credentials' in data:
+            raise ConfigError('每类脚本只使用一套授权，请将 credentials 配置改为 [auth]')
+        auth = data.get('auth')
+        if not isinstance(auth,dict) or auth.get('source') not in SOURCES:
+            raise ConfigError('需要配置 [auth] 及本脚本的 source')
         settings=data.get('settings',{})
         if not isinstance(settings,dict) or not isinstance(data.get('mysql',{}),dict):
             raise ConfigError('settings / mysql 必须为配置表')
@@ -56,7 +52,7 @@ class Config:
         return cls(path,data,routes)
 
     @property
-    def credentials(self): return self.data['credentials']
+    def auth(self): return self.data['auth']
     @property
     def settings(self): return self.data.get('settings',{})
     @property
@@ -64,10 +60,12 @@ class Config:
     def resolve(self,value):
         p=Path(value)
         return p.resolve() if p.is_absolute() else (self.path.parent/p).resolve()
-    def credential_path(self,name):
-        # Hash names so labels can never escape the private state directory.
-        import hashlib
-        return self.state_dir/'credentials'/(hashlib.sha256(name.encode()).hexdigest()+'.json')
+    @property
+    def state_path(self):
+        return self.state_dir/self.auth['source']/'auth.json'
+    @property
+    def browser_dir(self):
+        return self.state_dir/self.auth['source']/'browser'
     def database_kwargs(self):
         db=self.data.get('mysql',{})
         password=os.environ.get(db.get('password_env','LIVE_MYSQL_PASSWORD'))

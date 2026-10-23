@@ -61,7 +61,6 @@ class Window:
 class Task:
     task_id: str
     source: str
-    credential: str
     account_id: str = ''
     options: dict = field(default_factory=dict)
 

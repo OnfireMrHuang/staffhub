@@ -1,9 +1,10 @@
 import json
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 import httpx
-from scripts.utils.model import Task as Route, Window, DataError
+from scripts.utils.model import Task as Route, CHINA, Window, DataError
 from scripts.marketing.collector import Collector as MarketingCollector
 from scripts.qianchuan.collector import Collector as QianchuanCollector
 from scripts.pingan.collector import Collector as PinganCollector
@@ -12,8 +13,14 @@ from scripts.utils.transport import Transport
 from scripts.marketing.contracts import default_metrics
 
 
+def setUpModule():
+    clock = patch('scripts.qianchuan.parameters.now', return_value=datetime(2026, 10, 23, tzinfo=CHINA))
+    clock.start()
+    unittest.addModuleCleanup(clock.stop)
+
+
 def route(source, **options):
-    return Route('r1', source, 'cred1', '123' if source in ('marketing', 'qianchuan') else '', options)
+    return Route('r1', source, '123' if source in ('marketing', 'qianchuan') else '', options)
 
 
 class CollectorTests(unittest.TestCase):

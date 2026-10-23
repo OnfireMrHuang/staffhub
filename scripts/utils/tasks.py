@@ -23,8 +23,7 @@ def hash_value(value):
         separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
-def build_task(source, credential, account_id, options, scope):
+def build_task(source, account_id, options, scope):
     """Identity depends only on the source query scope, never business ownership."""
-    credential = text(credential, 'credential')
     identity = [source, account_id, scope]
-    return Task('task-' + hash_value(identity), source, credential, account_id, dict(options))
+    return Task('task-' + hash_value(identity), source, account_id, dict(options))

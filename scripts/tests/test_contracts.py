@@ -121,7 +121,7 @@ class FieldContractTests(unittest.TestCase):
                 'metrics':[{'field':'stat_cost'},{'field':'click_cnt'},{'field':'show_cnt'}]}]}})
         for version in ('smart', 'legacy'):
             transport = Transport(httpx.Client(transport=httpx.MockTransport(respond)), retries=0)
-            task = Route('r','marketing','cred','123',{'version':version,'account_scope':True})
+            task = Route('r','marketing','123',{'version':version,'account_scope':True})
             with self.assertRaisesRegex(DataError,'缺少请求字段'):
                 MarketingCollector(transport).collect(task, Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),{'access_token':'test'})
         self.assertTrue(all('/config/' in path for path in seen))
@@ -135,7 +135,7 @@ class FieldContractTests(unittest.TestCase):
                   'orderInfo':{'orderInfoList':[],'totalCount':0,'totalPage':0}}[endpoint]
             return httpx.Response(200,json={'code':200,'data':data})
         transport=Transport(httpx.Client(transport=httpx.MockTransport(respond)),retries=0)
-        task=Route('r','pingan','cred','',{'channel':'test'})
+        task=Route('r','pingan','',{'channel':'test'})
         batch=PinganCollector(transport).collect(task,Window.parse('2026-10-20T09:00:00','2026-10-20T10:00:00'),{})
         metrics=batch.snapshots[0]['metrics']
         self.assertEqual(metrics['summary'][0]['annualPremium'],'153260.28')
@@ -158,7 +158,7 @@ class FieldContractTests(unittest.TestCase):
                 self.assertIn('UNIQUE KEY `uk_account_hour` (`advertiser_id`,`stat_time_hour`)',sql)
             if source == 'qianchuan':
                 self.assertIn("`aweme_id` VARCHAR(128) NOT NULL DEFAULT ''",sql)
-                self.assertIn('UNIQUE KEY `uk_account_hour_aweme` (`advertiser_id`,`stat_datetime`,`aweme_id`)',sql)
+                self.assertIn('UNIQUE KEY `uk_account_grain_time_aweme` (`advertiser_id`,`time_granularity`,`stat_datetime`,`aweme_id`)',sql)
 
     def test_collectors_request_full_defaults_and_keep_request_context(self):
         for source in ('marketing', 'qianchuan'):
@@ -172,7 +172,7 @@ class FieldContractTests(unittest.TestCase):
                 row = {'stat_datetime': '2026-10-20 09:00:00', 'stat_cost': '1.23001', 'new_metric': 7} if source == 'qianchuan' else {'dimensions': {'stat_time_hour': '2026-10-20 09:00:00'}, 'metrics': {'stat_cost': '1.23001', 'new_metric': 7}}
                 return httpx.Response(200, json={'code': 0, 'data': {'list' if source == 'qianchuan' else 'rows': [row], 'page_info': {'total_page': 1, 'total_number': 1}}})
             transport = Transport(httpx.Client(transport=httpx.MockTransport(respond)), retries=0)
-            route = Route('r', source, 'cred', '123', {'account_scope': True})
+            route = Route('r', source, '123', {'account_scope': True})
             batch = source_module(source).Collector(transport).collect(route, Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00'), {'access_token': 'test'})
             self.assertEqual(requested, default_metrics(source))
             self.assertEqual(batch.ads[0]['metrics']['new_metric'], 7)
@@ -187,7 +187,7 @@ class FieldContractTests(unittest.TestCase):
                     'getOrderList': [{'orderNo': 'o1', 'nextPage': None}]}[endpoint]
             return httpx.Response(200, json={'success': True, 'data': data})
         transport = Transport(httpx.Client(transport=httpx.MockTransport(respond)), retries=0)
-        route = Route('r', 'zhongan', 'cred', '', {'dy_no': 'abc'})
+        route = Route('r', 'zhongan', '', {'dy_no': 'abc'})
         batch = ZhonganCollector(transport).collect(route, Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00'), {})
         self.assertIn('nextPage', batch.orders[0]['payload'])
         self.assertEqual(batch.snapshots[0]['metrics']['unknown'], {'x': 1})

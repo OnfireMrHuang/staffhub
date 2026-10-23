@@ -11,7 +11,7 @@ database = 'source_data'
 user = 'collector'
 password_env = 'QIANCHUAN_MYSQL_PASSWORD'
 
-[credentials.default]
+[auth]
 source = 'qianchuan'
 env_prefix = 'QIANCHUAN_'
 # app_id = '123'  # Optional binding check against the private APP_ID.
@@ -22,3 +22,6 @@ env_prefix = 'QIANCHUAN_'
 # account_name = 'Demo account'
 # account_type = 'Demo type'
 # room_name = 'Optional output label, not a business room ID'
+
+[report]
+time_granularity = "TIME_GRANULARITY_HOURLY"

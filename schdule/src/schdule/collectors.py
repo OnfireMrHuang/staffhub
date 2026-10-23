@@ -2,7 +2,7 @@
 from copy import deepcopy
 from importlib import import_module
 from scripts.utils.config import Config
-from scripts.utils.cli import validate_credentials
+from scripts.utils.cli import validate_auth_config
 from .errors import ScheduleError, failure
 from .models import Target
 
@@ -27,11 +27,12 @@ class Collectors:
             options=deepcopy(accounts.get(key,{}))
             if not isinstance(options,dict):raise ScheduleError('来源账户配置必须为对象')
             options.update(binding.options)
-            task=tasks.make_task(binding.credential,account,options)
+            if source=='qianchuan':options=tasks.configured_options(config,options)
+            task=tasks.make_task(account,options)
         else:
             if binding.advertise_id:raise ScheduleError('保单计划不能携带广告账户')
-            task=tasks.make_task(binding.credential,binding.options)
-        validate_credentials(config,task)
+            task=tasks.make_task(binding.options)
+        validate_auth_config(config,task)
         return Target(binding,task,config,api,tasks.validate(task))
 
     def check(self,target,*,renew=False,threshold=1800,wait=15):

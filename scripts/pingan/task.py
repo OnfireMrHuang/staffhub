@@ -6,7 +6,7 @@ CONTEXT = set()
 ALLOWED = {'channel'} | CONTEXT
 
 
-def make_task(credential, options=None):
+def make_task(options=None):
     if options is None:
         options = {}
     if not isinstance(options, dict):
@@ -19,7 +19,7 @@ def make_task(credential, options=None):
             options[field] = text(options[field], field)
     options['channel'] = text(options.get('channel'), 'channel')
     scope = {name: value for name, value in options.items() if name not in CONTEXT}
-    route = build_task('pingan', credential, '', options, scope)
+    route = build_task('pingan', '', options, scope)
     validate(route)
     return route
 

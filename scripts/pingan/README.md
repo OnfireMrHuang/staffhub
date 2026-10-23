@@ -26,3 +26,5 @@ uv run pingan authorize --help
 ```
 
 本项目只依赖自有锁定包和本地 `../utils`；.venv、config/local.toml、private.env、runtime 不提交。发布或复制本项目时同时分发 utils，或将两者分别打包安装。
+
+本类型只使用一套 `[auth]` 授权。状态缓存为 `state_dir/pingan/auth.json`，不使用 credential 参数或别名。

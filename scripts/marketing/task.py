@@ -26,13 +26,13 @@ def _options(options):
     return options
 
 
-def make_task(credential, account_id, options=None):
+def make_task(account_id, options=None):
     account_id = positive_id(account_id, 'account_id')
     options = dict(options or {})
     options.setdefault('account_scope', True)
     options = _options(options)
     scope = {key: options[key] for key in ('version', 'account_scope')}
-    return build_task(SOURCE, credential, account_id, options, scope)
+    return build_task(SOURCE, account_id, options, scope)
 
 
 def validate(route):

@@ -1,6 +1,6 @@
 """Own command arguments, configuration and concrete execution components."""
 import httpx
-from scripts.utils.cli import Parser, preview, run_main, validate_credentials
+from scripts.utils.cli import Parser, preview, run_main, validate_auth_config
 from scripts.utils.config import Config
 from scripts.utils.model import ConfigError, DayWindow
 from scripts.utils.runtime import CollectionService, error_result
@@ -18,7 +18,6 @@ def parser():
         p = commands.add_parser(name)
         p.add_argument('--config', default='config/local.toml')
         if name == 'init-db': continue
-        p.add_argument('--credential', default='default')
         p.add_argument('--dy-no', required=True)
         p.add_argument('--platform', default='DOUYIN')
         if name == 'collect':
@@ -29,13 +28,13 @@ def parser():
 
 
 def read_task(args, config):
-    return make_task(args.credential, options={'dy_no':args.dy_no, 'platform':args.platform})
+    return make_task(options={'dy_no':args.dy_no, 'platform':args.platform})
 
 
 
 def check_task(config, task, renew=False, force=False, wait_seconds=15):
     validate(task)
-    validate_credentials(config, task)
+    validate_auth_config(config, task)
     if not 1 <= wait_seconds <= 1800: raise ConfigError('wait-seconds 必须为1至1800秒')
     with httpx.Client(timeout=config.settings.get('timeout_seconds',30),follow_redirects=False) as client:
         return Auth(config,client).ensure(task,renew=renew,force=force,wait_seconds=wait_seconds)
@@ -43,7 +42,7 @@ def check_task(config, task, renew=False, force=False, wait_seconds=15):
 
 def collect_task(config, task, window):
     validate(task)
-    validate_credentials(config, task)
+    validate_auth_config(config, task)
     with httpx.Client(timeout=config.settings.get('timeout_seconds',30),follow_redirects=False) as client:
         repository = Repository.connect(config)
         try:
@@ -61,7 +60,7 @@ def execute(args):
         finally: repository.close()
         return {'code':0,'source':'zhongan','status':'schema_ready'}
     task = read_task(args,config)
-    validate_credentials(config,task)
+    validate_auth_config(config,task)
     if args.command == 'collect':
         window = DayWindow.parse(args.date)
         if args.dry_run: return preview(task,window)

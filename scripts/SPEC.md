@@ -1,6 +1,6 @@
-# 四类独立采集脚本规格 v3
+# 四类独立采集脚本规格 v4
 
-版本：2026-10-22。本文是四类采集脚本的独立规格；主规格只引用本文。首先定义数据汇 MySQL DDL，然后定义目录与依赖边界，再按来源分别定义配置、参数、功能、用例及验收。
+版本：2026-10-23。本文是四类采集脚本的独立规格；主规格只引用本文。首先定义数据汇 MySQL DDL，然后定义目录与依赖边界，再按来源分别定义配置、参数、功能、用例及验收。
 
 依据：[第一期直播数据管理 Page](https://chatgpt.com/space/page_1b6e05dc95ec81918416244f056f2cd4)、Page 指定的本地工作簿 `schdule/data/第一期试点直播间产品.xlsx` 和用户补充。本版按本地工作簿快照核对六张字段字典，共 266 个字段；未声称在线飞书内容与快照始终一致。真实账户、应用密钥、登录密码和手机号不复制到文档。
 
@@ -13,7 +13,7 @@
 | 类型 | MySQL 表 | 汇表字段数 | 一行含义 | 幂等边界 |
 | --- | --- | ---: | --- | --- |
 | 巨量营销 | `marketing_stats` | 42 | 一个账户、一个来源小时的统计 | advertiser_id＋stat_time_hour |
-| 巨量千川 | `qianchuan_stats` | 111 | 一个账户、一个主播或账户全量、一个来源小时的统计 | advertiser_id＋stat_datetime＋aweme_id |
+| 巨量千川 | `qianchuan_stats` | 111 | 一个账户、一个主播或账户全量、一个小时或一天的统计 | advertiser_id＋time_granularity＋stat_datetime＋aweme_id |
 | 平安保单 | `pingan_stats` | 20 | 一个渠道、统计日期在实际观察小时的累计快照 | channel＋startDate＋observed_hour |
 | 平安保单 | `pingan_orders` | 12 | 一个渠道下 postId 对应的最新订单记录 | channel＋postId |
 | 众安保单 | `zhongan_stats` | 49 | 一个平台、dyNo、来源场次、统计日期在观察小时的累计快照 | livePlatform＋dyNo＋roomId＋startDate＋observed_hour |
@@ -29,8 +29,8 @@
 - 来源未明确类型的字段和数组使用独立 JSON 列；这仍然是逐字段物理列，不是把整张汇表塞进一个 JSON。只存储字段字典定义的值。JSON 能力依据 [MySQL JSON](https://dev.mysql.com/doc/refman/8.0/en/json.html)。
 - 时间统一按 Asia/Shanghai 写 DATETIME，不依赖服务器自动时区转换。来源小时/日期与 observed_at 分开；保单回补只能保存本次实际观察的累计值，不能伪造历史小时状态。
 - 平安三项固定展示字段 gmvSimpleRoi/performanceRoi/adSpend 写 `-`；四项本地派生率按百分比字符串保留两位小数。漏斗百分率按字段表显示百分号，缺失为 `/`。其他缺失默认 NULL，不用 0 补齐。
-- 营销唯一键为账户 ID＋统计小时，仅支持账户级采集；smart/legacy 为接口查询版本，同账户同小时重采会替换已有值，不分别存储版本副本。千川唯一键为账户 ID＋统计小时＋已有业务字段 aweme_id；筛选时保存规范化内部 ID，账户全量用空字符串表示。查询千川全量时必须限定 aweme_id=''，不能与主播结果相加。
-- 广告仅在全部分页完整、账户/主播身份一致且字段校验通过后，在一个事务中按上述账户、主播业务键删除指定小时区间并插入完整新结果；成功空结果清空该业务键的旧值。千川的主播内部 ID 随内存批次传递，空结果也使用同一业务键；失败回滚，保留旧数据。
+- 营销唯一键为账户 ID＋统计小时，仅支持账户级采集；smart/legacy 为接口查询版本，同账户同小时重采会替换已有值，不分别存储版本副本。千川唯一键为账户 ID＋时间粒度＋stat_datetime＋已有业务字段 aweme_id；筛选时保存规范化内部 ID，账户全量用空字符串表示。查询千川全量时必须限定 aweme_id='' 并选择一个 time_granularity，不能混加账户/主播或小时/天数据。
+- 广告仅在全部分页完整、账户/主播身份一致且字段校验通过后，在一个事务中按上述账户、主播和粒度业务键删除指定时间区间并插入完整新结果；成功空结果清空该业务键的旧值。千川的主播内部 ID 随内存批次传递，空结果也使用同一业务键；失败回滚，保留旧数据。
 - 保单按唯一键 upsert；订单保留首次 first_seen_at，更新 observed_at 和字段；同观察小时快照更新，新观察小时追加。无场次、响应结构异常、分页不全属于失败，不覆盖已有快照。
 - 表之间不建立产品/业务直播间外键。众安 `roomId` 是接口要求的来源场次 ID；千川 `room_name` 是固定汇表展示列，均不等于内部业务 `room_id` 参数。
 
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS `qianchuan_stats` (
   `stat_time_hour` DATETIME NULL COMMENT '统计小时；来源汇表字段',
   `start_date` DATE NULL COMMENT '查询开始日期；来源汇表字段',
   `end_date` DATE NULL COMMENT '查询结束日期；来源汇表字段',
-  `time_granularity` VARCHAR(512) NULL COMMENT '时间粒度；来源汇表字段',
+  `time_granularity` VARCHAR(32) NOT NULL COMMENT '时间粒度；来源汇表字段',
   `advertiser_id` VARCHAR(128) NOT NULL COMMENT '账户ID；来源汇表字段',
   `account_name` VARCHAR(512) NULL COMMENT '账户名称；来源汇表字段',
   `account_type` VARCHAR(512) NULL COMMENT '账户类型；来源汇表字段',
@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS `qianchuan_stats` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_account_hour_aweme` (`advertiser_id`,`stat_datetime`,`aweme_id`),
+  UNIQUE KEY `uk_account_grain_time_aweme` (`advertiser_id`,`time_granularity`,`stat_datetime`,`aweme_id`),
   KEY `idx_account_hour` (`advertiser_id`,`stat_datetime`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
 ```
@@ -459,7 +459,7 @@ staffhub/
 
 | Page 信息 | 本版归属 |
 | --- | --- |
-| 账户 ID | 营销/千川 `--advertise-id`；入库字段仍为 advertiser_id |
+| 账户 ID | 营销 `--advertise-id`，千川 `--advertiser-id`；入库字段均为 advertiser_id |
 | 账户平台 | 调用方选择营销/千川模块；营销报表版本由 --version 选择 |
 | 账户名称/类型 | 本类型 accounts 表，可选，仅用于固定输出列 |
 | 应用 app_id、secret、授权链接/码 | 私有应用配置；AUTH_CODE 是授权链接实际返回的临时码 |
@@ -471,6 +471,17 @@ staffhub/
 
 删除旧参数 `--product-id`、`--room-id`、`--app-id`、`--task-file`、`--metrics`。不暴露重复的 `--account-scope`：未选主播时即账户全量。授权应用 ID 由配置提供；固定汇表指标不可用自定义 metrics 缩减。广告不暴露无用途的浏览器等待参数；众安不暴露上游未使用的小时起止参数。
 
+### 2.3 单套授权和状态缓存
+
+每类脚本只使用一套授权，配置段统一为 `[auth]`，不再提供授权别名。命令行和 Task 中移除 credential，调度计划也不再包含该字段。
+
+| 类型 | 配置中的信息 | 授权状态 |
+| --- | --- | --- |
+| 巨量营销、千川 | 自身应用配置、环境变量或私有 env_file | access_token、refresh_token、expires_at 和 app_id |
+| 平安、众安 | 浏览器和认证 Cookie 名称等提取规则 | 浏览器授权时提取的 Cookie/认证状态，采集时从缓存读取 |
+
+每个项目的缓存位置为 `state_dir/<source>/auth.json`，浏览器目录为 `state_dir/<source>/browser`。默认 state_dir=../runtime，相对于配置文件所在目录解析。状态文件权限0600、写入原子替换、刷新按文件加锁；即使四类配置指向同一 runtime 根目录也互相隔离。授权检查和采集读取缓存；只有 authorize 或授权调度维护会刷新 Token/恢复浏览器会话。
+
 ## 3. 巨量营销
 
 ### 3.1 目标、数据汇和依赖
@@ -481,14 +492,14 @@ staffhub/
 
 ### 3.2 配置
 
-复制 [配置模板](marketing/config/example.toml) 为本目录 `config/local.toml`。Page 的应用信息分配到 credentials；真实值通过环境或私有 env_file 提供。
+复制 [配置模板](marketing/config/example.toml) 为本目录 `config/local.toml`。Page 的应用信息分配到 auth；真实值通过环境或私有 env_file 提供。
 
 | 配置 | 必需性 / 默认 | 作用 |
 | --- | --- | --- |
-| credentials.default.source | 固定 marketing | 防止误用其他类型凭据 |
-| credentials.default.env_prefix | 默认模板 MARKETING_ | 隔离本应用环境变量 |
-| credentials.default.env_file | 可选，相对 TOML | 私有 env 文件；进程环境优先 |
-| credentials.default.app_id | 可选绑定校验 | 如填写，必须与私有 APP_ID 相同；不作为 CLI 参数 |
+| auth.source | 固定 marketing | 防止误用其他类型凭据 |
+| auth.env_prefix | 默认模板 MARKETING_ | 隔离本应用环境变量 |
+| auth.env_file | 可选，相对 TOML | 私有 env 文件；进程环境优先 |
+| auth.app_id | 可选绑定校验 | 如填写，必须与私有 APP_ID 相同；不作为 CLI 参数 |
 | MARKETING_APP_ID / MARKETING_APP_SECRET | 授权需要 | 应用身份与密钥 |
 | MARKETING_AUTH_CODE | 首次或重新交换需要 | 来源授权链接返回的新授权码；后续优先使用刷新 token |
 | accounts."账户ID".account_name / account_type | 可选 | 仅填固定展示列；缺失为 NULL |
@@ -502,7 +513,6 @@ staffhub/
 | 参数 | 适用命令 | 必需 / 默认 | 实际用途 |
 | --- | --- | --- | --- |
 | --config | 全部 | config/local.toml | 选择此项目配置文件 |
-| --credential | check-auth / authorize / collect | default | 选择本应用别名 |
 | --advertise-id | check-auth / authorize / collect | 必填，正整数文本 | 实际账户权限探测、报表查询及输出 |
 | --version | check-auth / authorize / collect | smart；可选 legacy | 选择营销数据主题与权限探测方式 |
 | --start / --end | collect | 成对可选，默认上一完整小时 | 北京时间整小时半开区间，最多 7 天，结束不晚于当前整点 |
@@ -534,60 +544,79 @@ uv run marketing collect --advertise-id 123 --version smart \
 
 ## 4. 巨量千川
 
-### 4.1 目标、数据汇和依赖
+### 4.1 目标和接口
 
-目录 [qianchuan/](qianchuan/)，发行包 `live-collector-qianchuan`，命令 `qianchuan`，独立 pyproject/uv.lock/.venv。输出 [qianchuan_stats](qianchuan/schema.sql)，111 列；字段定义见 [fields.json](qianchuan/fields.json)。按账户查询千川小时报表，平台接口按日请求，本源根据 stat_datetime 裁剪回指定小时范围。
+独立项目 [qianchuan/](qianchuan/) 输出 [qianchuan_stats](qianchuan/schema.sql) 的 111 个业务列。对照 [获取投放账户数据官方文档](https://open.oceanengine.com/labels/12/docs/1697466393573376)（2026-10-23 核对）实现 GET `/open_api/v1.0/qianchuan/report/advertiser/get/`，请求主机使用文档正文中的 ad.oceanengine.com。
+
+请求构造由本类型 parameters.py 维护。认证头 Access-Token 从本类型状态缓存读取；advertiser_id 发送数字；fields 和 filtering 按 JSON 编码为 GET 查询参数。分页完整后才写入。
 
 ### 4.2 配置
 
-使用 [千川配置模板](qianchuan/config/example.toml)，不共用营销应用身份。
+[配置模板](qianchuan/config/example.toml) 中只配置一套 `[auth]`：source=qianchuan，env_prefix=QIANCHUAN_，可选 env_file/app_id。应用环境使用 QIANCHUAN_APP_ID、QIANCHUAN_APP_SECRET，首次授权使用 QIANCHUAN_AUTH_CODE；之后使用缓存 refresh_token 刷新。mysql 和 settings 由本项目独立维护。
 
-| 配置 | 必需性 / 默认 | 用途 |
+```toml
+[report]
+time_granularity = "TIME_GRANULARITY_HOURLY"
+```
+
+允许 TIME_GRANULARITY_HOURLY 和 TIME_GRANULARITY_DAILY；优先级为 CLI/调度 options、账户配置、report 配置、小时默认值。accounts 中的 account_name/account_type/room_name 仅用于已有展示列。aweme_nick_name 的映射尚未核实，保留 NULL。
+
+### 4.3 参数与请求映射
+
+| 参数 | 适用命令 | 规则 |
 | --- | --- | --- |
-| credentials.default.source / env_prefix | qianchuan / QIANCHUAN_ | 独立应用和缓存身份 |
-| QIANCHUAN_APP_ID / APP_SECRET / AUTH_CODE | 首次授权需要，后续刷新不需要新码 | 与营销相同的 OAuth 生命周期，使用千川应用值 |
-| credentials.default.env_file / app_id | 可选 | 私有配置文件与应用绑定校验 |
-| accounts."账户ID".account_name / account_type | 可选 | 固定汇表展示列 |
-| accounts."账户ID".room_name | 可选 | 固定汇表已有展示列；不是查询范围或业务 room_id |
-| mysql.* / password_env | 入库需要；QIANCHUAN_MYSQL_PASSWORD | 千川自己的数据库配置 |
-| settings.state_dir / timeout_seconds / max_pages / refresh_before_seconds | ../runtime / 30 / 10000 / 1800 | 本项目运行与维护设置 |
+| --config | 全部 | 本项目配置，默认 config/local.toml |
+| --advertiser-id | check-auth / authorize / collect | 必填；上游 advertiser_id，兼容旧 --advertise-id |
+| --start-date / --end-date | collect | 成对传入 YYYY-MM-DD，含首尾日期；起始不得早于今天前180天，结束不得晚于今天 |
+| --time-granularity | collect | TIME_GRANULARITY_HOURLY 或 TIME_GRANULARITY_DAILY；覆盖配置 |
+| --aweme-ids | collect | 传已核实的内部主播 ID，映射 filtering.aweme_ids；省略为账户全量 |
+| --dry-run | collect | 仅校验配置、任务和日期，不访问网络或数据库 |
 
-`aweme_nick_name` 原表虽有列，但现有数据源映射未确认；保留该物理列为 NULL，不提供无实际用途的同名配置。更换映射需在本源 contracts/fields 中实施。
+小时粒度单次最多7个日期，天粒度最多30个日期。没有指定日期时，小时模式收集上一完整小时，天模式收集昨天。显式查询今天时，天结果是今天截至本次请求的累计数据，可重复更新。
 
-### 4.3 参数
+官方 aweme_ids 支持数组。本项目现有汇表每行只记录一个主播，因此每次接受一个内部 ID；多个主播需分别调用。移除原来的显示号 --aweme-id 入口，不再隐式调用其他接口推断 ID。尚未查询到的显示号列 aweme_show_id 保持 NULL。
 
-| 参数 | 适用命令 | 必需 / 默认 | 实际用途 |
-| --- | --- | --- | --- |
-| --config / --credential | 全部 / 除 init-db | config/local.toml / default | 本项目配置及千川凭据 |
-| --advertise-id | check-auth / authorize / collect | 必填 | 千川账户权限探测、查询和输出 |
-| --aweme-id | collect | 可选 | 手机端抖音显示号；查询映射后使用内部 ID，不猜测 ID 类型 |
-| --start / --end | collect | 成对可选，默认上一完整小时 | 整小时半开区间；跨日拆请求；最多 7 天 |
-| --dry-run | collect | false | 离线计划校验 |
+| 上游参数 | 本脚本的取值/管理方式 |
+| --- | --- |
+| advertiser_id | --advertiser-id，规范化为正整数 |
+| start_date / end_date | 对应日期；内部逐日请求，小时调度可裁剪回精确窗口 |
+| time_granularity | CLI 或配置，显式发送相应枚举 |
+| fields | 固定汇表的全部接口指标；不暴露缩减列集的参数 |
+| filtering.marketing_goal / order_platform | 固定 LIVE_PROM_GOODS / QIANCHUAN，符合本期直播投放采集口径 |
+| filtering.aweme_ids | 可选内部主播 ID 数组 |
+| page / page_size | 自动完整翻页，从1开始，每页100；不暴露只取部分页的参数 |
+| order_field / order_type | 不传，沿用接口默认排序；其他 filtering 条件未在本期开放 |
 
-千川没有营销版本参数。调用方若已有已验证内部主播 ID，可通过 Python task.make_task 的 `options.aweme_ids=[id]` 使用；与显示号互斥，只接受一个 ID。普通 CLI 只保留显示号入口。
+上游不传 time_granularity 会返回区间合计且缺少 stat_datetime。本项目按小时/天写入，始终显式指定粒度，不把区间合计伪造成一个小时或一天。
 
-### 4.4 功能与用例
+### 4.4 使用与验收
 
-在 `scripts/qianchuan/` 执行：
+在 scripts/qianchuan/ 执行：
 
 ```bash
 uv sync --locked
 cp -n config/example.toml config/local.toml
-uv run qianchuan check-auth --advertise-id 456
-uv run qianchuan authorize --advertise-id 456
+uv run qianchuan check-auth --advertiser-id 456
+uv run qianchuan authorize --advertiser-id 456
 uv run qianchuan init-db
-uv run qianchuan collect --advertise-id 456 --dry-run
-uv run qianchuan collect --advertise-id 456 \
-  --start 2026-10-19T23:00:00 --end 2026-10-20T01:00:00
+uv run qianchuan collect --advertiser-id 456 --dry-run
+uv run qianchuan collect --advertiser-id 456 \
+  --start-date 2026-10-20 --end-date 2026-10-21 \
+  --time-granularity TIME_GRANULARITY_DAILY
+uv run qianchuan collect --advertiser-id 456 --aweme-ids 987 \
+  --start-date 2026-10-20 --end-date 2026-10-20 \
+  --time-granularity TIME_GRANULARITY_HOURLY
 ```
 
 | 用例 | 预期 |
 | --- | --- |
-| 检查/授权指定账户 | 使用千川应用探测，禁止用营销缓存通过检查 |
-| 跨零点采集两小时 | 分别请求两天，只存 23:00 与 00:00 两个小时 |
-| 指定主播显示号 | 唯一解析为内部 ID 后筛选；不唯一或不存在则失败 |
-| 重复页、总数改变或总数缺失 | 任务失败，不提交不完整数据 |
-| 同窗口重跑 | 只替换相同账户及范围，不影响其他账户/主播 |
+| 授权检查/授权 | 使用本项目应用和 Token 缓存；探测账户权限，不连接 MySQL |
+| 小时粒度 | 校验来源整小时 stat_datetime，裁剪到实际请求窗口 |
+| 天粒度 | 校验 stat_datetime 为当天零点，stat_time_hour 写 NULL；小时调度窗口扩展为涉及的完整日期 |
+| 同一账户同一零点同时存在小时和天数据 | time_granularity 参与唯一键和替换条件，互不覆盖 |
+| 主播筛选 | 发送内部 ID 数组，空结果仍按同一业务键清理旧值 |
+| 日期超过粒度上限/粒度不合法 | 请求前失败 |
+| 分页不完整/日期时间不符合粒度/写入失败 | 全批失败并保留旧数据 |
 
 ## 5. 平安保单
 
@@ -603,7 +632,7 @@ uv run qianchuan collect --advertise-id 456 \
 
 | 配置 | 必需性 / 默认 | 用途 |
 | --- | --- | --- |
-| credentials.default.source | pingan | 限制本类型 |
+| auth.source | pingan | 限制本类型 |
 | browser_channel | chrome | 系统 Chrome，可见桌面登录；每凭据独立浏览器目录 |
 | token_storage | cookie（可选 localStorage） | 实际认证 token 的存放位置 |
 | token_key | 接入时核实，必须替换模板占位 | 只读取实际认证键，不能使用任意 Cookie |
@@ -611,13 +640,13 @@ uv run qianchuan collect --advertise-id 456 \
 | mysql.* / password_env | 入库需要；PINGAN_MYSQL_PASSWORD | 本项目数据库配置 |
 | settings.state_dir / timeout_seconds / max_pages / refresh_before_seconds | ../runtime / 30 / 10000 / 1800 | 私有状态、HTTP、分页与授权维护 |
 
-不同平安登录身份分配不同 credential；共享一个别名会共享浏览器会话。首次创建新 profile 不会自动导入日常 Chrome 登录态。
+平安只使用本项目的一套后台登录身份。授权浏览器目录为 state_dir/pingan/browser；首次创建目录不会自动导入日常 Chrome 登录态。
 
 ### 5.3 参数
 
 | 参数 | 适用命令 | 必需 / 默认 | 实际用途 |
 | --- | --- | --- | --- |
-| --config / --credential | 全部 / 除 init-db | config/local.toml / default | 平安配置和登录身份 |
+| --config | 全部 | config/local.toml | 平安配置和登录身份 |
 | --channel | check-auth / authorize / collect | 必填 | merchantChannel/merchantChannelCode 与 advertPlat 查询范围 |
 | --start / --end | collect | 成对可选，默认上一完整小时 | 订单更新时间窗口及当日漏斗截止时间；最多 7 天 |
 | --wait-seconds | authorize | 15；1–1800 秒 | 管理员登录等待预算 |
@@ -666,7 +695,7 @@ uv run pingan collect --channel DEMO_CHANNEL \
 
 | 配置 | 必需性 / 默认 | 用途 |
 | --- | --- | --- |
-| credentials.default.source | zhongan | 限制本类型 |
+| auth.source | zhongan | 限制本类型 |
 | browser_channel | chrome | 独立持久浏览器会话 |
 | auth_cookie_names | 接入时核实，非空数组 | 必须齐全的认证 Cookie 名称，不使用追踪 Cookie 判断登录 |
 | 私有账号、密码、手机号 | Page 资料；人工登录 | 不传 CLI，不在日志打印 |
@@ -679,7 +708,7 @@ uv run pingan collect --channel DEMO_CHANNEL \
 
 | 参数 | 适用命令 | 必需 / 默认 | 实际用途 |
 | --- | --- | --- | --- |
-| --config / --credential | 全部 / 除 init-db | config/local.toml / default | 众安配置与登录身份 |
+| --config | 全部 | config/local.toml | 众安配置与登录身份 |
 | --dy-no | check-auth / authorize / collect | 必填，文本 | 查询/验证目标 dyNo |
 | --platform | check-auth / authorize / collect | DOUYIN | livePlatform 请求值 |
 | --date | collect | 北京时间今天，YYYY-MM-DD，不可为未来 | 接口实际使用的查询日期 |
@@ -728,18 +757,21 @@ from scripts.utils.config import Config
 from scripts.utils.model import Window
 
 config = Config.load('/absolute/path/scripts/marketing/config/local.toml')
-task = make_task('default', '123')
+task = make_task('123')
 check_task(config, task)                       # 授权检查
 check_task(config, task, renew=True)           # 距到期阈值内维护
 window = Window.parse('2026-10-20T09:00:00', '2026-10-20T10:00:00')
 result = collect_task(config, task, window)
 ```
 
-Task 仅含 task_id/source/credential/account_id/options；account_id 只供广告使用，保单留空。调度保留自己的产品/房间计划身份，再转为来源 Task；计划归属变化不会制造同源事实副本。主数据中应用绑定转换为凭据配置校验，不能把 app_id 作为多余采集参数。
+Task 仅含 task_id/source/account_id/options；account_id 只供广告使用，保单留空。调度保留自己的产品/房间计划身份，再转为来源 Task；计划归属变化不会制造同源事实副本。主数据中应用绑定转换为凭据配置校验，不能把 app_id 作为多余采集参数。
 
-授权维护独立于 collect，默认提前 1800 秒检查刷新；OAuth 轮换成功先保存新 token，再探测账户权限。会话有效期未知的后台按实际探测/浏览器恢复处理。文件状态按凭据加锁，原子写入，敏感缓存权限为 0600。部署需要共享同一凭据状态或保持单节点维护，不能让多份 refresh token 缓存竞争刷新。
+授权维护独立于 collect，默认提前 1800 秒检查刷新；OAuth 轮换成功先保存新 token，再探测账户权限。会话有效期未知的后台按实际探测/浏览器恢复处理。文件状态按脚本类型加锁，原子写入，敏感缓存权限为 0600。部署需要共享同一授权状态或保持单节点维护，不能让多份 refresh token 缓存竞争刷新。
 
 ### 7.2 迁移边界
+
+- 旧 `[credentials.default]` 改为 `[auth]`，保留原授权配置内容；删除命令行及计划投影中的 credential。旧配置会明确报错，避免误用。旧缓存仍保留，需核对 source/app_id 后迁移至 state_dir/<source>/auth.json；旧浏览器目录可迁至同类型 browser 目录，不自动猜测多个旧授权目录。
+- 千川原有小时数据需填入 TIME_GRANULARITY_HOURLY，并将 time_granularity 改为 VARCHAR(32) NOT NULL、加入业务唯一键后，再启用天粒度；init-db 不自动升级已有表。
 
 - 根目录 scripts 是独立项目集合；调度位于 schdule，读取已同步 MySQL 的关联查询投影。
 - 旧产品/房间参数、JSON 任务文件及旧共享事实表接口停止作为新脚本协议。主规格和操作文档统一引用本文。

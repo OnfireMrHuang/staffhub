@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS `qianchuan_stats` (
   `stat_time_hour` DATETIME NULL COMMENT '统计小时；来源汇表字段',
   `start_date` DATE NULL COMMENT '查询开始日期；来源汇表字段',
   `end_date` DATE NULL COMMENT '查询结束日期；来源汇表字段',
-  `time_granularity` VARCHAR(512) NULL COMMENT '时间粒度；来源汇表字段',
+  `time_granularity` VARCHAR(32) NOT NULL COMMENT '时间粒度；来源汇表字段',
   `advertiser_id` VARCHAR(128) NOT NULL COMMENT '账户ID；来源汇表字段',
   `account_name` VARCHAR(512) NULL COMMENT '账户名称；来源汇表字段',
   `account_type` VARCHAR(512) NULL COMMENT '账户类型；来源汇表字段',
@@ -115,6 +115,6 @@ CREATE TABLE IF NOT EXISTS `qianchuan_stats` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `observed_at` DATETIME(6) NOT NULL COMMENT '北京时间实际采集时刻',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_account_hour_aweme` (`advertiser_id`,`stat_datetime`,`aweme_id`),
+  UNIQUE KEY `uk_account_grain_time_aweme` (`advertiser_id`,`time_granularity`,`stat_datetime`,`aweme_id`),
   KEY `idx_account_hour` (`advertiser_id`,`stat_datetime`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
