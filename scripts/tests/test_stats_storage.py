@@ -14,6 +14,7 @@ from scripts.utils.transport import Transport
 
 class Connection:
     def __init__(self, source):
+        self.tables = {'stats': source+'_stats', 'audit': 'collector_run'}
         self.db = sqlite3.connect(':memory:')
         definition = importlib.import_module(f'scripts.{source}.contracts').contract()
         columns = ','.join('`'+field['name']+'` TEXT' for field in definition['fields'])
@@ -31,7 +32,7 @@ class Connection:
     def __exit__(self, *args): pass
 
     def execute(self, sql, params):
-        if self.fail_audit and sql.startswith('INSERT INTO collector_run'):
+        if self.fail_audit and sql.startswith('INSERT INTO `collector_run`'):
             raise RuntimeError('synthetic audit failure')
         self.db.execute(sql.replace('%s', '?'), params)
 
@@ -55,7 +56,7 @@ class StatsStorageTests(unittest.TestCase):
         from scripts.marketing import Repository, make_task
         connection = Connection('marketing')
         self.addCleanup(connection.db.close)
-        repo = Repository(connection)
+        repo = Repository(connection, connection.tables)
         for account in ('123', '456'):
             repo.write(make_task(account), self.window, self.batch('marketing', account))
         later = Window.parse('2026-10-20T10:00:00', '2026-10-20T11:00:00')
@@ -71,7 +72,7 @@ class StatsStorageTests(unittest.TestCase):
         from scripts.qianchuan import Repository, make_task
         connection = Connection('qianchuan')
         self.addCleanup(connection.db.close)
-        repo = Repository(connection)
+        repo = Repository(connection, connection.tables)
         for anchor in ('', '987', '654'):
             task = make_task('123', {'aweme_ids': [anchor]} if anchor else {})
             repo.write(task, self.window, self.batch('qianchuan', anchor=anchor))
@@ -87,7 +88,7 @@ class StatsStorageTests(unittest.TestCase):
             module = importlib.import_module('scripts.'+source)
             connection = Connection(source)
             self.addCleanup(connection.db.close)
-            repo, task = module.Repository(connection), module.make_task('123')
+            repo, task = module.Repository(connection, connection.tables), module.make_task('123')
             repo.write(task, self.window, self.batch(source))
             connection.fail_audit = True
             with self.assertRaises(StorageError):
@@ -100,7 +101,7 @@ class StatsStorageTests(unittest.TestCase):
         from scripts.qianchuan.parameters import DAILY, HOURLY
         connection = Connection('qianchuan')
         self.addCleanup(connection.db.close)
-        repo = Repository(connection)
+        repo = Repository(connection, connection.tables)
         midnight = Window.parse('2026-10-20T00:00:00', '2026-10-20T01:00:00')
         hourly = make_task('123')
         daily = make_task('123', {'time_granularity': DAILY})
@@ -124,7 +125,7 @@ class StatsStorageTests(unittest.TestCase):
             module = importlib.import_module('scripts.'+source)
             connection = Connection(source)
             self.addCleanup(connection.db.close)
-            repo, task = module.Repository(connection), module.make_task('123')
+            repo, task = module.Repository(connection, connection.tables), module.make_task('123')
             repo.write(task, self.window, self.batch(source))
             duplicate = self.batch(source)
             duplicate.ads *= 2
@@ -142,7 +143,7 @@ class StatsStorageTests(unittest.TestCase):
         self.assertEqual((batch.aweme_id, batch.count), ('987', 0))
         connection = Connection('qianchuan')
         self.addCleanup(connection.db.close)
-        repo = Repository(connection)
+        repo = Repository(connection, connection.tables)
         with self.assertRaises(DataError): repo.write(task, self.window, Batch())
         with self.assertRaises(DataError):
             repo.write(make_task('123', {'aweme_ids': [654]}), self.window, batch)

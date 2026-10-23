@@ -1,6 +1,5 @@
 """Read one MySQL relation projection and build a fully validated immutable run plan."""
 import json
-import os
 import re
 from pathlib import Path
 from .models import Binding
@@ -31,8 +30,8 @@ def load_mysql(settings,connect=None):
         body=re.sub(r'^\s*--[^\n]*(?:\n|$)', '', query, flags=re.MULTILINE).lstrip()
         if len(query)>1024*1024 or not re.match(r'(SELECT|WITH)\b',body,re.IGNORECASE):
             raise ScheduleError('计划 SQL 必须是 SELECT 或 WITH 查询')
-        password=os.environ.get(db.get('password_env','SCHDULE_MYSQL_PASSWORD'))
-        if password is None:raise ScheduleError('未设置调度 MySQL 密码环境变量')
+        password=db.get('password')
+        if not isinstance(password,str):raise ScheduleError('请在 mysql.password 中配置字符串密码')
         connection=(connect or pymysql.connect)(host=db.get('host','127.0.0.1'),port=int(db.get('port',3306)),
             user=db.get('user','schedule_reader'),password=password,database=db.get('database','source_data'),
             charset='utf8mb4',autocommit=False,connect_timeout=10,read_timeout=30,write_timeout=30,

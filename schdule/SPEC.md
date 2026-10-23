@@ -92,7 +92,7 @@ SQL 应过滤停用的产品、房间、账户和后台绑定。推荐账户投�
 
 1. 使用独立只读 MySQL 用户，在 READ ONLY 事务中执行一次关联查询。
 2. 最多读取 max_rows＋1 行；超限报错，不截断后执行。空计划同样报错，避免错误 JOIN 被误认为成功空跑。
-3. 释放查询连接，再构造四类来源 Task。所有绑定与来源配置必须先验证完，才开始任何授权或采集动作。
+3. 释放查询连接，再构造四类来源 Task。所有绑定与来源配置必须先验证完，才开始任何授权或采集动作。采集调度额外调用各源 validate_collection_config，确认每个目标均配置了所需表映射；来源库和表由部署方提前创建。具体字段只引用独立脚本规格。
 4. 同房间、同来源范围和同参数的重复行合并，特别是宽表关联产生的重复后台行。
 5. 相同范围跨房间、同范围不同参数、账户全量与主播子集重叠、不可比较的主播 ID 类型都拒绝执行。
 6. 一个业务房间最多一个不同保单后台范围。广告任务先于该房间的保单任务，之后再进入下一个房间。
@@ -175,13 +175,13 @@ flowchart TD
 | --- | --- |
 | runtime.directory | ../runtime；两个调度应使用同一个部署运行目录 |
 | plan.query_file / max_rows | 业务关联 SQL / 10000 |
-| mysql.* | 只读计划库连接；password_env 默认 SCHDULE_MYSQL_PASSWORD |
+| mysql.* | 只读计划库连接；password 直接填写字符串密码 |
 | sources.<source>.config | 对应独立脚本的 TOML 路径；仍使用本源 env_file、状态目录和数据库配置 |
 | authorization.refresh_before_seconds / wait_seconds | 1800 / 15 |
 | collection.on_error / notify_on_error | continue / false |
 | sms.enabled / cooldown_seconds | false / 1800；实际环境配置腾讯云应用、签名、模板和号码 |
 
-TOML 中路径相对该 TOML；CLI --config、--plan-file 相对当前工作目录。平台密钥放来源配置引用的私有环境；调度 MySQL 密码和腾讯云密钥由进程环境提供。
+TOML 中路径相对该 TOML；CLI --config、--plan-file 相对当前工作目录。平台密钥放来源配置引用的私有环境；调度 MySQL 密码直接填写在本调度 TOML 的 mysql.password 中；腾讯云密钥仍由进程环境提供。
 
 授权锁 auth.lock 和采集锁 collect.lock 分开，两类作业可以同时运行；同类不可重入。来源自有范围锁和凭据文件锁继续保护源写入与 token 轮换；冲突返回6，由下一轮或人工重跑处理。单机文件锁不是跨机器调度锁。
 

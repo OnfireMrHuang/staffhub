@@ -3,7 +3,6 @@ from dataclasses import replace
 from datetime import datetime
 import io
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -95,9 +94,12 @@ class PlanTests(unittest.TestCase):
         connection.cursor.return_value.__enter__=Mock(return_value=cursor)
         connection.cursor.return_value.__exit__=Mock(return_value=False)
         cursor.fetchmany.return_value=rows
-        settings=Settings(ROOT/'config/test.toml',{'plan':{'query_file':'plan.example.sql','max_rows':2}})
-        with patch.dict(os.environ,{'SCHDULE_MYSQL_PASSWORD':'not-printed'}):
-            self.assertEqual(len(load_mysql(settings,connect=Mock(return_value=connection))),1)
+        settings=Settings(ROOT/'config/test.toml',{'plan':{'query_file':'plan.example.sql','max_rows':2},
+                          'mysql':{'password':'configured-password'}})
+        connect=Mock(return_value=connection)
+        with patch.dict('os.environ',{'SCHDULE_MYSQL_PASSWORD':'unused-env-password'}):
+            self.assertEqual(len(load_mysql(settings,connect=connect)),1)
+        self.assertEqual(connect.call_args.kwargs['password'],'configured-password')
         self.assertEqual(cursor.execute.call_args_list[0].args,('SET TRANSACTION READ ONLY',))
         cursor.fetchmany.assert_called_once_with(3)
         connection.begin.assert_called_once();connection.commit.assert_called_once();connection.close.assert_called_once()
@@ -107,11 +109,21 @@ class PlanTests(unittest.TestCase):
         connection.cursor.return_value.__enter__=Mock(return_value=cursor)
         connection.cursor.return_value.__exit__=Mock(return_value=False)
         cursor.execute.side_effect=RuntimeError('mysql_password=SECRET')
-        settings=Settings(ROOT/'config/test.toml',{'plan':{'query_file':'plan.example.sql'}})
-        with patch.dict(os.environ,{'SCHDULE_MYSQL_PASSWORD':'not-printed'}):
-            with self.assertRaises(ScheduleError) as error:load_mysql(settings,connect=Mock(return_value=connection))
+        settings=Settings(ROOT/'config/test.toml',{'plan':{'query_file':'plan.example.sql'},'mysql':{'password':'SECRET'}})
+        with self.assertRaises(ScheduleError) as error:load_mysql(settings,connect=Mock(return_value=connection))
         self.assertEqual(error.exception.code,5);self.assertNotIn('SECRET',str(error.exception))
         connection.close.assert_called_once()
+
+    def test_password_is_required_from_config_without_environment_fallback(self):
+        for password in (None,123,False,['SECRET']):
+            settings=Settings(ROOT/'config/test.toml',{'plan':{'query_file':'plan.example.sql'},
+                              'mysql':{'password':password}})
+            connect=Mock()
+            with patch.dict('os.environ',{'SCHDULE_MYSQL_PASSWORD':'unused'}), self.assertRaises(ScheduleError) as error:
+                load_mysql(settings,connect)
+            connect.assert_not_called()
+            self.assertEqual(error.exception.code,2)
+            self.assertNotIn('SECRET',str(error.exception))
 
     def test_empty_and_truncated_result_never_succeed(self):
         from schdule.plan import validate_rows
@@ -311,6 +323,21 @@ class NotificationTests(unittest.TestCase):
 
 
 class EntryIntegrationTests(unittest.TestCase):
+    def test_missing_table_config_stops_before_any_collector_runs(self):
+        bindings=load_fixture(ROOT/'config/plan.example.json',100)
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Settings.load(ROOT/'config/preview.toml')
+            settings=Settings(base.path,{**base.data,'runtime':{'directory':tmp}})
+            from scripts.utils.model import ConfigError
+            with (patch('schdule.cli.Settings.load',return_value=settings),
+                  patch('schdule.cli.load_mysql',return_value=bindings),
+                  patch('scripts.qianchuan.cli.validate_collection_config',side_effect=ConfigError('mysql.tables 缺失')),
+                  patch.object(Collectors,'collect') as collect,
+                  redirect_stdout(io.StringIO()) as output):
+                self.assertEqual(main('collect',[]),2)
+            collect.assert_not_called()
+            self.assertEqual(json.loads(output.getvalue())['code'],2)
+
     def test_formal_entries_load_mysql_plan_and_persist_each_result(self):
         bindings=load_fixture(ROOT/'config/plan.example.json',100)
         for job in ('auth','collect'):

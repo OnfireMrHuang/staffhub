@@ -11,7 +11,7 @@ host = '127.0.0.1'
 port = 3306
 database = 'source_data'
 user = 'schedule_reader'
-password_env = 'SCHDULE_MYSQL_PASSWORD'
+password = 'REPLACE_WITH_DATABASE_PASSWORD'
 
 # These are each collector's private settings, not a merged scheduler credential file.
 [sources.marketing]

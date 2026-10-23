@@ -36,7 +36,10 @@ def execute(job,args):
     adapter=Collectors(settings)
     def read_plan():
         bindings=load_fixture(args.plan_file,settings.max_rows) if args.plan_file else load_mysql(settings)
-        return build_plan(bindings,adapter)
+        targets=build_plan(bindings,adapter)
+        if job=='collect':
+            for target in targets:target.api.validate_collection_config(target.config)
+        return targets
     if args.dry_run:
         targets=read_plan()
         result={'code':0,'job':job,'dry_run':True,'tasks':[]}

@@ -9,14 +9,13 @@ uv sync --locked
 cp -n config/example.toml config/local.toml
 uv run zhongan check-auth --dy-no DEMO_DY
 uv run zhongan authorize --dy-no DEMO_DY --wait-seconds 1800
-uv run zhongan init-db
 uv run zhongan collect --dy-no DEMO_DY --dry-run
 uv run zhongan collect --dy-no DEMO_DY --date 2026-10-20
 ```
 
 授权需要系统 Chrome 和图形桌面。先核实模板中的认证键，再在打开的独立浏览器中完成账号登录/验证码；模板占位值不是有效认证键。
 
-MySQL 库需事先创建；模板密码环境变量为 `ZHONGAN_MYSQL_PASSWORD`。授权检查/授权不使用 MySQL；dry-run 不访问网络。真实 collect 要求授权有效及本源表已创建。默认配置为当前工作目录的 config/local.toml，从其他目录运行请传 `--config` 绝对路径；配置内相对路径以 TOML 目录为基准。
+MySQL 库、数据汇表和审计表需事先创建；密码直接填写在配置文件的 `mysql.password` 中。授权检查/授权不使用 MySQL；dry-run 不访问网络。在 `[mysql.tables]` 配置 stats、orders、audit 对应的实际表名，采集脚本不执行建表。dry-run 会校验表名映射；真实 collect 要求授权有效且表结构符合 DDL。默认配置为当前工作目录的 config/local.toml，从其他目录运行请传 `--config` 绝对路径；配置内相对路径以 TOML 目录为基准。
 
 也可使用 `uv run python -m scripts.zhongan`。不需要产品、业务直播间、主数据导入或 schdule 包。查看本源实际参数：
 

@@ -1,9 +1,20 @@
 from dataclasses import dataclass
-import os
 import re
 from pathlib import Path
 import tomllib
 from .model import ConfigError, SOURCES
+
+
+def validate_tables(tables, roles):
+    """Bind source-owned roles to simple table names in the configured database."""
+    if not isinstance(tables, dict) or set(tables) != set(roles):
+        raise ConfigError('mysql.tables 必须且仅配置：' + '、'.join(roles))
+    for name in tables.values():
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,63}', name):
+            raise ConfigError('表名须为 1–64 位字母、数字或下划线，首位不能是数字；不含库名')
+    if len({name.lower() for name in tables.values()}) != len(tables):
+        raise ConfigError('同一来源的统计、订单、审计表不能使用相同表名')
+    return dict(tables)
 
 
 @dataclass
@@ -66,8 +77,10 @@ class Config:
     @property
     def browser_dir(self):
         return self.state_dir/self.auth['source']/'browser'
+    def database_tables(self, roles):
+        return validate_tables(self.data.get('mysql', {}).get('tables'), roles)
     def database_kwargs(self):
         db=self.data.get('mysql',{})
-        password=os.environ.get(db.get('password_env','LIVE_MYSQL_PASSWORD'))
-        if password is None: raise ConfigError('未设置 MySQL 密码环境变量')
+        password=db.get('password')
+        if not isinstance(password,str): raise ConfigError('请在 mysql.password 中配置字符串密码')
         return {'host':db.get('host','127.0.0.1'),'port':int(db.get('port',3306)), 'user':db.get('user','live_data'), 'password':password,'database':db.get('database','live_data'), 'charset':'utf8mb4','autocommit':False,'connect_timeout':10,'read_timeout':60,'write_timeout':60}

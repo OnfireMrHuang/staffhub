@@ -113,8 +113,9 @@ class PolicyModules(unittest.TestCase):
             module = self.module(source)
             route = self.task(source, **options)
             batch = Batch(orders=[{'order_id': 'order', 'session_id': '', 'date': '2026-01-01', 'payload': {'postId':'order','orderNo':'order','raw':1,'_collection':{'context':{'livePlatform':'DOUYIN','dyNo':'dy'}}}}])
+            tables = {'stats':source+'_stats','orders':source+'_orders','audit':'collector_run'}
             connection = Connection()
-            module.Repository(connection).write(route, window, batch)
+            module.Repository(connection, tables).write(route, window, batch)
             self.assertEqual(connection.commits, 1)
             self.assertEqual(connection.rollbacks, 0)
             self.assertIn('collector_run', connection.statements[-1][0])
@@ -125,7 +126,7 @@ class PolicyModules(unittest.TestCase):
                 self.assertNotIn('`'+removed+'`', sql)
             self.assertFalse(any(isinstance(value, str) and '"raw":' in value for value in params))
             failed = Connection(fail=True)
-            with self.assertRaises(StorageError): module.Repository(failed).write(route, window, batch)
+            with self.assertRaises(StorageError): module.Repository(failed, tables).write(route, window, batch)
             self.assertEqual((failed.commits, failed.rollbacks), (0, 1))
 
 

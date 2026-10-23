@@ -15,10 +15,9 @@ from .parameters import GRANULARITIES, cli_window, collection_window
 def parser():
     root = Parser(description='qianchuan 独立采集项目', allow_abbrev=False)
     commands = root.add_subparsers(dest='command', required=True, parser_class=Parser)
-    for name in ('check-auth','authorize','collect','init-db'):
+    for name in ('check-auth','authorize','collect'):
         p = commands.add_parser(name, allow_abbrev=False)
         p.add_argument('--config', default='config/local.toml')
-        if name == 'init-db': continue
         p.add_argument('--advertiser-id', '--advertise-id', dest='advertise_id', required=True, help='接口 advertiser_id；兼容旧 --advertise-id')
         if name == 'collect':
             p.add_argument('--start-date')
@@ -49,6 +48,10 @@ def check_task(config, task, renew=False, force=False, wait_seconds=15):
         return Auth(config,client).ensure(task,renew=renew,force=force,wait_seconds=wait_seconds)
 
 
+def validate_collection_config(config):
+    return Repository.configured_tables(config)
+
+
 def collect_task(config, task, window):
     validate(task)
     validate_auth_config(config, task)
@@ -64,14 +67,10 @@ def collect_task(config, task, window):
 
 def execute(args):
     config = Config.load(args.config)
-    if args.command == 'init-db':
-        repository = Repository.connect(config)
-        try: repository.init_schema()
-        finally: repository.close()
-        return {'code':0,'source':'qianchuan','status':'schema_ready'}
     task = read_task(args,config)
     validate_auth_config(config,task)
     if args.command == 'collect':
+        validate_collection_config(config)
         window = cli_window(args.start_date, args.end_date, task.options['time_granularity'])
         if args.dry_run: return preview(task,window)
         try: return collect_task(config,task,window)

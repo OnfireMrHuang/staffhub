@@ -9,7 +9,13 @@ host = '127.0.0.1'
 port = 3306
 database = 'source_data'
 user = 'collector'
-password_env = 'PINGAN_MYSQL_PASSWORD'
+password = 'REPLACE_WITH_DATABASE_PASSWORD'
+
+# Tables must already exist with the documented columns and unique keys.
+[mysql.tables]
+stats = 'pingan_stats'
+orders = 'pingan_orders'
+audit = 'collector_run'
 
 [auth]
 source = 'pingan'

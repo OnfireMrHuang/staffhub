@@ -14,10 +14,9 @@ from .repository import Repository
 def parser():
     root = Parser(description='zhongan 独立采集项目')
     commands = root.add_subparsers(dest='command', required=True, parser_class=Parser)
-    for name in ('check-auth','authorize','collect','init-db'):
+    for name in ('check-auth','authorize','collect'):
         p = commands.add_parser(name)
         p.add_argument('--config', default='config/local.toml')
-        if name == 'init-db': continue
         p.add_argument('--dy-no', required=True)
         p.add_argument('--platform', default='DOUYIN')
         if name == 'collect':
@@ -40,6 +39,10 @@ def check_task(config, task, renew=False, force=False, wait_seconds=15):
         return Auth(config,client).ensure(task,renew=renew,force=force,wait_seconds=wait_seconds)
 
 
+def validate_collection_config(config):
+    return Repository.configured_tables(config)
+
+
 def collect_task(config, task, window):
     validate(task)
     validate_auth_config(config, task)
@@ -54,14 +57,10 @@ def collect_task(config, task, window):
 
 def execute(args):
     config = Config.load(args.config)
-    if args.command == 'init-db':
-        repository = Repository.connect(config)
-        try: repository.init_schema()
-        finally: repository.close()
-        return {'code':0,'source':'zhongan','status':'schema_ready'}
     task = read_task(args,config)
     validate_auth_config(config,task)
     if args.command == 'collect':
+        validate_collection_config(config)
         window = DayWindow.parse(args.date)
         if args.dry_run: return preview(task,window)
         try: return collect_task(config,task,window)

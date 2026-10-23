@@ -27,9 +27,6 @@ class AdModuleTests(unittest.TestCase):
                 self.assertEqual(repository.write.__module__, f'scripts.{source}.repository')
                 self.assertEqual(contract['source'], source)
                 self.assertTrue(contract['fields'])
-                code = (ROOT.parent / 'scripts' / source / 'repository.py').read_text()
-                self.assertIn('DELETE FROM `'+source+'_stats`', code)
-                self.assertIn('INSERT INTO `', code)
 
     def test_ad_packages_have_no_live_data_dependency(self):
         for source in ('marketing', 'qianchuan'):
@@ -126,7 +123,7 @@ class AdBehaviorTests(unittest.TestCase):
                     connection.cursor.return_value.__exit__ = Mock(return_value=False)
                     if fail:
                         cursor.execute.side_effect = [None, RuntimeError('sql failed')]
-                    repository = package.Repository(connection)
+                    repository = package.Repository(connection, {'stats':source+'_stats','audit':'collector_run'})
                     batch = Batch(ads=[{'hour': '2026-10-20 09:00:00', 'dimensions': {'stat_time_hour':'2026-10-20 09:00:00','stat_datetime':'2026-10-20 09:00:00'}, 'metrics': {'_collection':{'context':{'advertiser_id':'123','time_granularity':'TIME_GRANULARITY_HOURLY','stat_datetime':'2026-10-20 09:00:00'}}}, 'cost': None}])
                     if fail:
                         with self.assertRaises(StorageError):
@@ -139,7 +136,7 @@ class AdBehaviorTests(unittest.TestCase):
                         self.assertEqual(len(statements), 3)
                         self.assertTrue(statements[0].startswith('DELETE FROM `'+source+'_stats`'))
                         self.assertTrue(statements[1].startswith('INSERT INTO `'+source+'_stats`'))
-                        self.assertTrue(statements[2].startswith('INSERT INTO collector_run'))
+                        self.assertTrue(statements[2].startswith('INSERT INTO `collector_run`'))
                         self.assertIn('123', cursor.execute.call_args_list[1].args[1])
                         connection.commit.assert_called_once()
                         connection.rollback.assert_not_called()

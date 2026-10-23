@@ -2,9 +2,9 @@
 from contextlib import contextmanager
 import hashlib
 import json
-from pathlib import Path
 import uuid
 
+from .config import validate_tables
 from .model import BusyError, ConfigError, LiveError, StorageError, timestamp
 
 
@@ -17,14 +17,25 @@ def digest(value):
 
 
 class Database:
-    def __init__(self, connection):
+    table_roles = ('audit',)
+
+    def __init__(self, connection, tables):
+        self.tables = validate_tables(tables, self.table_roles)
         self.connection = connection
+
+    @classmethod
+    def configured_tables(cls, config):
+        return config.database_tables(cls.table_roles)
+
+    def table(self, role):
+        return '`' + self.tables[role] + '`'
 
     @classmethod
     def connect(cls, config):
         import pymysql
+        tables = cls.configured_tables(config)
         try:
-            return cls(pymysql.connect(**config.database_kwargs()))
+            return cls(pymysql.connect(**config.database_kwargs()), tables)
         except pymysql.Error as exc:
             raise StorageError('MySQL 连接失败，请检查地址、数据库和权限') from exc
 
@@ -74,32 +85,9 @@ class Database:
                 except Exception as exc:
                     raise StorageError('MySQL 释放任务锁失败，关闭连接后锁自动释放') from exc
 
-    def init_schema_files(self, *paths):
-        """Execute only the DDL files supplied by the owning repository."""
-        try:
-            with self.connection.cursor() as cursor:
-                for path in paths:
-                    # Repository-owned schemas use whole-line -- comments. Remove
-                    # these before splitting so punctuation in prose is never SQL.
-                    sql = '\n'.join(line for line in Path(path).read_text().splitlines()
-                                    if not line.lstrip().startswith('--'))
-                    for statement in sql.split(';'):
-                        if statement.strip():
-                            cursor.execute(statement.strip())
-            self.connection.commit()
-        except Exception as exc:
-            try:
-                self.connection.rollback()
-            except Exception as rollback_error:
-                raise StorageError('MySQL 建表失败且连接回滚异常；部分对象可能已创建，请检查数据库状态') from rollback_error
-            raise StorageError('建表失败；已创建的表保留，可修复后重跑') from exc
-
-    def apply_schema(self, path):
-        return self.init_schema_files(path)
-
     def audit(self, cursor, route, window, code, count, message):
         cursor.execute(
-            'INSERT INTO collector_run (run_id,task_id,source,window_start,window_end,status,exit_code,row_count,message) '
+            'INSERT INTO ' + self.table('audit') + ' (run_id,task_id,source,window_start,window_end,status,exit_code,row_count,message) '
             'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
             (str(uuid.uuid4()), route.task_id, route.source, timestamp(window.start), timestamp(window.end),
              'success' if code == 0 else 'failed', code, count, message))

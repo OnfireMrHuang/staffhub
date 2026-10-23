@@ -1,10 +1,12 @@
-# 四类独立采集脚本规格 v4
+# 四类独立采集脚本规格 v5
 
 版本：2026-10-23。本文是四类采集脚本的独立规格；主规格只引用本文。首先定义数据汇 MySQL DDL，然后定义目录与依赖边界，再按来源分别定义配置、参数、功能、用例及验收。
 
 依据：[第一期直播数据管理 Page](https://chatgpt.com/space/page_1b6e05dc95ec81918416244f056f2cd4)、Page 指定的本地工作簿 `schdule/data/第一期试点直播间产品.xlsx` 和用户补充。本版按本地工作簿快照核对六张字段字典，共 266 个字段；未声称在线飞书内容与快照始终一致。真实账户、应用密钥、登录密码和手机号不复制到文档。
 
 ## 1. 数据汇 MySQL DDL
+
+以下 DDL 是预建表的结构参考。数据库和数据汇表由部署方提前创建，脚本仅连接已有库并按配置表名写入，不执行 DDL。DDL 与字段字典中的表名为参考名称；实际物理表名由各类型 mysql.tables 映射，字段、类型、唯一键和事务引擎须符合本规格。
 
 ### 1.1 表与粒度
 
@@ -415,7 +417,7 @@ staffhub/
 | `auth.py` | 本平台授权探测、授权恢复、会话提取 |
 | `collector.py` | 本平台端点、分页、完整性校验、采集与清洗 |
 | `contracts.py`、`fields.json` | 本平台字段映射、派生字段与类型 |
-| `repository.py`、`schema.sql` | 本平台建表、锁范围、SQL、事务和幂等规则 |
+| `repository.py`、`schema.sql` | 本平台预建表结构、锁范围、SQL、事务和幂等规则 |
 | `runtime/` | 凭据缓存和浏览器状态；权限受限，不提交 |
 
 `utils` 只提供参数错误处理、时间、HTTP 重试、凭据原子文件、OAuth/浏览器授权生命周期、MySQL 连接/事务/锁、字段值转换及共享巨量协议辅助。来源模块自行选择和组合这些能力；utils 不导入任何来源模块、schdule。通用审计表 `collector_run` 的 DDL 在 [utils/audit.sql](utils/audit.sql)，不属于上述 266 个汇表字段。
@@ -424,14 +426,13 @@ staffhub/
 
 ### 2.1 统一的功能名称与执行结果
 
-所有类型均实现以下三个核心功能，并提供独立建表命令：
+所有类型仅提供以下三个核心功能：
 
 | 功能 | 命令 | 行为 |
 | --- | --- | --- |
 | 授权检查 | `check-auth` | 读取已有会话、检查期限并访问本源探测接口；不自动登录/刷新；不连接 MySQL |
 | 授权 | `authorize` | 广告交换/刷新 token；保单打开本源浏览器登录流程、提取会话并探测；不连接 MySQL |
 | 数据收集 | `collect` | 校验参数→目标范围锁→检查授权→完整采集→清洗投影→本源事务写入→返回状态 |
-| 初始化 | `init-db` | 创建本源数据汇及 collector_run；不需要业务查询参数，不发业务请求 |
 
 `collect --dry-run` 只验证配置结构、查询参数和时间，输出安全任务计划；不探测授权、不连接 MySQL、不访问平台，不能用它证明授权有效。
 
@@ -482,6 +483,37 @@ staffhub/
 
 每个项目的缓存位置为 `state_dir/<source>/auth.json`，浏览器目录为 `state_dir/<source>/browser`。默认 state_dir=../runtime，相对于配置文件所在目录解析。状态文件权限0600、写入原子替换、刷新按文件加锁；即使四类配置指向同一 runtime 根目录也互相隔离。授权检查和采集读取缓存；只有 authorize 或授权调度维护会刷新 Token/恢复浏览器会话。
 
+### 2.4 数据库连接与已有表映射
+
+各类型在自身 TOML 的 `[mysql]` 配置连接信息，其中 password 直接填写字符串密码（允许显式空字符串），不做环境变量替换；`[mysql.tables]` 指定实际物理表名。示例（平安）：
+
+```toml
+[mysql]
+host = '127.0.0.1'
+port = 3306
+database = 'source_data'
+user = 'collector'
+password = 'REPLACE_WITH_DATABASE_PASSWORD'
+
+[mysql.tables]
+stats = 'pingan_stats'
+orders = 'pingan_orders'
+audit = 'collector_run'
+```
+
+| 类型 | 必须配置的表角色 | 模板参考名称 |
+| --- | --- | --- |
+| 巨量营销 | stats、audit | marketing_stats、collector_run |
+| 巨量千川 | stats、audit | qianchuan_stats、collector_run |
+| 平安保单 | stats、orders、audit | pingan_stats、pingan_orders、collector_run |
+| 众安保单 | stats、orders、audit | zhongan_stats、zhongan_orders、collector_run |
+
+这些角色由来源仓储声明；运行时不回退到字段字典的表名。缺少、多余或重复映射报配置错误。表名仅接受1–64位英文字母、数字、下划线，首位不能为数字；库名放 mysql.database，不在表名中拼接库名。统一校验后作为 SQL 标识符引用，字段值继续使用绑定参数。
+
+统计替换、订单写入和成功/失败审计都使用上述映射。audit 仍是必要的运行记录表，按 utils/audit.sql 提前建立，可由四类来源共用；它与该来源业务表使用同一连接和事务。表缺失或结构不匹配时报存储失败，不自动修复结构。数据库账号需要实际采集所用的数据读写及锁权限，无需建表权限。
+
+check-auth / authorize 不依赖数据库配置。collect --dry-run 只校验表名配置，不连接 MySQL，也不证明表已存在；正式 collect 使用 mysql.password 的字符串值连接数据库，不读取密码环境变量。调度采集在调用任一来源前通过各源 validate_collection_config 检查全部目标的表映射；调度自身不维护另一份数据汇表名。
+
 ## 3. 巨量营销
 
 ### 3.1 目标、数据汇和依赖
@@ -503,7 +535,8 @@ staffhub/
 | MARKETING_APP_ID / MARKETING_APP_SECRET | 授权需要 | 应用身份与密钥 |
 | MARKETING_AUTH_CODE | 首次或重新交换需要 | 来源授权链接返回的新授权码；后续优先使用刷新 token |
 | accounts."账户ID".account_name / account_type | 可选 | 仅填固定展示列；缺失为 NULL |
-| mysql.* | init-db / 非 dry-run collect 使用 | host/port/database/user/password_env；模板密码环境为 MARKETING_MYSQL_PASSWORD |
+| mysql.* | 非 dry-run collect 使用 | host/port/database/user/password；密码直接配置在本类型 TOML |
+| mysql.tables.stats / audit | collect 必填 | 已建好的营销汇表 / 审计表实际名称 |
 | settings.state_dir | ../runtime | 私有缓存目录，相对 TOML |
 | settings.timeout_seconds / max_pages | 30 / 10000 | HTTP 超时和完整分页上限 |
 | settings.refresh_before_seconds | 1800 | 授权维护接口使用的提前刷新阈值 |
@@ -527,7 +560,6 @@ uv sync --locked
 cp -n config/example.toml config/local.toml
 uv run marketing check-auth --advertise-id 123
 uv run marketing authorize --advertise-id 123
-uv run marketing init-db
 uv run marketing collect --advertise-id 123 --dry-run
 uv run marketing collect --advertise-id 123 --version smart \
   --start 2026-10-20T09:00:00 --end 2026-10-20T10:00:00
@@ -552,7 +584,7 @@ uv run marketing collect --advertise-id 123 --version smart \
 
 ### 4.2 配置
 
-[配置模板](qianchuan/config/example.toml) 中只配置一套 `[auth]`：source=qianchuan，env_prefix=QIANCHUAN_，可选 env_file/app_id。应用环境使用 QIANCHUAN_APP_ID、QIANCHUAN_APP_SECRET，首次授权使用 QIANCHUAN_AUTH_CODE；之后使用缓存 refresh_token 刷新。mysql 和 settings 由本项目独立维护。
+[配置模板](qianchuan/config/example.toml) 中只配置一套 `[auth]`：source=qianchuan，env_prefix=QIANCHUAN_，可选 env_file/app_id。应用环境使用 QIANCHUAN_APP_ID、QIANCHUAN_APP_SECRET，首次授权使用 QIANCHUAN_AUTH_CODE；之后使用缓存 refresh_token 刷新。mysql 和 settings 由本项目独立维护；mysql.tables.stats 和 audit 必填，分别指定已有千川汇表、审计表。
 
 ```toml
 [report]
@@ -598,7 +630,6 @@ uv sync --locked
 cp -n config/example.toml config/local.toml
 uv run qianchuan check-auth --advertiser-id 456
 uv run qianchuan authorize --advertiser-id 456
-uv run qianchuan init-db
 uv run qianchuan collect --advertiser-id 456 --dry-run
 uv run qianchuan collect --advertiser-id 456 \
   --start-date 2026-10-20 --end-date 2026-10-21 \
@@ -637,7 +668,8 @@ uv run qianchuan collect --advertiser-id 456 --aweme-ids 987 \
 | token_storage | cookie（可选 localStorage） | 实际认证 token 的存放位置 |
 | token_key | 接入时核实，必须替换模板占位 | 只读取实际认证键，不能使用任意 Cookie |
 | 私有账号、密码、登录手机号 | Page 可获取；人工登录使用 | 不放 CLI，也不宣称脚本自动填密码或验证码 |
-| mysql.* / password_env | 入库需要；PINGAN_MYSQL_PASSWORD | 本项目数据库配置 |
+| mysql.* / password | 入库需要，直接填写密码 | 本项目数据库配置 |
+| mysql.tables.stats / orders / audit | collect 必填 | 已有平安统计表、订单表、审计表 |
 | settings.state_dir / timeout_seconds / max_pages / refresh_before_seconds | ../runtime / 30 / 10000 / 1800 | 私有状态、HTTP、分页与授权维护 |
 
 平安只使用本项目的一套后台登录身份。授权浏览器目录为 state_dir/pingan/browser；首次创建目录不会自动导入日常 Chrome 登录态。
@@ -663,7 +695,6 @@ uv sync --locked
 cp -n config/example.toml config/local.toml
 uv run pingan check-auth --channel DEMO_CHANNEL
 uv run pingan authorize --channel DEMO_CHANNEL --wait-seconds 1800
-uv run pingan init-db
 uv run pingan collect --channel DEMO_CHANNEL --dry-run
 uv run pingan collect --channel DEMO_CHANNEL \
   --start 2026-10-20T09:00:00 --end 2026-10-20T10:00:00
@@ -699,7 +730,8 @@ uv run pingan collect --channel DEMO_CHANNEL \
 | browser_channel | chrome | 独立持久浏览器会话 |
 | auth_cookie_names | 接入时核实，非空数组 | 必须齐全的认证 Cookie 名称，不使用追踪 Cookie 判断登录 |
 | 私有账号、密码、手机号 | Page 资料；人工登录 | 不传 CLI，不在日志打印 |
-| mysql.* / password_env | 入库需要；ZHONGAN_MYSQL_PASSWORD | 本类型 MySQL 配置 |
+| mysql.* / password | 入库需要，直接填写密码 | 本类型 MySQL 配置 |
+| mysql.tables.stats / orders / audit | collect 必填 | 已有众安统计表、订单表、审计表 |
 | settings.state_dir / timeout_seconds / max_pages / refresh_before_seconds | ../runtime / 30 / 10000 / 1800 | 私有状态、请求、游标上限、授权维护 |
 
 只发送与目标域、路径及有效期匹配的 Cookie，读取接口需要的本站 localStorage 请求头。没有明确有效期时不能凭 Cookie 存在认定会话有效，必须实际探测。
@@ -726,7 +758,6 @@ uv sync --locked
 cp -n config/example.toml config/local.toml
 uv run zhongan check-auth --dy-no DEMO_DY
 uv run zhongan authorize --dy-no DEMO_DY --wait-seconds 1800
-uv run zhongan init-db
 uv run zhongan collect --dy-no DEMO_DY --date 2026-10-20 --dry-run
 uv run zhongan collect --dy-no DEMO_DY --platform DOUYIN --date 2026-10-20
 ```
@@ -771,12 +802,12 @@ Task 仅含 task_id/source/account_id/options；account_id 只供广告使用，
 ### 7.2 迁移边界
 
 - 旧 `[credentials.default]` 改为 `[auth]`，保留原授权配置内容；删除命令行及计划投影中的 credential。旧配置会明确报错，避免误用。旧缓存仍保留，需核对 source/app_id 后迁移至 state_dir/<source>/auth.json；旧浏览器目录可迁至同类型 browser 目录，不自动猜测多个旧授权目录。
-- 千川原有小时数据需填入 TIME_GRANULARITY_HOURLY，并将 time_granularity 改为 VARCHAR(32) NOT NULL、加入业务唯一键后，再启用天粒度；init-db 不自动升级已有表。
+- 千川原有小时数据需填入 TIME_GRANULARITY_HOURLY，并将 time_granularity 改为 VARCHAR(32) NOT NULL、加入业务唯一键后，再启用天粒度；表结构由部署方提前升级。
 
 - 根目录 scripts 是独立项目集合；调度位于 schdule，读取已同步 MySQL 的关联查询投影。
 - 旧产品/房间参数、JSON 任务文件及旧共享事实表接口停止作为新脚本协议。主规格和操作文档统一引用本文。
-- init-db 只创建新表，不自动删除旧表、不自动从 live_ad_hourly/live_policy_snapshot/live_policy_order 回填；CREATE IF NOT EXISTS 不负责升级已经存在的同名异构表。迁移旧数据需单独制定映射并验证范围去重。
-- 本版广告新表统一使用 stats 后缀。已有数据库的改名、删除旧列及唯一键迁移需要单独执行；init-db 不会迁移历史数据。历史广告数据可能有重叠范围或不同版本，需先确定保留口径，不能直接删列后机械添加唯一键。
+- 删除 init-db 及运行时建表方法；旧配置须补充 mysql.tables。库、业务表和审计表需提前建立。脚本不自动创建、修改或迁移表；旧数据迁移由部署方单独制定映射并验证范围去重。
+- 本版广告新表统一使用 stats 后缀。已有数据库的改名、删除旧列及唯一键迁移需要单独执行；采集脚本不会迁移历史数据。历史广告数据可能有重叠范围或不同版本，需先确定保留口径，不能直接删列后机械添加唯一键。
 - 尚未确认的字段映射明确留空或 JSON；列定义不因此删减。映射完成应升级本类型字段契约和测试，维护对应 schema 迁移。
 - 本版的离线检查不代表已经完成生产授权、真实平台字段覆盖或 MySQL 执行验收。
 
@@ -784,7 +815,7 @@ Task 仅含 task_id/source/account_id/options；account_id 只供广告使用，
 
 1. 六张源汇表逐列覆盖 266 个原字典字段，列名/顺序一致；只写入已定义的业务列及必要记录/观察时间列；不保存完整原始响应和查询摘要。
 2. 四个目录分别从自己的 uv.lock 安装，在各自 .venv 执行入口；移除/阻断 schdule 导入仍能 dry-run。
-3. 每个类型的 check-auth、authorize、collect 独立可调用；auth/dry-run 不要求 MySQL；init-db 不要求业务查询参数。
+3. 每个类型的 check-auth、authorize、collect 独立可调用；授权命令不依赖数据库配置；collect dry-run 校验表名映射但不连接 MySQL。缺少映射在任何采集写入前失败。
 4. 营销只传 advertise_id 即可生成账户任务；传 product-id/room-id/aweme-id 等无用途参数明确报错。千川、平安、众安只接受本节列明的 CLI 参数。
 5. 授权缺失/到期、应用不匹配、Cookie 缺少、分页缺页/重复、数量变化、字段不支持都不能报告采集成功。
 6. 重跑不重复，同源范围串行；失败事务回滚；来源时间与观察时间分开；订单首次时间不被更新覆盖。

@@ -24,7 +24,7 @@ cp -n config/plan.example.sql config/plan.sql
 ```
 
 1. 按 [查询投影契约](SPEC.md#3-mysql-计划输入契约) 将 plan.sql 改为已同步 MySQL 原表的 SELECT/JOIN，排除停用绑定。示例 SQL 故意为空，不能直接投入生产。
-2. 填写只读计划库连接，通过 SCHDULE_MYSQL_PASSWORD 提供密码；调度不创建或同步业务表。
+2. 填写只读计划库连接，直接在 `[mysql]` 的 `password` 中填写密码；调度不创建或同步业务表。
 3. sources.<source>.config 指向四类脚本各自的私有 TOML，凭据别名与 SQL 返回值一致。沿用脚本自己的状态目录，才能与单独运行共享授权。
 4. 按来源 README 完成各自数据库初始化及首次授权。调度不持有数据汇 DDL，不接受平台密钥参数。
 5. 需要授权失败短信时，启用 sms 并填写已审核签名/模板、E.164 号码和腾讯云环境凭据。模板必须与 template_params 顺序匹配。
